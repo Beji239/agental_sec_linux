@@ -1,0 +1,666 @@
+{
+  "_comment": [
+    "AgentalSec Linux configuration. Copy to config.json and edit, or simply",
+    "delete config.json and let main.py create it from this file on first run.",
+    "",
+    "SHAPE ONLY -- no secrets. API keys live in .env:",
+    "  AGENTAL_API_KEY           the model provider key",
+    "  AGENTAL_APP_API_KEY       AgentalSec's REST key, 64 hex chars",
+    "  AGENTAL_ROUTER_COMMUNITY  SNMP read community, if router_monitor is on",
+    "  AGENTAL_SSH_KEY_PATH      private key for linux_monitor's SSH path",
+    "",
+    "EVERY BLOCK IN THE RUNNING FILE IS REPRESENTED HERE, checked against",
+    "main.py's own readers rather than against a template that drifted. It was",
+    "missing the seven blocks below that carry the agentic half of the app,",
+    "which meant a fresh install booted with no incident watcher, no action",
+    "executor and no duty loop, and the dashboard reported them as missing",
+    "rather than as switched off by the operator's choice.",
+    "",
+    "The defaults here are the code's own defaults, so deleting this file and",
+    "letting main.py write a fresh config.json lands in the same place."
+  ],
+
+  "provider": {
+    "_comment": [
+      "Any provider works. Fill in the three values for yours.",
+      "model: the id your provider uses for the model you want.",
+      "api_url: the provider's chat endpoint. Either an OpenAI-style",
+      "  .../v1/chat/completions URL or an Anthropic-style .../v1/messages URL.",
+      "api_style: auto, openai or anthropic. Auto reads it from api_url.",
+      "The key goes in .env as AGENTAL_API_KEY, never here.",
+      "max_output_tokens: the answer budget, reasoning comes out of it.",
+      "context_budget: our cap on how much gets sent per turn."
+    ],
+    "model": "",
+    "api_url": "",
+    "api_style": "auto",
+    "max_output_tokens": 16384,
+    "context_budget": 128000
+  },
+
+  "geoip": {
+    "_comment": [
+      "Threat map. Needs maxminddb (pip install -r requirements.txt) and the",
+      "database itself. Without either, the geoip sensor is SKIPPED at boot",
+      "with the reason in the log, and the map says why it is empty.",
+      "Run scripts/fetch_geoip.py to download the database (CC-BY 4.0)."
+    ],
+    "enabled": true,
+    "db_path": "geoip/dbip-city-lite.mmdb",
+    "home_lat": null,
+    "home_lon": null,
+    "home_label": null,
+    "locate_online": true
+  },
+
+  "flask": {
+    "_comment": [
+      "Dashboard binding. 127.0.0.1 for local-only, 0.0.0.0 for LAN access.",
+      "Add the name you browse to under allowed_hosts when binding beyond",
+      "loopback, or the Host header check answers 403.",
+      "auto_open_browser: opens a browser when the listener is up."
+    ],
+    "host": "127.0.0.1",
+    "port": 5000,
+    "auto_open_browser": true,
+    "allowed_hosts": []
+  },
+
+  "sensors": {
+    "_comment": [
+      "Enable/disable individual sensors.",
+      "Some need root or CAP_NET_RAW; see core/privilege_linux.py and the",
+      "privilege report main.py prints before any module loads."
+    ],
+    "packet_sniffer": {
+      "enabled": true,
+      "capture_method": "afpacket",
+      "interface": null,
+      "promiscuous": false,
+      "filter": null,
+      "rcvbuf": 4194304
+    },
+    "process_monitor": {
+      "enabled": true,
+      "poll_interval": 60
+    },
+    "event_monitor": {
+      "enabled": true,
+      "sources": ["journald", "syslog", "auth.log"],
+      "poll_interval": 60
+    },
+    "network_scanner": {
+      "enabled": true,
+      "poll_interval": 300,
+      "targets": []
+    },
+    "port_scanner": {
+      "_comment": [
+        "PS-13 option (c), 2026-09-25. The TCP pass has two methods now and",
+        "the payload names the one that ran (tcp_method on every scan).",
+        "",
+        "\"auto\"    SYN where a raw socket opens (CAP_NET_RAW or root), the",
+        "          connect test where it does not. An absent key means this,",
+        "          so a config written before the key existed is unchanged.",
+        "\"syn\"     SYN only. With no raw socket the TCP pass REFUSES by name",
+        "          rather than quietly substituting a connect test -- the",
+        "          substitution is exactly the defect PS-13 is about.",
+        "\"connect\" the connect test only, even when a raw socket is",
+        "          available.",
+        "",
+        "Read from port_scan.tcp_method, in the block below, next to",
+        "default_set.",
+        "",
+        "PS-14, 2026-09-25, AND THE CLOCK IS BUILT: on the owner's instruction",
+        "(\"I want you to create that back ground clock\") a background clock",
+        "runs a self-scan of 127.0.0.1 every poll_interval seconds and stores",
+        "it in port_scan_results like any other scan, so the port record keeps",
+        "moving when nobody asks. It costs 0.54 s per pass and writes 3 rows",
+        "plus 1 run row (measured on the reference host).",
+        "",
+        "poll_interval: the clock's cadence, in seconds, floored in code at",
+        "60 so a value of 5 cannot ask for a permanently busy scanner. It was",
+        "read by nothing before this; it is read now, and the Settings card",
+        "and the boot log both say which setting is in charge.",
+        "",
+        "enabled=false stops BOTH the clock and the call: run_port_scan",
+        "refuses, and nothing self-scans on a timer either. An empty port",
+        "answer with the switch off is the switch, NOT a quiet machine.",
+        "",
+        "The clock is a self-scan of LOOPBACK only. It measures what is BOUND",
+        "on this host, which is deliberately not the same question as what is",
+        "reachable from another machine; every row it writes says origin=self",
+        "and carries that caveat."
+      ],
+      "enabled": true,
+      "poll_interval": 600
+    },
+    "autorun_monitor": {
+      "_comment": [
+        "Persistence on THIS host: systemd units (system and user), cron,",
+        "init.d and shell startup files. Section 7 of toolaudit.md.",
+        "",
+        "enabled=false means REFUSE. This sensor is drawn on demand, not on a",
+        "clock, so the switch cannot stop a loop -- it stops the ANSWER.",
+        "query_autoruns then reads nothing and returns off_by_config=true with",
+        "count 0 and a sentence saying an empty list is not a clean machine.",
+        "The readiness page shows it as OFF rather than as running. An absent",
+        "key means ON, as it does for every other sensor here.",
+        "",
+        "poll_interval is the CACHE lifetime on this sensor (seconds). It is",
+        "the one thing the key can honestly mean with no poll loop: an answer",
+        "up to this old may be returned, marked cached=true with its age. Pass",
+        "refresh=true for a live read."
+      ],
+      "enabled": true,
+      "poll_interval": 3600
+    },
+    "local_integrity": {
+      "_comment": [
+        "L3, 2026-09-22. The integrity of THIS host, read directly, not over",
+        "SSH. linux_monitor above and below is the REMOTE one and is left",
+        "alone. This sensor needs no privilege for the half it does, and it",
+        "reports the half it cannot: /etc/sudoers and /etc/sudoers.d are",
+        "root-only, so for those only name, mode, owner, size and mtime are",
+        "watched.",
+        "",
+        "poll_interval: tier A, the file and directory watch. Measured at",
+        "about a second for the whole set on the reference host.",
+        "",
+        "sweep_interval_seconds: tier B, the setuid/setgid/capability sweep.",
+        "It has to walk the filesystem and MEASURED 30 to 40 seconds over",
+        "936,143 files there, which is why it is hourly and why it runs on",
+        "its own thread rather than on the poll loop. A floor of 30s is",
+        "enforced in code: a value below it asks for a permanently busy",
+        "disk, not a faster sensor.",
+        "",
+        "dpkg_interval_seconds: tier C, `dpkg -V`. MEASURED 209s for a full",
+        "run over 2755 packages on the reference host, on its own thread,",
+        "default three hours. A floor of 300s is enforced in code. The",
+        "owner's instruction was 'expensive, hourly at most'; three hours",
+        "is slower than that on purpose, and the reason is that the thing",
+        "this detects -- a file a package shipped being replaced -- is not",
+        "a race with a three-hour window.",
+        "",
+        "dpkg_exclude_boot: /boot is EXCLUDED BY DEFAULT. Kernel images and",
+        "System.map files legitimately churn, they are mode 600 root and so",
+        "unreadable on an ordinary run anyway, and they produced 18 of the",
+        "55 measured output lines. Set it to false on a host where /boot is",
+        "readable and stable and the check is worth having.",
+        "",
+        "NOTE ON WHAT dpkg -V CANNOT DO. It compares file CONTENTS against",
+        "the md5sums dpkg recorded at unpack time. It does not check",
+        "signatures, it does not know about files no package shipped, and",
+        "on a host with one malformed control file it ABORTS with exit 2",
+        "having verified only the packages sorting before the bad one. This",
+        "sensor works around that by naming the packages it can verify and",
+        "reporting the refused ones as a coverage finding -- measured on",
+        "this host as 1 package of 2756."
+      ],
+      "enabled": true,
+      "poll_interval": 60,
+      "sweep_interval_seconds": 3600,
+      "dpkg_interval_seconds": 10800,
+      "dpkg_exclude_boot": true
+    },
+    "ebpf_events": {
+      "_comment": [
+        "T6, 2026-09-22. THE KERNEL CAMERA, read side. ebpf/ebpf_monitor.py",
+        "runs as ROOT, attaches sched_process_exec and sys_enter_connect, and",
+        "writes a file of its own; this block configures the app that READS",
+        "that file. It is the only sensor in this app that sees an execution",
+        "at the moment it happens, which is what makes a program that lives",
+        "five seconds inside a sixty-second poll gap visible at all.",
+        "",
+        "events_db: where the camera writes. MUST MATCH the camera's own --out,",
+        "and scripts/install_ebpf_camera.sh is what keeps the two in step.",
+        "The default is the path that installer creates. If the camera is not",
+        "installed, the tool says so in words and does NOT report blind: a",
+        "camera that was never started is a stated limit of the machine, not a",
+        "fault in the app.",
+        "",
+        "poll_interval: how often the app reads the file. MEASURED: a pass is",
+        "a handful of indexed SQLite reads over new rows only, so this is",
+        "cheap. It is NOT the camera's own cadence -- the camera writes",
+        "continuously and this only decides how often somebody looks.",
+        "",
+        "stale_after_seconds: how old the newest event has to be before the",
+        "camera is reported as STOPPED. 900 is deliberately generous: a quiet",
+        "desktop legitimately executes nothing for minutes at a time, and a",
+        "tight window would report a working camera as dead. A stopped camera",
+        "is NOT reported blind, because the file was readable -- what stopped",
+        "is the recording, and anything that ran since is not seen LATE, it is",
+        "not seen at all. There is no later pass that picks it up.",
+        "",
+        "path_allowlist: realpath prefixes that are never worth a finding. The",
+        "default covers systemd's own private tmp. MEASURED ON THIS HOST: a",
+        "boot executes systemd's executor out of",
+        "/tmp/systemd-private-<random>-<unit>-<random>/, which is not an",
+        "attack and would otherwise be a finding on every boot of the machine",
+        "the app is installed on. Add to this list rather than turning the",
+        "staging rule off: each entry subtracts one known-innocent shape, and",
+        "switching the rule off subtracts all of them at once.",
+        "",
+        "watch_staging_directories / watch_dangerous_ports: the two rules.",
+        "/tmp, /var/tmp, /dev/shm, /run/user and a user's cache or Downloads,",
+        "seen at execve time (LNX-3001 / LNX-3002); and connect(2) calls to",
+        "4444, 5555, 6666, 31337, 12345, 54321 (LNX-3003), which the packet",
+        "capture can see on the wire but cannot attribute to a process."
+      ],
+      "enabled": true,
+      "poll_interval": 60,
+      "events_db": "/var/lib/agental_sec/ebpf_events.db",
+      "stale_after_seconds": 900,
+      "path_allowlist": [
+        "/tmp/systemd-private-",
+        "/var/tmp/systemd-private-"
+      ],
+      "watch_staging_directories": true,
+      "watch_dangerous_ports": true
+    },
+    "auditd": {
+      "_comment": [
+        "L4, 2026-09-22. THE KERNEL AUDIT FEED, read side. auditd is the",
+        "Linux kernel's own audit subsystem: it records syscalls, file",
+        "watches and account changes AT THE KERNEL LEVEL, with the identity",
+        "of whoever did it. On a host where it runs, its log is the deepest",
+        "always-listening feed this machine offers.",
+        "",
+        "IT IS NOT INSTALLED ON THIS BOX, and that is the ordinary case: it",
+        "needs a package install and root, both of which only the operator",
+        "can do. So the reader is loaded UNCONDITIONALLY and reports the",
+        "absence in words, with the one command printed --",
+        "",
+        "    sudo apt install auditd",
+        "",
+        "-- rather than returning an empty list, which a reader would take",
+        "as a clean bill of health. That distinction is the whole feature.",
+        "",
+        "enabled: whether this app reads the log. The module still loads and",
+        "still reports the machine's own state when this is false: OFF and",
+        "BROKEN have to stay different sentences, and a reader switched off",
+        "on a host WITH auditd installed would otherwise read as a machine",
+        "with none.",
+        "",
+        "log_path: WHERE TO READ INSTEAD OF WHAT auditd.conf SAYS. Absent",
+        "(the default, and what you want) means the reader asks auditd's own",
+        "configuration, falling back to /var/log/audit/audit.log. Set it",
+        "only to read a log from somewhere else -- a fixture during",
+        "verification, or a host that keeps the file off its usual path.",
+        "When it is set, the payload carries a warning if the audit",
+        "userspace is not installed, because then the file is NOT being",
+        "written by a running auditd and its age says nothing about now.",
+        "",
+        "NO SEPARATE CADENCE KNOB. poll_interval is the ordinary sensor one",
+        "and 60 is right: a pass reads only what was APPENDED since the last",
+        "one, from a stored byte offset, so its cost is proportional to how",
+        "much auditd wrote rather than to how large the log is. On a host",
+        "where auditd is absent the pass returns before touching the disk.",
+        "",
+        "WHAT IT RAISES. AUD-1001 when the audit configuration itself",
+        "changed (a rule added or removed -- nothing else in this app can",
+        "see that at all), AUD-1002 when a path under an audit watch was",
+        "touched with the identity the kernel recorded, AUD-1003 when the",
+        "KERNEL'S OWN SWITCH IS OFF (audit_enabled=0 -- the kernel records",
+        "nothing at all from that moment, so every later quiet answer is about",
+        "the switch rather than the machine) or when the kernel has DROPPED",
+        "records because its backlog overflowed, and AUD-1004 when the daemon",
+        "wrote DAEMON_END and stopped writing to the log. It reads the raw",
+        "records too, through query_audit_events, whose payload carries",
+        "`kernel_enabled` for the same reason: an empty record list under a",
+        "switched-off kernel is not a quiet machine."
+      ],
+      "enabled": true,
+      "log_path": null,
+      "poll_interval": 60
+    },
+    "linux_monitor": {
+      "_comment": [
+        "Remote Linux host monitoring over SSH. Needs paramiko and key auth.",
+        "An unrecognised host key policy is refused loudly, because a wrong",
+        "value here is a silent trust decision."
+      ],
+      "enabled": false,
+      "strict_host_key": false,
+      "hosts": []
+    }
+  },
+
+  "port_scan": {
+    "_comment": [
+      "How the port scanner behaves when a scan is asked for. Both keys are",
+      "read by tools/port_scanner.py; see register PS-13 option (c).",
+      "",
+      "default_set: the port set used when a caller names none. 'common' is",
+      "the profiled list (fast, and blind to anything unprofiled),",
+      "'extended' adds 1-1024 (~6s a host), 'all' is 1-65535 (~5.5 min a",
+      "host and loud enough to look like an attack).",
+      "",
+      "tcp_method: which TCP probe the scanner may use.",
+      "  \"auto\"    (DEFAULT, and an absent key) raw SYN where CAP_NET_RAW or",
+      "            root allows it, the connect test where it does not.",
+      "  \"syn\"     SYN only. Without a raw socket the TCP pass refuses by",
+      "            name instead of silently substituting a connect test.",
+      "  \"connect\" the connect test only, even when a raw socket is",
+      "            available.",
+      "An unreadable value is REPORTED on the scan payload",
+      "(tcp_method_problem) and falls back to \"auto\" so a typo does not stop",
+      "the scanner."
+    ],
+    "default_set": "common",
+    "tcp_method": "auto"
+  },
+
+  "linux_monitor": {
+    "_comment": [
+      "THE BLOCK THE CODE ACTUALLY READS. main.py's _linux_targets() does",
+      "config.get('linux_monitor') at TOP level, and its comment says it",
+      "accepts both the multi-host shape and the older single-host one; it",
+      "never looks under config.sensors. Both spellings are present in this",
+      "template so that editing either is visible rather than silently",
+      "ignored, but this top level one is the one that starts a collector.",
+      "hosts: a list of {label, host, user, port, key_path}; an entry",
+      "without host is skipped."
+    ],
+    "enabled": false,
+    "strict_host_key": false,
+    "hosts": []
+  },
+
+  "linux": {
+    "_comment": [
+      "Linux-specific paths and backends.",
+      "firewall_backend: auto picks the layer of record; ufw when installed",
+      "and enabled in /etc/ufw/ufw.conf, then nftables, then iptables."
+    ],
+    "packet_capture_method": "afpacket",
+    "firewall_backend": "auto",
+    "autorun_paths": {
+      "systemd_system": [
+        "/etc/systemd/system",
+        "/lib/systemd/system",
+        "/usr/lib/systemd/system"
+      ],
+      "cron_system": [
+        "/etc/crontab",
+        "/etc/cron.d",
+        "/etc/cron.daily",
+        "/etc/cron.hourly",
+        "/etc/cron.weekly",
+        "/etc/cron.monthly"
+      ],
+      "init_d": ["/etc/init.d"],
+      "shell_startup": [
+        "~/.bashrc",
+        "~/.bash_profile",
+        "~/.profile",
+        "~/.zshrc"
+      ]
+    },
+    "log_sources": [
+      "/var/log/syslog",
+      "/var/log/auth.log",
+      "/var/log/kern.log",
+      "/var/log/dpkg.log"
+    ]
+  },
+
+  "retention": {
+    "_comment": [
+      "Data retention policies. A prune is an irreversible statement about",
+      "what mattered, so these are the operator's numbers and nothing here",
+      "guesses at a default. Note before shortening",
+      "packets_days: it also shortens the longest interval still detectable."
+    ],
+    "packets_days": 7,
+    "events_days": 30,
+    "findings_days": 90,
+    "baselines_days": 365
+  },
+
+  "ai": {
+    "_comment": ["AI analyst settings"],
+    "max_turns": 50,
+    "timeout_seconds": 120,
+    "temperature": 0.3
+  },
+
+  "vpn": {
+    "_comment": [
+      "Read-only VPN state reader. Empty patterns means autodetect.",
+      "There is no VPN control path: interface_patterns only says what to",
+      "REPORT, it never brings an interface up or down."
+    ],
+    "interface_patterns": []
+  },
+
+  "sensor": {
+    "_comment": [
+      "Where this instance sits. Six positions: host, gateway, mirror,",
+      "inline, resolver, offline. Defaults to host. An unrecognised value is",
+      "refused loudly at boot, because a wrong value here makes every",
+      "downstream scope statement wrong. See core/sensors.py.",
+      "position 'host' cannot see traffic between other devices, or from",
+      "another device to the internet; it sees this host's own traffic plus",
+      "broadcast and multicast, and nothing else."
+    ],
+    "position": "host",
+    "label": null
+  },
+
+  "presence_sweep": {
+    "_comment": [
+      "The cheap cadence: an ARP sweep every 15 minutes, recorded so that",
+      "absence becomes countable. Positives only; absence is derived against",
+      "the sweeps that ran. Python owns this schedule, not the model."
+    ],
+    "enabled": true,
+    "interval_minutes": 15
+  },
+
+  "probe": {
+    "_comment": [
+      "The expensive cadence: the device inventory fingerprint probe, every",
+      "21 days following Microsoft's published Defender cadence.",
+      "NOT a model tool at any privilege, because it ORIGINATES TRAFFIC.",
+      "Both the permanent list and exclusion_list default to not touching a",
+      "device, which is the right default for anything that sends packets at",
+      "somebody else's hardware."
+    ],
+    "enabled": true,
+    "interval_days": 21,
+    "max_hosts_per_pass": 25,
+    "pacing_seconds": 2.0,
+    "exclusion_list": []
+  },
+
+  "dns_monitor": {
+    "_comment": [
+      "Read-only DNS ingestion from a resolver you run (Pi-hole or AdGuard",
+      "Home). Nothing is sent and the resolver is never written to. This is",
+      "the only sensor that covers devices this host cannot see, because a",
+      "device that cannot resolve cannot connect.",
+      "Off by default: it needs a path to a real resolver's database."
+    ],
+    "enabled": false,
+    "source": "pihole",
+    "path": "",
+    "interval_minutes": 15,
+    "label": null
+  },
+
+  "router_monitor": {
+    "_comment": [
+      "Read-only SNMP collection from the gateway. Off by default because it",
+      "needs a host and a community string, and probing a router nobody",
+      "pointed it at is worse than not collecting. Only set",
+      "AGENTAL_ROUTER_COMMUNITY in .env if you turn this on."
+    ],
+    "enabled": false,
+    "backend": "snmp",
+    "host": "",
+    "port": 161,
+    "timeout_seconds": 3,
+    "interval_minutes": 10,
+    "max_rows_per_table": 8192,
+    "label": null
+  },
+
+  "heartbeat": {
+    "_comment": [
+      "Leaves a durable line every N minutes so a run that lasts hours is",
+      "distinguishable from a process that died. 0 disables it."
+    ],
+    "interval_minutes": 5
+  },
+
+  "incident_watcher": {
+    "_comment": [
+      "T2, 2026-09-17. The Duty Watch's deterministic tick. NO MODEL, NO",
+      "TOKENS: it reads new findings on a timer and collapses them into",
+      "incidents. It is worth having with the model switched off and it must",
+      "keep working when the model is unreachable. See core/incident.py.",
+      "",
+      "severity_floor: info and low findings do NOT open incidents at this",
+      "setting. That is a volume decision measured on a real machine (2,782",
+      "successful logins and 232 sudo rows in one evening), not a claim that",
+      "they do not matter. Lower it to 'low' or 'info' to see everything, and",
+      "expect that setting to be unreadable within a day on a busy host.",
+      "",
+      "daily_cap: a cap HIT is recorded as a cap, never as an absence of",
+      "incidents, and the findings it skipped stay unaccounted so the next",
+      "tick sees them again.",
+      "",
+      "enabled: false means NOTHING IS AGGREGATING FINDINGS. That is reported",
+      "as blind by query_sensor_health rather than as a quiet network."
+    ],
+    "enabled": true,
+    "tick_seconds": 60,
+    "severity_floor": "medium",
+    "daily_cap": 40
+  },
+
+  "action_queue": {
+    "_comment": [
+      "T3, 2026-09-18. The action queue and its executor. A gated action the",
+      "agent wanted to take is FILED as a row here instead of running, so the",
+      "decision outlives the chat turn that reached it. See core/actions.py.",
+      "",
+      "UNANSWERED NEVER BECOMES EXECUTED. There is no clock here that turns",
+      "silence into a yes. A request nobody answers retires (see expiry_days)",
+      "as NOT APPROVED AND NOT DENIED, which is a different sentence from",
+      "being refused.",
+      "",
+      "enabled: false means NOTHING EXECUTES AN APPROVED REQUEST. The card",
+      "still says approved and the action behind it never happens. That is",
+      "reported as blind by query_action_requests and by sensor_health rather",
+      "than left to be discovered.",
+      "",
+      "notify: the desktop bubble, a doorbell and not a control. Nothing is",
+      "decided from a bubble; the card is on the Action Queue tab. A missing",
+      "notify-send is reported, not swallowed."
+    ],
+    "enabled": true,
+    "poll_seconds": 15,
+    "notify": true,
+    "expiry_days": 10
+  },
+
+  "duty_loop": {
+    "_comment": [
+      "T4, 2026-09-18. The agentic half: it wakes without being asked, looks",
+      "at what the ledger raised, and leaves a report a person can read. See",
+      "core/duty.py. Before this the model had exactly one door, /api/chat,",
+      "so if nobody typed the analyst did not exist that hour.",
+      "",
+      "TWO TRIGGERS. An EMERGENCY (a UDP flood, high inbound AND outbound",
+      "volume) runs as soon as the condition is seen. FOUR REGULAR MOMENTS a",
+      "day, at local hours 9, 13, 17 and 21; each wakes, reports on up to two",
+      "findings from DIFFERENT tools, and goes back to sleep.",
+      "",
+      "enabled: false means NOTHING IS INVESTIGATING ANYTHING. That is",
+      "reported as blind by query_agent_reports and by the Agents tab rather",
+      "than looking like a quiet network.",
+      "",
+      "The budgets are HARD STOPS: a refusal examines NOTHING and is recorded",
+      "as 'budget', never as an absence of activity. The daily token ceiling",
+      "is counted from the duty_run rows themselves, because a counter in",
+      "memory would reset on every restart, which is not a limit. It is a",
+      "runaway stop rather than a ration: an ordinary day lands near 660,000",
+      "and a loop that has gone wrong hits the ceiling in hours."
+    ],
+    "enabled": true,
+    "tick_seconds": 60,
+    "max_investigations_per_hour": 3,
+    "daily_token_ceiling": 2000000,
+    "wake_hours": [9, 13, 17, 21]
+  },
+
+  "sensor_backends": {
+    "_comment": [
+      "Which module answers for each sensor role. Empty means 'use the",
+      "default for this platform', which is what almost every install wants.",
+      "It exists as config so the Windows monitor and its Linux twin can be",
+      "swapped without editing code. Example:",
+      "  \"process_monitor\": \"tools.process_monitor\""
+    ]
+  },
+
+  "threat_feeds": {
+    "_comment": [
+      "THE KNOWN-BAD LISTS, matched continuously against every destination this",
+      "app sees. tools/feed_matcher.py pulls them into the threat_feed table,",
+      "then checks packet destinations, DNS queries and TLS SNI names against",
+      "it as the traffic arrives -- so nobody has to think to ask.",
+      "",
+      "FIVE FEEDS, AND THEY ARE NOT ALL THE SAME SHAPE.",
+      "",
+      "  feodo     keyed (AGENTAL_ABUSECH_KEY). Botnet C2 addresses.",
+      "  urlhaus   keyed. Hosts serving malware.",
+      "  threatfox KEYLESS (corrected 2026-09-27, this line said \"keyed\"):",
+      "            its plaintext CSV export answers without a key, MEASURED",
+      "            on this host. Recent IOCs with the malware family attached.",
+      "  misp      KEYLESS. CIRCL's OSINT MISP feed - community-published",
+      "            reports with the indicators in them.",
+      "  otx       KEYED (AGENTAL_OTX_KEY). AlienVault OTX pulses.",
+      "",
+      "MISP IS AN ARCHIVE, NOT A LIST, and that is why it has its own knobs.",
+      "It holds ~1,681 events, one JSON file each, at a MEASURED 2.0 MB",
+      "average. Mirroring it is not possible on any useful clock, so each",
+      "refresh reads the MANIFEST and fetches the NEWEST N EVENTS. Every",
+      "surface says so: a finding from MISP names the event, and the feed's",
+      "status carries how many events were read and how many were left.",
+      "An indicator listed only in an OLD event is therefore absent from the",
+      "table, which is a stated limit rather than a silent one.",
+      "",
+      "OTX NEEDS ITS OWN KEY. MEASURED: every bulk endpoint answers HTTP 403",
+      "'Authentication required' without one. A free key from",
+      "otx.alienvault.com (Settings -> API key). With no key the feed reports",
+      "WHY in words and the rest of the matcher carries on -- a refusal is not",
+      "allowed to look like a feed that found nothing.",
+      "",
+      "refresh_hours: 6 is chosen for POLITENESS as much as cost. The default",
+      "MISP window is ~30 MB and ~100 s of download per refresh; hourly would",
+      "be 750 MB a day from a free university service, which is how a project",
+      "gets blocked rather than throttled.",
+      "",
+      "match_interval_seconds: matching is local SQL and is meant to be often.",
+      "The point of the whole feature is that a bad destination is noticed as",
+      "it happens rather than when somebody asks.",
+      "",
+      "feeds: which lists to pull. Leave it out for all of them. A name here",
+      "that is not a feed is REPORTED rather than ignored, because a typo in",
+      "this list is a person believing a list is being pulled.",
+      "",
+      "misp_max_events / otx_max_pulses: the per-feed windows, clamped in",
+      "code to 60 and 100. A config value above the ceiling is refused rather",
+      "than honoured, so a typo cannot turn a boot into a gigabyte download."
+    ],
+    "enabled": true,
+    "refresh_hours": 6,
+    "match_interval_seconds": 300,
+    "feeds": ["feodo", "urlhaus", "threatfox", "misp", "otx"],
+    "misp_max_events": 15,
+    "otx_max_pulses": 20
+  }
+}

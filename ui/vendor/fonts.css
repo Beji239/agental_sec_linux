@@ -1,0 +1,54 @@
+/* ui/vendor/fonts.css
+   Local copies of the two fonts the dashboard uses.
+
+   These used to come from fonts.googleapis.com on every page load, which
+   meant the tool told Google every time you opened your own dashboard. For
+   something whose whole pitch is that it runs on your machine, that was a
+   bit silly. Latin subset only, and only the weights the page actually asks
+   for, which is why this is about 140 KB instead of several megabytes.
+
+   Both fonts are SIL Open Font License 1.1. See LICENSES.md next door. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('fonts/inter-latin-300-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/jetbrains-mono-latin-600-normal.woff2') format('woff2');
+}

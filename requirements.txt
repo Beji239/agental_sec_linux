@@ -1,0 +1,58 @@
+# AgentalSec Linux - Python dependencies
+#
+# This file says what the code needs. Install with:
+#     pip install -r requirements.txt
+#
+# EVERY LINE BELOW IS IMPORTED SOMEWHERE IN THIS TREE, checked against the
+# source rather than copied from a template. A pin nothing imports is an
+# install that can fail on a machine with no compiler for a package nobody
+# calls. See the removals at the bottom for what was dropped and why.
+
+# Web framework
+flask>=3.0.0
+flask-cors>=4.0.0
+waitress>=3.0.0
+
+# HTTP clients. httpx is used by the agent loop; requests by enrichment,
+# web_search, ip_lookup, runbook, update_oui and websearch_check.
+httpx>=0.27.0
+requests>=2.31.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Network operations and packet capture
+scapy>=2.5.0
+
+# SSH for remote Linux monitoring
+paramiko>=3.4.0
+
+# Encryption for secrets (Linux alternative to DPAPI)
+cryptography>=40.0.0
+
+# GeoIP lookups. core/geoip.py imports maxminddb directly and the threat map
+# needs it; without it the geoip sensor is SKIPPED at boot, with the install
+# line in the log, and the map stays empty.
+maxminddb>=2.6.0
+
+# NOT required by this tree, kept commented out so the reason is on the record:
+#
+#   pytest>=7.0.0     NOW REQUIRED. Five files in tests/ are written against
+#                     pytest (test_detector_tools, test_dns_inspection,
+#                     test_feed_matcher, test_lan_watch, test_payload_ring),
+#                     and they are shipped here rather than left in the
+#                     Windows tree. This entry used to say the pin would be a
+#                     "dependency on nothing" because this tree shipped no
+#                     tests/ directory -- that stopped being true when the
+#                     suite was ported, and the comment outlived it. Without
+#                     pytest those five files cannot run and report a clean
+#                     suite they never executed.
+#   geoip2>=4.0.0     high level wrapper; core/geoip.py talks to maxminddb.
+#   aiohttp>=3.8.0    no async HTTP client is used; the sensors are threads.
+#   pyyaml>=6.0       config is JSON, not YAML.
+#   netifaces>=0.11.0 interfaces are enumerated through psutil and /proc.
+#   systemd-python    journald is read by shelling out to journalctl, so the
+#                     C extension is not needed and libsystemd-dev is not a
+#                     build requirement.
+
+pytest>=7.0.0

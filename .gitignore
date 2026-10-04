@@ -1,0 +1,27 @@
+# Secrets and personal data, never published
+.env
+config.json
+agental_sec.db*
+logs/
+integrity_anchor*
+wg0.conf
+
+# Downloaded at install time by the fetch scripts
+geoip/*.mmdb
+data/oui.csv
+data/mam.csv
+data/mas.csv
+data/lolbas.json
+
+# Build output
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+ebpf/.build/
+ebpf/.toolchain/
+ebpf/*.o
+
+# Launchers written by scripts/install_launchers.sh, they hold this machine's path
+/*.desktop
