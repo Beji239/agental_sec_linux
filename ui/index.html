@@ -3809,11 +3809,46 @@ async function loadFindings() {
           <div class="finding-desc">${esc(f.description||'')}</div>
         </div>
         <div class="finding-time">${fmtTime(f.found_at)}</div>
+        ${f.detection_id ? `<button class="btn-dismiss"
+                title="Stop ${esc(f.detection_id)} alerts about ${esc(f.entity_value)} only. Other rules about it keep reporting. Undo on the Detections tab."
+                onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">silence</button>` : ''}
         <button class="btn-dismiss"
                 data-type="${esc(f.entity_type)}" data-value="${esc(f.entity_value)}"
                 onclick="dismissFinding('${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">dismiss</button>
       </div>`).join('');
   } catch(e) {}
+}
+
+// Silence one rule for one thing, from the alert itself. The reason is asked
+// for because the route requires one, and the alerts it covers close with it.
+async function silenceFinding(did, type, value, btn) {
+  const reason = prompt('Why should ' + did + ' stop reporting about '
+    + value + '?\n\nOther rules about it keep reporting. Undo it on the '
+    + 'Detections tab with "let it speak".');
+  if (reason === null || !reason.trim()) return false;
+  const label = btn ? btn.textContent : '';
+  if (btn) btn.textContent = '...';
+  try {
+    const r = await fetch('/api/detections/suppress', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ detection_id: did, reason: reason.trim(),
+                             entity_type: type, entity_value: value }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || body.error) {
+      if (btn) { btn.textContent = 'failed';
+                 btn.title = body.error || ('The app answered ' + r.status
+                             + ' and nothing was silenced.'); }
+      return false;
+    }
+    loadFindings();
+    return true;
+  } catch (e) {
+    if (btn) { btn.textContent = label || 'silence';
+               btn.title = 'The request never reached the app.'; }
+    return false;
+  }
 }
 
 // A FAILED DISMISS USED TO LOOK EXACTLY LIKE A SUCCESSFUL ONE.

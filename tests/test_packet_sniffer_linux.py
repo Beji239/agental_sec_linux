@@ -621,6 +621,19 @@ with mock.patch.object(ps.time, "time", return_value=t0):
 true("and it fires when a source passes the threshold", v)
 check("with PKT-1001's own severity", v and v["severity"], "low")
 ps._volume_data.clear()
+v = None
+with mock.patch.object(ps.time, "time", return_value=t0), \
+        mock.patch.object(ps, "is_self_address", lambda ip: ip == "192.0.2.10"):
+    for i in range(ps.VOLUME_THRESHOLD):
+        v = ps._detect_volume({"src_ip": "192.0.2.10"}) or v
+check("this host's own traffic does not fire it", v, None)
+ps._volume_data.clear()
+v = None
+with mock.patch.object(ps.time, "time", return_value=t0):
+    for i in range(1000):
+        v = ps._detect_volume({"src_ip": "192.0.2.9"}) or v
+check("an ordinary download's 1,000 packets do not fire it", v, None)
+ps._volume_data.clear()
 
 
 print("\n[13] SNF-12: the payload check's limits are stated, not implied")

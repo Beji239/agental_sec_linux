@@ -449,6 +449,28 @@ report = ee.analyze(cfg_for(SPT, path_allowlist=["/tmp/systemd-private-",
                                                  "/tmp/nothing-matches/"]))
 check("a custom allowlist is honoured", len(report["findings"]), 0)
 
+print("\n  -- Timeshift's own scripts are quiet only when they run as root")
+TS = str(SCRATCH / "camera_ts.db")
+make_camera(TS, events=[], age_seconds=0)
+ee.analyze(cfg_for(TS))                             # seed an empty file
+conn = sqlite3.connect(TS)
+_when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+for _pid, _uid, _file in ((910, 0, "/tmp/timeshift-Ab12Cd34/1"),
+                          (911, 1000, "/tmp/timeshift-fake/payload")):
+    conn.execute(
+        """INSERT INTO ebpf_event (kind, ts_ns, pid, tgid, ppid, uid, comm,
+                                   parent, filename, recorded_at)
+           VALUES ('exec', ?, ?, ?, 1, ?, 'timeshift', 'timeshift', ?, ?)""",
+        (_pid, _pid, _pid, _uid, _file, _when))
+conn.commit()
+conn.close()
+report = ee.analyze(cfg_for(TS))
+_paths = [f["entity_value"] for f in report["findings"]]
+check("a root Timeshift script raises nothing",
+      any("Ab12Cd34" in p for p in _paths), False)
+check("THE SAME NAME RUN BY A USER STILL RAISES",
+      any("timeshift-fake" in p for p in _paths), True)
+
 
 print("\n[6] A REAL HIT RAISES, AND A SHELL IS A DIFFERENT ID")
 

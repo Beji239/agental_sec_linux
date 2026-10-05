@@ -40,6 +40,14 @@ import pytest
 from tools import dns_inspector as di
 
 
+@pytest.fixture(autouse=True)
+def _nothing_dismissed(monkeypatch):
+    """The raisers ask about dismissals; nothing here is dismissed unless a
+    test says so, and no test reads the real store for it."""
+    import core.memory_engine as me
+    monkeypatch.setattr(me, "is_dismissed", lambda *a, **k: False)
+
+
 # entropy helper
 
 def test_entropy_empty_returns_zero():
@@ -1056,6 +1064,65 @@ def test_partial_reply_codes_are_reported_as_a_floor(monkeypatch):
 # FUNCTIONS, CALLED NONE OF THEM, AND EXITED 0. The whole file read as passing
 # in the suite while asserting nothing at all.
 #
+# NOISE FROM REAL SERVICES. Every case below was raised on a live home
+# network before the rules learned to tell it apart.
+
+def test_compound_english_site_names_are_not_dga():
+    for name in ("theglobeandmail.com", "videogameschronicle.com",
+                 "caughtoffside.com", "southernliving.com",
+                 "learncodinganywhere.com"):
+        assert di._is_dga_candidate(name) is False, name
+
+
+def test_a_generated_name_still_is_dga():
+    assert di._is_dga_candidate("xkq7zvbt4wplrm9d.com") is True
+
+
+def test_a_local_name_is_never_dga_or_tunnel():
+    assert di._is_dga_candidate("qx7zvbk4wtrp9lm.lan") is False
+    names = [f"{_payload(n)}.printer.lan" for n in range(8)]
+    saved = _tunnel_setup_named(names)
+    assert saved == []
+
+
+def _tunnel_setup_named(names, clients=("192.0.2.5",)):
+    mp = pytest.MonkeyPatch()
+    try:
+        import core.memory_engine as me
+        mp.setattr(me, "is_dismissed", lambda *a, **k: False)
+        saved = _tunnel_setup(mp, [(c, d) for c in clients for d in names])
+        di.analyse_once({}, "sess-test")
+        return [s for s in saved if s["detection_id"] == "DNS-1003"]
+    finally:
+        mp.undo()
+
+
+def test_service_names_made_of_words_are_not_a_tunnel():
+    words = ["action-cards-host-app", "account-public-service-prod",
+             "avatar-service-prod", "friends-public-service",
+             "catalog-public-service", "agent-popup-gui-service",
+             "assetdelivery-cdn-edge"]
+    assert _tunnel_setup_named([f"{w}.example.net" for w in words]) == []
+
+
+def test_a_domain_three_devices_use_is_not_one_devices_tunnel():
+    names = _TUNNEL_NAMES[:8]
+    raised = _tunnel_setup_named(
+        names, clients=("192.0.2.5", "192.0.2.6", "192.0.2.7"))
+    assert raised == []
+
+
+def test_two_devices_on_a_tunnel_domain_still_raise():
+    raised = _tunnel_setup_named(_TUNNEL_NAMES[:8],
+                                 clients=("192.0.2.5", "192.0.2.6"))
+    assert len(raised) == 2
+
+
+def test_the_known_roots_apply_to_the_registered_domain():
+    names = [f"rr{n}---sn-{_payload(n, 12)}.googlevideo.com" for n in range(8)]
+    assert _tunnel_setup_named(names) == []
+
+
 # NO PYTEST IS A FAILURE HERE, NOT A SKIP. A skip would put this straight back
 # where it was: a file that ran nothing, reported nothing wrong, and looked
 # fine in the summary. One pip install is a much smaller price than a test

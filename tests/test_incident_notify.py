@@ -30,7 +30,8 @@ actions.notify = lambda title, body, urgency="normal": (
     sent.append((title, body, urgency)) or {"sent": True})
 incident._urgent_floor_rank = lambda: incident._severity_rank("high")
 incident._config_cache = {"incident_watcher": {"notify": True,
-                                               "notify_daily_cap": 3}}
+                                               "notify_daily_cap": 3,
+                                               "notify_min_gap_minutes": 0}}
 
 
 def write(did, value, severity):
@@ -80,6 +81,26 @@ me.save_finding("notify-test", "test", "high", "process", "w1", "watched",
                 detection_id="LNX-1011")
 r = incident.watch_once("notify-test")
 check("a repeat finding coalesces quietly", (r["coalesced"], r["notified"]), (1, 0))
+
+print("a burst is grouped into one notice")
+from datetime import timedelta  # noqa: E402
+incident._config_cache["incident_watcher"].update(
+    notify_daily_cap=20, notify_min_gap_minutes=10)
+incident._notify_day.update(date=None)
+incident._notify_hold.update(last_at=None, held=[])
+before = len(sent)
+check("the first of a burst rings at once", write("LNX-1011", "h1", "high")["sent"], True)
+r = write("LNX-1011", "h2", "high")
+check("the next inside the gap is held", (r["sent"], r.get("held")), (False, True))
+write("LNX-1011", "h3", "high")
+check("nothing more rang during the gap", len(sent) - before, 1)
+check("the flush waits for the gap", incident.flush_held_notices()["sent"], False)
+incident._notify_hold["last_at"] -= timedelta(minutes=11)
+r = incident.flush_held_notices()
+check("after the gap the held ones go out together", r["sent"], True)
+check("as one notice naming how many", ("2 more urgent" in sent[-1][0], len(sent) - before), (True, 2))
+check("and one rule is one line, counted", sent[-1][1].startswith("2 x LNX-1011: "), True)
+check("nothing is held after the flush", incident.flush_held_notices()["sent"], False)
 
 print()
 if fails:

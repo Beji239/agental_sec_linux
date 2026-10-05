@@ -187,7 +187,10 @@ BEACON_MIN_INTERVAL  = 5      # faster than this is a stream, not a beacon
 BEACON_MAX_INTERVAL  = 3600   # slower than this is not visible in one window
 BEACON_MAX_TRACKED   = 5000   # bound memory, keyed by what a peer chooses
 
-VOLUME_THRESHOLD     = 1000   # packets from one source per window (PKT-1001)
+# Measured over 7 days of stored packets: the busiest source other than this
+# host peaked at 9,076 in a window (the router, while it was polled every
+# second), and 1,000 fired on every download. 20,000 is twice that peak.
+VOLUME_THRESHOLD     = 20000  # packets from one source per window (PKT-1001)
 VOLUME_WINDOW        = 300    # the window that threshold is measured over
 VOLUME_MAX_TRACKED   = 2000   # bound the per-source map the same way
 
@@ -1349,7 +1352,9 @@ def _detect_volume(packet_data: dict) -> dict | None:
     with the table capped like the beacon table.
     """
     src = packet_data.get("src_ip")
-    if not src:
+    # This host's own traffic is the operator working, and the host sensors
+    # already attribute it per process.
+    if not src or is_self_address(src):
         return None
     now = time.time()
     hits = _volume_data.get(src)

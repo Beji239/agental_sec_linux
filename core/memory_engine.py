@@ -6309,6 +6309,40 @@ def finding_already_open(source: str, entity_type: str, entity_value: str,
         return row is not None
 
 
+def dismissal_silences(detection_id: str, entity_type: str,
+                       entity_value: str, raw_data: dict = None):
+    """
+    The reason a dismissal stops this finding, or None.
+
+    A dismissal covers the SAME RULE about the same thing, never a different
+    rule: dismissing a noisy DNS alert about a device must not hide a tunnel
+    or a spoof about it. A process dismissal must also be about the same
+    executable (PM-7). Fails open: a store that cannot be read raises.
+    """
+    try:
+        if not is_dismissed(entity_type, entity_value):
+            return None
+        with _get_readonly_conn() as conn:
+            same_rule = conn.execute(
+                "SELECT 1 FROM findings WHERE entity_type=? AND entity_value=? "
+                "AND detection_id=? AND dismissed=1 AND dismissed_reason LIKE ? "
+                "LIMIT 1",
+                (entity_type, entity_value, detection_id,
+                 ENTITY_DISMISSAL_MARK + "%")).fetchone()
+    except Exception as e:                              # noqa: BLE001
+        logger.warning(f"Could not read the dismissal of {entity_type}:"
+                       f"{entity_value} ({e}). Raising anyway.")
+        return None
+    if same_rule is None:
+        return None
+    if entity_type == "process":
+        exe = (raw_data or {}).get("exe") if isinstance(raw_data, dict) else None
+        covered = dismissal_covers("process", entity_value, exe)
+        return covered["reason"] if covered["covered"] else None
+    return (f"{entity_type} {entity_value} was dismissed for {detection_id}, "
+            f"and this is the same rule")
+
+
 def save_finding(session_id: str, source: str, severity: str,
                  entity_type: str, entity_value: str, title: str,
                  description: str = None, raw_data: dict = None,
@@ -6352,8 +6386,7 @@ def save_finding(session_id: str, source: str, severity: str,
     det.check_severity(detection_id, severity)
 
     # Checked HERE rather than at each call site so it cannot be forgotten by
-    # the next sensor somebody writes. dismiss_entity is checked separately by
-    # the callers that care; the two mechanisms stay distinct on purpose, so
+    # the next sensor somebody writes. The two mechanisms stay distinct, so
     # that "why was I not told" always has one answer rather than a shrug.
     silenced = detection_suppressed(detection_id, entity_type, entity_value)
     if silenced.get("suppressed"):
@@ -6363,6 +6396,15 @@ def save_finding(session_id: str, source: str, severity: str,
         return {"saved": False, "detection_id": detection_id,
                 "reason": silenced.get("reason"),
                 "suppression_id": silenced.get("suppression_id")}
+
+    # A dismissal is honoured here too, because several sensors never asked.
+    dismissed = dismissal_silences(detection_id, entity_type, entity_value,
+                                   raw_data)
+    if dismissed:
+        logger.info(f"{detection_id} not raised for {entity_value}: "
+                    f"{dismissed}")
+        return {"saved": False, "detection_id": detection_id,
+                "reason": dismissed, "suppression_id": None}
 
     with _get_conn() as conn:
         conn.execute("""
@@ -6495,6 +6537,14 @@ def suppress_detection(detection_id: str, reason: str,
                               expires_at = excluded.expires_at
             """, (detection_id, et, ev, reason, created_by, expires_at))
             sid = cur.lastrowid
+            # The open alerts this covers are closed with it, or the page
+            # shows them again on its next poll.
+            where, args = _suppression_scope(detection_id, et, ev)
+            closed = conn.execute(f"""
+                UPDATE findings SET dismissed = 1,
+                       dismissed_at = CURRENT_TIMESTAMP, dismissed_reason = ?
+                 WHERE dismissed = 0 AND {where}
+            """, [RULE_SILENCED_MARK + " " + reason] + args).rowcount or 0
     except Exception as e:
         logger.error(f"Could not suppress {detection_id}: {e}")
         return {"ok": False, "error": str(e)}
@@ -6502,9 +6552,21 @@ def suppress_detection(detection_id: str, reason: str,
     _journal("detection_suppressed", "detection_suppression",
              f"{detection_id}:{et}:{ev}",
              {"reason": reason, "created_by": created_by,
-              "expires_at": expires_at})
+              "expires_at": expires_at, "closed": closed})
     return {"ok": True, "id": sid, "detection_id": detection_id,
-            "entity_type": et, "entity_value": ev}
+            "entity_type": et, "entity_value": ev, "closed": closed}
+
+
+RULE_SILENCED_MARK = "rule silenced:"
+
+
+def _suppression_scope(detection_id: str, et: str, ev: str):
+    where, args = ["detection_id = ?"], [detection_id]
+    if et != "*":
+        where.append("entity_type = ?"); args.append(et)
+    if ev != "*":
+        where.append("entity_value = ?"); args.append(ev)
+    return " AND ".join(where), args
 
 
 def unsuppress_detection(detection_id: str, entity_type: str = "*",
@@ -6525,6 +6587,16 @@ def unsuppress_detection(detection_id: str, entity_type: str = "*",
                    AND entity_value = ?
             """, (detection_id, et, ev))
             removed = cur.rowcount or 0
+            reopened = 0
+            if removed:
+                # Only the alerts the silencing closed come back.
+                where, args = _suppression_scope(detection_id, et, ev)
+                reopened = conn.execute(f"""
+                    UPDATE findings SET dismissed = 0, dismissed_at = NULL,
+                           dismissed_reason = NULL
+                     WHERE dismissed = 1 AND dismissed_reason LIKE ?
+                       AND {where}
+                """, [RULE_SILENCED_MARK + "%"] + args).rowcount or 0
     except Exception as e:
         logger.error(f"Could not unsuppress {detection_id}: {e}")
         return {"ok": False, "removed": 0, "error": str(e)}
@@ -6532,7 +6604,7 @@ def unsuppress_detection(detection_id: str, entity_type: str = "*",
     if removed:
         _journal("detection_unsuppressed", "detection_suppression",
                  f"{detection_id}:{et}:{ev}", {"removed": removed})
-    return {"ok": True, "removed": removed,
+    return {"ok": True, "removed": removed, "reopened": reopened,
             "note": (None if removed else
                      "No suppression was in place for that combination. "
                      "Nothing was removed and nothing was wrong.")}

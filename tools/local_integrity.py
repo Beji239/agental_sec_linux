@@ -212,6 +212,7 @@ SUID_PRUNE = (
     "/var/lib/snapper",
     "/snapshots",
     "/var/lib/docker",      # container images, their own filesystems
+    "/var/lib/containerd",  # the same, for Docker on the containerd store
     "/var/lib/containers",
     "/mnt",                 # anything mounted by hand
     "/media",               # removable media
@@ -3270,6 +3271,11 @@ def seed_ssh_permission_findings(new: dict) -> list:
     return out
 
 
+def _under_prune(path: str) -> bool:
+    return any(path == root or path.startswith(root + "/")
+               for root in SUID_PRUNE)
+
+
 def diff_sweep(old: dict, new: dict, unreadable_dirs=None,
                files_seen=None, seconds=None) -> list:
     """
@@ -3303,7 +3309,10 @@ def diff_sweep(old: dict, new: dict, unreadable_dirs=None,
          {"added": "medium", "replaced": "high", "removed": "low"}),
     )
     for key, did, label, severity_by_change in pairs:
-        was_all = (old or {}).get(key) or {}
+        # A baseline path under a pruned tree is not walked any more, so it
+        # must not read as "bit removed" when a prune is added.
+        was_all = {p: h for p, h in ((old or {}).get(key) or {}).items()
+                   if not _under_prune(p)}
         now_all = (new or {}).get(key) or {}
         for path in sorted(set(now_all) - set(was_all)):
             out.append(_finding(

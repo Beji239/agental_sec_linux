@@ -54,7 +54,7 @@ if os.name != "posix":
 import psutil                                       # noqa: E402
 from tools import process_monitor_linux as pm       # noqa: E402
 
-TMP = pathlib.Path(tempfile.mkdtemp(prefix="pmround."))
+TMP = pathlib.Path(tempfile.mkdtemp(prefix="pmround.", dir="/tmp"))
 
 
 def _plant(dest_name, argv0=None):

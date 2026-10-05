@@ -106,6 +106,7 @@
 
 import logging
 import math
+import re
 import statistics
 
 from tools.dns_monitor import (
@@ -294,7 +295,65 @@ _KNOWN_ROOTS = frozenset([
     "microsoftonline", "windowsupdate", "microsoft", "office365", "live",
     # common subdomains that look high-entropy but are structured
     "googlevideo",
+    # hash and UUID names in front of their own domains, one device each
+    "apple", "icloud", "aaplimg", "fbcdn", "akadns",
 ])
+
+# Names that never leave the network, so no attacker registered them.
+_LOCAL_SUFFIXES = (".lan", ".local", ".localdomain", ".home.arpa",
+                   ".internal")
+
+# A registered domain this many devices query in the window is shared
+# infrastructure. Both rules here describe ONE device talking to a domain, so
+# the trade is stated: the same tunnel or DGA on three devices at once is
+# not reported by these two rules.
+SHARED_DOMAIN_CLIENTS = 3
+
+_VOWELS = frozenset("aeiou")
+
+
+def _looks_machine_made(label: str) -> bool:
+    """
+    Whether a label reads as generated rather than as words.
+
+    Entropy cannot do this: "theglobeandmail" scores 3.5 and so does a
+    random string. Measured on generated labels: 78% of random a-z at length
+    10, 86% at 12, 91% at 16, and over 99% of hex are caught by these three
+    tests, while every real site name in a week of this network's queries
+    passes. A dictionary-word DGA reads as words and is out of reach here.
+    """
+    s = label.replace("-", "")
+    letters = [ch for ch in s if ch.isalpha()]
+    if not letters:
+        return False
+    vowel_share = sum(ch in _VOWELS for ch in letters) / len(letters)
+    longest_run = max((len(m) for m in
+                       re.findall(r"[bcdfghjklmnpqrstvwxyz]+", s)), default=0)
+    digits = sum(ch.isdigit() for ch in s)
+    return vowel_share < 0.28 or longest_run >= 5 or digits >= 3
+
+
+def _is_local_name(domain: str) -> bool:
+    return (domain or "").lower().rstrip(".").endswith(_LOCAL_SUFFIXES)
+
+
+def _already_handled(client_ip: str, title: str) -> bool:
+    """Open already. A dismissal of the same rule is honoured by save_finding."""
+    from core import memory_engine as me
+    return me.finding_already_open("dns_inspector", "ip", client_ip, title)
+
+
+def _clients_per_domain(conn) -> dict:
+    """Registered domain to the set of devices that queried it in the window."""
+    out: dict = {}
+    for client_ip, domain in conn.execute("""
+        SELECT DISTINCT client_ip, domain FROM dns_queries
+        WHERE queried_at >= ? AND client_ip IS NOT NULL AND domain IS NOT NULL
+    """, (_window_cutoff(DNS_ACTIVITY_WINDOW_HOURS),)).fetchall():
+        reg = _registered_domain(domain)
+        if reg:
+            out.setdefault(reg, set()).add(client_ip)
+    return out
 
 _INSPECT_CURSOR_KEY = "dns_inspect_cursor"
 
@@ -467,12 +526,15 @@ def _is_dga_candidate(domain: str) -> bool:
 
     Does NOT check count or novelty. The caller does.
     """
+    if _is_local_name(domain):
+        return False
     sld = _second_level_label(domain)
     if not sld or len(sld) < DGA_MIN_LABEL_LEN:
         return False
     if sld in _KNOWN_ROOTS:
         return False
-    return _entropy(sld) >= DGA_ENTROPY_THRESHOLD
+    return (_entropy(sld) >= DGA_ENTROPY_THRESHOLD
+            and _looks_machine_made(sld))
 
 
 def _check_dga(conn, since_id: int, session_id: str) -> int:
@@ -506,6 +568,7 @@ def _check_dga(conn, since_id: int, session_id: str) -> int:
 
     seen_pairs: set[tuple] = set()
     per_client: dict = {}
+    shared = None
 
     for client_ip, domain in rows:
         if (client_ip, domain) in seen_pairs:
@@ -513,6 +576,11 @@ def _check_dga(conn, since_id: int, session_id: str) -> int:
         seen_pairs.add((client_ip, domain))
 
         if not _is_dga_candidate(domain):
+            continue
+        if shared is None:
+            shared = _clients_per_domain(conn)
+        if len(shared.get(_registered_domain(domain), ())) \
+                >= SHARED_DOMAIN_CLIENTS:
             continue
 
         # Count total queries for this (client, domain) in the whole table.
@@ -536,7 +604,7 @@ def _check_dga(conn, since_id: int, session_id: str) -> int:
 
         for domain, total in hits[:DGA_MAX_PER_CLIENT_PER_PASS]:
             title = f"DGA-profile domain queried by {client_ip}: {domain}"
-            if me.finding_already_open("dns_inspector", "ip", client_ip, title):
+            if _already_handled(client_ip, title):
                 continue
 
             sld = _second_level_label(domain)
@@ -589,7 +657,7 @@ def _check_dga(conn, since_id: int, session_id: str) -> int:
         extra = len(hits) - DGA_MAX_PER_CLIENT_PER_PASS
         if extra > 0:
             title = (f"{client_ip} is rotating through DGA-profile domains")
-            if me.finding_already_open("dns_inspector", "ip", client_ip, title):
+            if _already_handled(client_ip, title):
                 continue
             names = ", ".join(d for d, _c in hits[:12])
             result = me.save_finding(
@@ -709,11 +777,12 @@ def _check_tunnels(conn, session_id: str) -> int:
             if (len(label) >= TUNNEL_MIN_PAYLOAD_LEN
                     and len(label) > len(payload)):
                 payload = label
-        if not payload:
+        if not payload or _is_local_name(domain):
             continue
         # The known roots are a noise filter for an entropy rule, not an
-        # allowlist, and the same list the DGA check uses applies here.
-        if payload in _KNOWN_ROOTS:
+        # allowlist, and the same list the DGA check uses applies here. It
+        # names REGISTERED domains, so that is the label it is checked on.
+        if _second_level_label(domain) in _KNOWN_ROOTS:
             continue
         if _entropy(payload) < TUNNEL_ENTROPY_FLOOR:
             continue
@@ -724,14 +793,27 @@ def _check_tunnels(conn, session_id: str) -> int:
         per_target.setdefault(key, {})
         per_target[key].setdefault(payload, domain)
 
+    clients_on = {}
+    for (client_ip, registered) in per_target:
+        clients_on.setdefault(registered, set()).add(client_ip)
+
     raised = 0
     for (client_ip, registered), payloads in sorted(per_target.items()):
         distinct = len(payloads)
         if distinct < TUNNEL_MIN_DISTINCT_PER_CLIENT:
             continue
+        if len(clients_on[registered]) >= SHARED_DOMAIN_CLIENTS:
+            continue
+        # Payload reads as generated. Service names (action-cards-host-app,
+        # assetdelivery) read as words, measured at 7 to 25% machine-made on
+        # three services here against over 90% for base32 chunks, so the
+        # judgement is made over the domain's names rather than per name.
+        machine = sum(_looks_machine_made(p) for p in payloads)
+        if machine * 2 < distinct:
+            continue
 
         title = f"Possible DNS tunnel under {registered} from {client_ip}"
-        if me.finding_already_open("dns_inspector", "ip", client_ip, title):
+        if _already_handled(client_ip, title):
             continue
 
         severity = ("high" if distinct >= TUNNEL_HIGH_DISTINCT_PER_CLIENT
@@ -954,8 +1036,7 @@ def _check_activity(conn, session_id: str) -> dict:
             # without changing the row's identity. Same shape for the tunnel,
             # NXDOMAIN and TXT titles below.
             title = f"Unusual DNS query volume from {client_ip}"
-            if not me.finding_already_open("dns_inspector", "ip", client_ip,
-                                           title):
+            if not _already_handled(client_ip, title):
                 result = me.save_finding(
                     session_id=session_id,
                     source="dns_inspector",
@@ -994,8 +1075,7 @@ def _check_activity(conn, session_id: str) -> dict:
             share = nxdomain / total
             if share >= NXDOMAIN_MIN_SHARE:
                 title = f"Most of what {client_ip} asked for does not exist"
-                if not me.finding_already_open("dns_inspector", "ip",
-                                               client_ip, title):
+                if not _already_handled(client_ip, title):
                     result = me.save_finding(
                         session_id=session_id,
                         source="dns_inspector",
@@ -1034,8 +1114,7 @@ def _check_activity(conn, session_id: str) -> dict:
         # DNS-1006, TXT.
         if txt >= TXT_MIN_COUNT:
             title = f"Unusual TXT record volume from {client_ip}"
-            if not me.finding_already_open("dns_inspector", "ip", client_ip,
-                                           title):
+            if not _already_handled(client_ip, title):
                 result = me.save_finding(
                     session_id=session_id,
                     source="dns_inspector",
@@ -1178,7 +1257,7 @@ def _check_beacons(conn, session_id: str) -> int:
             continue
 
         title = f"DNS beacon: {client_ip} polls {domain} on schedule"
-        if me.finding_already_open("dns_inspector", "ip", client_ip, title):
+        if _already_handled(client_ip, title):
             continue
 
         result = me.save_finding(

@@ -479,6 +479,13 @@ raised = rm._raise_client_findings(
     [{"ip": B, "mac": "f0:18:98:44:55:6f", "vendor": None,
       "entry_type": "dynamic"}], ROUTER, "s17", sid)
 check("and is not raised again while that one is open", raised, 0)
+raised = rm._raise_client_findings(
+    [{"ip": "8.8.8.8", "mac": "00:00:5e:00:53:01", "vendor": None,
+      "entry_type": "neighbor_reachable"},
+     {"ip": "fe80::10", "mac": "00:00:5e:00:53:02", "vendor": None,
+      "entry_type": "neighbor_stale"}], ROUTER, "s17", sid)
+check("the upstream's public address and a link-local fallback raise nothing",
+      raised, 0)
 
 me.save_router_config([{"setting": "sysDescr", "value": "OS 1", "detail": None}],
                       router_host=ROUTER, source="snmp:mib2", sensor_id=sid)

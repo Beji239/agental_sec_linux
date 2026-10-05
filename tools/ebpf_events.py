@@ -176,6 +176,13 @@ DEFAULT_PATH_ALLOWLIST = (
     "/var/tmp/systemd-private-",
 )
 
+# Allowed only when the program runs as root. Timeshift runs its own scripts
+# from /tmp/timeshift-<random>/ as root on every backup. Anyone can create a
+# directory with that name, but a non-root run of it is still reported.
+ROOT_PATH_ALLOWLIST = (
+    "/tmp/timeshift-",
+)
+
 # Ports where a connection is worth looking at. This is the same set the packet
 # sensor's Windows-era detector used (tools/packet_sniffer_linux.DANGEROUS_PORTS)
 # and it is NOT a threat feed: these are ports that appear in the default
@@ -1297,7 +1304,9 @@ def _staging_findings(rows: list, cfg: dict):
         staged = in_staging_directory(filename)
         if not staged:
             continue
-        if is_allowlisted(filename, cfg["path_allowlist"]):
+        if (is_allowlisted(filename, cfg["path_allowlist"])
+                or (uid == 0
+                    and is_allowlisted(filename, ROOT_PATH_ALLOWLIST))):
             counts["allowlisted"] = counts.get("allowlisted", 0) + 1
             continue
 

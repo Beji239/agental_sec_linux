@@ -35,9 +35,11 @@
 # out of the traceback is less tidy and needs nothing from the tests.
 
 import argparse
+import atexit
 import os
 import pathlib
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -90,7 +92,32 @@ def _child_env() -> dict:
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
     env["AGENTALSEC_TEST_DB"] = str(_scratch_db())
+    env["TMPDIR"] = str(_test_tmp())
     return env
+
+
+_TEST_TMP = None
+
+
+def _test_tmp() -> pathlib.Path:
+    """
+    The children's temp directory, under the user's state directory.
+
+    Tests start throwaway programs from tempfile directories, and under /tmp
+    the live eBPF sensor reported each one as a program run from a staging
+    directory. Not inside the project either: remediation refuses to touch
+    files in the app's own folder, so its tests need a path outside it. Tests
+    that need a real staging path ask for /tmp by name.
+    """
+    global _TEST_TMP
+    if _TEST_TMP is None:
+        state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser(
+            "~/.local/state")
+        base = pathlib.Path(state) / "agentalsec-tests"
+        base.mkdir(parents=True, exist_ok=True)
+        _TEST_TMP = pathlib.Path(tempfile.mkdtemp(prefix="run-", dir=base))
+        atexit.register(shutil.rmtree, _TEST_TMP, True)
+    return _TEST_TMP
 
 
 _SCRATCH = None

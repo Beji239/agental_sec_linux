@@ -1266,6 +1266,17 @@ def ensure_collector(config: dict, session_id: str) -> bool:
     return True
 
 
+def _on_local_network(address: str) -> bool:
+    """A private, routable address: not public, not link-local, not junk."""
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(address or "")
+    except ValueError:
+        return False
+    return (addr.is_private and not addr.is_link_local
+            and not addr.is_loopback and not addr.is_unspecified)
+
+
 def _raise_client_findings(new_clients: list, host: str, session_id: str,
                            sensor_id: str) -> int:
     """
@@ -1297,6 +1308,13 @@ def _raise_client_findings(new_clients: list, host: str, session_id: str,
 
     raised = 0
     for client in new_clients:
+        # A public address is the router's upstream on the internet side, and
+        # a link-local one is a device's fallback beside its real address.
+        # Neither is a new device on this network.
+        if not _on_local_network(client["ip"]):
+            logger.debug(f"RTR-1001 not raised for {client['ip']}: not an "
+                         f"address on the router's own network")
+            continue
         if me.is_dismissed("ip", client["ip"]):
             logger.debug(f"RTR-1001 not raised for {client['ip']}: dismissed")
             continue

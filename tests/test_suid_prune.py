@@ -95,5 +95,22 @@ for scratch in ("/tmp", "/var/tmp"):
 check("the snapshot prune is still there", "/timeshift" in li.SUID_PRUNE, True)
 
 
+print("\n[5] the containerd image store is pruned, and pruning it is quiet")
+# Docker on the containerd store keeps image layers under /var/lib/containerd.
+# Every image build or delete raised a batch of setuid highs about chfn and
+# chage inside a layer.
+check("the local sweep prunes it", "/var/lib/containerd" in li.SUID_PRUNE, True)
+check("the remote find prunes it", "-path /var/lib/containerd -prune" in cmd, True)
+_layer = ("/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/"
+          "snapshots/23/fs/usr/bin/chfn")
+_old = {"suid": {_layer: "aaaa", "/usr/bin/passwd": "bbbb"}, "sgid": {}}
+_new = {"suid": {}, "sgid": {}}
+_titles = [f["title"] for f in li.diff_sweep(_old, _new)]
+check("a baseline path under a pruned tree is not reported removed",
+      any("containerd" in t for t in _titles), False)
+check("a real setuid removal still is",
+      "Setuid bit removed: /usr/bin/passwd" in _titles, True)
+
+
 print("\n" + ("ALL PASS" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

@@ -1728,6 +1728,7 @@ class LinuxMonitor:
         "/var/lib/snapper",
         "/snapshots",
         "/var/lib/docker",      # container images, their own filesystems
+        "/var/lib/containerd",  # the same, for Docker on the containerd store
         "/var/lib/containers",
         "/mnt",                 # anything mounted by hand
         "/media",               # removable media
