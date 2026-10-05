@@ -61,11 +61,11 @@ class FakeRouter:
 
     def leases(self):
         return [{"ip": "172.21.0.10", "mac": "aa:bb:cc:00:00:10", "hostname": "console"},
-                {"ip": "172.21.0.11", "mac": "92:2f:57:00:00:01", "hostname": None}]
+                {"ip": "172.21.0.11", "mac": "02:00:5e:00:53:01", "hostname": None}]
 
     def neighbors(self):
         return [{"ip": "172.21.0.10", "mac": "aa:bb:cc:00:00:10", "interface": "br-lan"},
-                {"ip": "172.20.0.1", "mac": "14:c0:3e:93:80:02", "interface": "eth1"}]
+                {"ip": "172.20.0.1", "mac": "00:00:5e:00:53:22", "interface": "eth1"}]
 
     def blocks(self):
         return sorted(self.blocked)

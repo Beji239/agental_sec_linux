@@ -37,21 +37,21 @@ migrations.run_migrations(db)
 
 
 print("\n[1] identity_class has four groups")
-check("burned-in", me.identity_class("b8:81:98:40:d0:01"), "stable_host")
-check("dash form, upper case", me.identity_class("B8-81-98-40-D7-33"), "stable_host")
+check("burned-in", me.identity_class("00:00:5e:00:53:21"), "stable_host")
+check("dash form, upper case", me.identity_class("00-00-5E-00-53-21"), "stable_host")
 check("randomized", me.identity_class("02:1a:2b:3c:4d:5e"), "transient_client")
 check("absent", me.identity_class(""), "no_hardware_address")
 check("junk", me.identity_class("not-a-mac"), "unreadable_mac")
-check("cut off", me.identity_class("b8:81:98:40"), "unreadable_mac")
+check("cut off", me.identity_class("00:00:5e:00"), "unreadable_mac")
 check("all zeros", me.identity_class("00:00:00:00:00:00"), "unreadable_mac")
 
 
 print("\n[2] the enrollment counts and list")
-me.save_known_device("192.0.2.1", mac="b8:81:98:40:d0:01")
+me.save_known_device("192.0.2.1", mac="00:00:5e:00:53:21")
 me.save_known_device("192.0.2.2", mac="02:1a:2b:3c:4d:5e")
 me.save_known_device("192.0.2.3", mac="")
-me.save_known_device("192.0.2.4", mac="b8:81:98")
-me.save_known_device("192.0.2.5", mac="44:27:45:11:22:33")
+me.save_known_device("192.0.2.4", mac="00:00:5e")
+me.save_known_device("192.0.2.5", mac="00:00:5e:00:53:24")
 with sqlite3.connect(db) as conn:
     conn.execute("UPDATE known_devices SET retired_at = CURRENT_TIMESTAMP "
                  "WHERE ip = '192.0.2.5'")

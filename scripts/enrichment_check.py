@@ -34,7 +34,7 @@ from core import enrichment as en            # noqa: E402
 DEFAULTS = [
     "8.8.8.8",              # a boring allocation every source should know
     "CVE-2024-38063",       # a CVE both CVE sources should have
-    "5c:41:5a:80:80:01",    # a hardware prefix, local file, no network
+    "5c:41:5a:12:34:01",    # a hardware prefix, local file, no network
     "certutil.exe",         # a LOLBAS listing. First run downloads the catalogue.
 ]
 

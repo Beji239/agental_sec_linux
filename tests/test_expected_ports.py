@@ -53,7 +53,7 @@ sn.register_local()
 
 ECHO = "192.0.2.23"
 TV = "192.0.2.24"
-me.save_known_device(ip=ECHO, mac="5c:41:5a:80:80:01", known_as="Amazon device")
+me.save_known_device(ip=ECHO, mac="5c:41:5a:12:34:01", known_as="Amazon device")
 me.save_known_device(ip=TV, mac="00:11:22:33:44:55", known_as="LG TV")
 
 

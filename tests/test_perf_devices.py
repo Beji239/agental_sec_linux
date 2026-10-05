@@ -90,7 +90,7 @@ def _addr(prefix, host):
 HOST = _addr("10.0.0", "20")           # a desktop, RFC1918
 TV = _addr("10.0.0", "30")             # a television, RFC1918
 REMOTE = "77.111.246.43"               # a destination, not a device
-DNS = "11.22.33.53"                    # Comcast resolver, also not a device
+DNS = "11.22.33.53"                    # an ISP resolver, also not a device
 MCAST = "224.0.0.251"                  # mDNS group
 SSDP = "239.255.255.250"               # SSDP group
 LINKLOCAL = _addr("169.254.100", "1")  # an adapter with no lease

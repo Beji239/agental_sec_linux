@@ -101,7 +101,7 @@ print("\n[1] classify names the kind from the shape, and refuses to guess")
 check("an address is an ip",      en.classify("8.8.8.8"), "ip")
 check("a v6 address is an ip",    en.classify("2001:4860:4860::8888"), "ip")
 check("a CVE id is a cve",        en.classify("cve-2024-38063"), "cve")
-check("a hardware address is mac", en.classify("5c:41:5a:80:80:01"), "mac")
+check("a hardware address is mac", en.classify("5c:41:5a:12:34:01"), "mac")
 check("64 hex is a hash",         en.classify("a" * 64), "hash")
 check("a name is a domain",       en.classify("opera.com"), "domain")
 # The refusal matters more than any of the above. A guessed kind sends the

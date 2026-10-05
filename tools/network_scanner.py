@@ -672,7 +672,7 @@ def _read_arp_command() -> dict[str, str]:
                 continue
 
             # Linux net-tools:
-            # "_gateway (192.0.2.1) at 14:c0:3e:93:80:01 [ether] on wlp1s0"
+            # "_gateway (192.0.2.1) at 00:1b:21:12:34:56 [ether] on wlp1s0"
             # The address is in brackets, the MAC follows "at".
             addr = re.search(r"\((\d{1,3}(?:\.\d{1,3}){3})\)", line)
             if not addr:

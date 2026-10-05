@@ -47,7 +47,7 @@ print("\n[1] with NO registry file, it says no_data and not 'unknown'")
 # The distinction that matters most. A tool with no data saying "unknown
 # vendor" reads as "the registry has no entry", which is a different and much
 # stronger claim than the truth, which is that nobody looked.
-r = oui.lookup("5c:41:5a:80:80:01")
+r = oui.lookup("5c:41:5a:12:34:01")
 check("status is no_data", r["status"], "no_data")
 check("no vendor is claimed", r["vendor"], None)
 check("and it says what to run", "update_oui" in r["note"], True)
@@ -63,7 +63,7 @@ check("the note says no vendor CAN exist", "none can be" in r["note"], True)
 check("the bit test agrees", oui.is_locally_administered("02:11:22:33:44:55"),
       True)
 check("and a burned in address is not locally administered",
-      oui.is_locally_administered("5c:41:5a:80:80:01"), False)
+      oui.is_locally_administered("5c:41:5a:12:34:01"), False)
 
 
 print("\n[3] rubbish in does not become a vendor")
@@ -88,13 +88,13 @@ oui.reload()
 
 
 print("\n[4] a registered prefix resolves")
-r = oui.lookup("5c:41:5a:80:80:01")
+r = oui.lookup("5c:41:5a:12:34:01")
 check("vendor found", r["vendor"], "Example Devices Inc")
 check("status is resolved", r["status"], "resolved")
 check("case and separators do not matter",
-      oui.lookup("5C-41-5A-80-86-A5")["vendor"], "Example Devices Inc")
+      oui.lookup("5C-41-5A-12-34-01")["vendor"], "Example Devices Inc")
 check("so does no separator at all",
-      oui.lookup("5c415a8086a5")["vendor"], "Example Devices Inc")
+      oui.lookup("5c415a123401")["vendor"], "Example Devices Inc")
 
 
 print("\n[5] THE POINT: the longer prefix wins")
@@ -104,7 +104,7 @@ print("\n[5] THE POINT: the longer prefix wins")
 check("the 28 bit registration beats the 24 bit one",
       oui.lookup("5c:41:5a:98:80:01")["vendor"], "Small Vendor Co")
 check("and an address outside it still gets the parent",
-      oui.lookup("5c:41:5a:80:80:01")["vendor"], "Example Devices Inc")
+      oui.lookup("5c:41:5a:12:34:01")["vendor"], "Example Devices Inc")
 
 
 print("\n[6] a prefix genuinely absent from a LOADED registry")
@@ -122,7 +122,7 @@ print("\n[7] a broken registry file does not raise, it degrades")
 (tmp / "oui.csv").write_text("<html>we are down</html>", encoding="utf-8")
 (tmp / "mam.csv").unlink()
 oui.reload()
-r = oui.lookup("5c:41:5a:80:80:01")
+r = oui.lookup("5c:41:5a:12:34:01")
 check("falls back to no_data", r["status"], "no_data")
 check("status() reports not ready", oui.status()["ready"], False)
 
@@ -138,7 +138,7 @@ oui.reload()
 
 from core import memory_engine as me           # noqa: E402
 rows = me._with_identity_class([
-    {"ip": "192.0.2.5", "mac": "5c:41:5a:80:80:01"},
+    {"ip": "192.0.2.5", "mac": "5c:41:5a:12:34:01"},
     {"ip": "192.0.2.6", "mac": "02:11:22:33:44:55"},
     {"ip": "192.0.2.7", "mac": None},
 ])
@@ -169,7 +169,7 @@ for f in ("oui.csv", "mam.csv"):
     "AC:DE:48\tPrivate\n",
     encoding="utf-8")
 oui.reload()
-r = oui.lookup("5c:41:5a:80:80:01")
+r = oui.lookup("5c:41:5a:12:34:01")
 check("the 24 bit prefix resolves", r["vendor"], "Amazon Technologies Inc.")
 # The whole section this test belongs to is about claims having a source
 # behind them. It would be a poor joke for the lookup itself not to say
@@ -189,8 +189,8 @@ check("a two field line still works",
     encoding="utf-8")
 oui.reload()
 check("IEEE wins over manuf where both have the prefix",
-      oui.lookup("5c:41:5a:80:80:01")["vendor"], "Example Devices Inc")
-check("and the source says so", oui.lookup("5c:41:5a:80:80:01")["source"],
+      oui.lookup("5c:41:5a:12:34:01")["vendor"], "Example Devices Inc")
+check("and the source says so", oui.lookup("5c:41:5a:12:34:01")["source"],
       "oui.csv")
 
 
@@ -198,7 +198,7 @@ print("\n[9] an existing vendor is never overwritten")
 # A scan or a person looked at the device. The registry only knows who made
 # the network chip, which on plenty of hardware is not the brand on the box.
 # The two are shown side by side so a disagreement is visible.
-row = me._stamp_vendor({"ip": "192.0.2.5", "mac": "5c:41:5a:80:80:01",
+row = me._stamp_vendor({"ip": "192.0.2.5", "mac": "5c:41:5a:12:34:01",
                         "vendor": "Brand On The Box"})
 check("the recorded vendor survives", row["vendor"], "Brand On The Box")
 check("the registry answer is kept separately",

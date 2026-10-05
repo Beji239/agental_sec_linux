@@ -564,7 +564,7 @@ print("\n[NET-10] THE VENDOR COMES FROM THE REGISTRY THE APP ALREADY SHIPS")
 # from the map while oui.lookup resolved the same address.
 
 from core import oui                                  # noqa: E402
-_real = "14:c0:3e:93:80:01"
+_real = "00:1b:21:12:34:56"
 check("the registry resolves this host's gateway",
       oui.lookup(_real).get("status"), "resolved")
 check("and the module now returns that name, not Unknown",
