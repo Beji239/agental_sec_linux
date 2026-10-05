@@ -763,6 +763,70 @@ check("and NOT reported as the previous process moving its bind",
       kinds5.count("bind_changed"), 0)
 
 
+print("\n[9b] A BINDING THAT LEAVES AND RETURNS IS REACTIVATED, NOT LOST")
+# PO-1: prev holds only active rows, so the returning holder took the INSERT
+# path and hit idx_port_owner_unique on its own kept row, every pass, forever.
+def _sweeps():
+    with sqlite3.connect(DB) as c:
+        return c.execute("SELECT COUNT(*) FROM port_owner_sweep").fetchone()[0]
+
+
+def _rows_for(port):
+    with sqlite3.connect(DB) as c:
+        return c.execute(
+            "SELECT id, active, seen_count, first_seen_at FROM "
+            "port_owner_socket WHERE local_port = ?", (port,)).fetchall()
+
+
+_reset_sweep_state()
+po.record_sweep("t9", correlated=_payload([_one(45993, 1)]))
+first_row = _rows_for(45993)
+po.record_sweep("t9", correlated=_payload([]))
+check("the departed holder is kept, switched off",
+      [(r[1], r[2]) for r in _rows_for(45993)], [(0, 1)])
+n_before = _sweeps()
+back = po.record_sweep("t9", correlated=_payload([_one(45993, 1)]))
+check("THE RETURNING HOLDER DOES NOT FAIL THE SWEEP", back["ran"], True)
+check("and the sweep heartbeat row was written", _sweeps() - n_before, 1)
+again = _rows_for(45993)
+check("still exactly one row for the binding", len(again), 1)
+check("the SAME row, reactivated, count bumped",
+      (again[0][0], again[0][1], again[0][2]), (first_row[0][0], 1, 2))
+check("first_seen_at is kept", again[0][3], first_row[0][3])
+with sqlite3.connect(DB) as c:
+    kinds9b = [r[0] for r in c.execute(
+        "SELECT kind FROM port_owner_change ORDER BY id")]
+check("the feed says it left and came back", kinds9b,
+      ["disappeared", "appeared"])
+for _ in range(3):
+    po.record_sweep("t9", correlated=_payload([_one(45993, 1)]))
+check("repeat passes add no duplicate and keep counting",
+      [(r[1], r[2]) for r in _rows_for(45993)], [(1, 5)])
+
+print("\n  -- one row that cannot be written skips only that row (PO-2)")
+_reset_sweep_state()
+po.record_sweep("t9", correlated=_payload([_one(45992, 7000)]))
+with sqlite3.connect(DB) as c:
+    c.execute("CREATE TRIGGER t9_force_fail BEFORE INSERT ON port_owner_socket "
+              "WHEN NEW.local_port = 45991 "
+              "BEGIN SELECT RAISE(ABORT, 'forced by test'); END")
+try:
+    n_before = _sweeps()
+    part = po.record_sweep("t9", correlated=_payload(
+        [_one(45992, 7000), _one(45991, 7001), _one(45990, 7002)]))
+finally:
+    with sqlite3.connect(DB) as c:
+        c.execute("DROP TRIGGER IF EXISTS t9_force_fail")
+check("the sweep still ran", part["ran"], True)
+check("and reports the one skipped row", part["skipped"], 1)
+check("the heartbeat row survived", _sweeps() - n_before, 1)
+check("the good rows around the bad one survived",
+      (len(_rows_for(45992)), len(_rows_for(45991)), len(_rows_for(45990))),
+      (1, 0, 1))
+check_true("the sweep note says rows were skipped",
+           "skipped" in (part["note"] or ""), part["note"])
+
+
 print("\n[10] THE TWO ENTRY POINTS THE OWNER ASKED FOR")
 # "python should execute the scan on set intervals AND ... agent should be
 # able to call python to execute a scan whenever it wants to complete a
@@ -837,8 +901,27 @@ try:
     broken = po.sweep_now("t9", reason="broken store")
     check("it returned rather than raising", broken["ran"], False)
     check_true("with a reason", bool(broken.get("reason")), broken)
+    check("THE REASON IS THE ERROR, not the caller's label",
+          broken["reason"] != "broken store", True)
 finally:
     me.DB_PATH = _saved
+
+print("\n  -- a failed pass is not counted as a sweep (PO-3)")
+_real_record = po.record_sweep
+_count_before = po._state["sweeps"]
+po.record_sweep = lambda sid, correlated=None: {
+    "ran": False, "reason": "IntegrityError: forced by test"}
+try:
+    failed = po.sweep_now("t9", reason="interval")
+finally:
+    po.record_sweep = _real_record
+check("the real error survives as the reason", failed["reason"],
+      "IntegrityError: forced by test")
+check("the run's sweep count did not move", po._state["sweeps"], _count_before)
+check("status() carries the error", po.status()["last_error"],
+      "IntegrityError: forced by test")
+po.sweep_now("t9", reason="recovery")
+check("a good pass clears it", po.status()["last_error"], None)
 
 
 print("\n[11] THE DUTY LOOP USES BOTH HALVES, AND THE REPORT CARRIES THEM")

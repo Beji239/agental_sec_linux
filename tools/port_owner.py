@@ -126,6 +126,7 @@
 
 import logging
 import os
+import sqlite3
 import time
 from pathlib import Path
 from datetime import datetime, timezone
@@ -900,35 +901,37 @@ def record_sweep(session_id: str, correlated: dict = None) -> dict:
                 conn.execute("UPDATE port_owner_socket SET active = 0 "
                              "WHERE id = ?", (old["id"],))
 
+            # Each holder row has its own savepoint, so one row that cannot be
+            # written is skipped and logged instead of rolling back the whole
+            # sweep, heartbeat row included (PO-2).
+            skipped = 0
             for port_key, rows in now_by_port.items():
                 for r in rows:
-                    if _identity(r) in prev:
-                        conn.execute("""
-                            UPDATE port_owner_socket
-                               SET last_seen_at = ?,
-                                   seen_count = seen_count + 1,
-                                   active = 1, inode = ?, owner_status = ?
-                             WHERE id = ?
-                        """, (at, r.get("inode"), r["owner_status"],
-                              prev[_identity(r)]["id"]))
-                        continue
-                    conn.execute("""
-                        INSERT INTO port_owner_socket
-                            (proto, scope, local_address, local_port,
-                             remote_address, remote_port, pid, comm, exe,
-                             owner_status, inode, first_seen_at, last_seen_at,
-                             seen_count, active)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,1)
-                    """, (r["proto"], r["scope"], r["local_address"],
-                          r["local_port"], r.get("remote_address") or "",
-                          r.get("remote_port") or 0, r.get("pid"),
-                          r.get("comm"), r.get("exe"), r["owner_status"],
-                          r.get("inode"), at, at))
-                    appeared += 1
-                    if seeding or port_key in verdict:
-                        continue
-                    _log_change(conn, sweep_id, CHANGE_APPEARED, r, at,
-                                previous=None)
+                    conn.execute("SAVEPOINT port_row")
+                    try:
+                        if _identity(r) in prev:
+                            conn.execute("""
+                                UPDATE port_owner_socket
+                                   SET last_seen_at = ?,
+                                       seen_count = seen_count + 1,
+                                       active = 1, inode = ?, owner_status = ?
+                                 WHERE id = ?
+                            """, (at, r.get("inode"), r["owner_status"],
+                                  prev[_identity(r)]["id"]))
+                        else:
+                            _insert_holder(conn, r, at)
+                            if not (seeding or port_key in verdict):
+                                _log_change(conn, sweep_id, CHANGE_APPEARED,
+                                            r, at, previous=None)
+                            appeared += 1
+                    except sqlite3.IntegrityError as e:
+                        conn.execute("ROLLBACK TO port_row")
+                        skipped += 1
+                        logger.error(
+                            f"port_owner: holder row skipped, sweep continues: "
+                            f"{r['proto']} {r['local_address']}:"
+                            f"{r['local_port']} ({e})")
+                    conn.execute("RELEASE port_row")
 
             # THE DEPARTURES: a binding that is no longer in the kernel's
             # table. One change row says the binding stopped being held, and
@@ -945,6 +948,12 @@ def record_sweep(session_id: str, correlated: dict = None) -> dict:
                 _log_change(conn, sweep_id, CHANGE_DISAPPEARED, olds[0], at,
                             previous=olds[0])
 
+            if skipped:
+                note += (f" {skipped} holder row(s) could not be written this "
+                         f"pass and were skipped; the log names them.")
+                conn.execute("UPDATE port_owner_sweep SET note = ? "
+                             "WHERE id = ?", (note, sweep_id))
+
             conn.commit()
     except Exception as e:                                   # noqa: BLE001
         logger.error(f"port_owner: sweep could not be written: {e}")
@@ -958,12 +967,44 @@ def record_sweep(session_id: str, correlated: dict = None) -> dict:
         f"{counts['listeners_unreadable']} unreadable, "
         f"{appeared} holder row(s) written, {reheld} owner_changed, "
         f"{moved} bind_changed, {vanished} disappeared, "
+        f"{skipped} skipped, "
         f"{correlated['duration_ms']} ms")
     return {"ran": True, "sweep_id": sweep_id, "counts": counts,
             "coverage": coverage, "appeared": appeared,
             "owner_changed": reheld, "bind_changed": moved,
-            "disappeared": vanished,
+            "disappeared": vanished, "skipped": skipped,
             "seeding": seeding, "note": note}
+
+
+def _insert_holder(conn, r: dict, at: str) -> None:
+    """
+    Insert a holder row, or reactivate its kept inactive row (PO-1).
+
+    prev holds only active rows, so a binding that left and came back with the
+    same identity lands here. The conflict target must match
+    idx_port_owner_unique exactly. first_seen_at is left as it was.
+    """
+    conn.execute("""
+        INSERT INTO port_owner_socket
+            (proto, scope, local_address, local_port,
+             remote_address, remote_port, pid, comm, exe,
+             owner_status, inode, first_seen_at, last_seen_at,
+             seen_count, active)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,1)
+        ON CONFLICT (proto, scope, local_address, local_port,
+                     COALESCE(pid, -1), COALESCE(exe, ''),
+                     COALESCE(remote_address, ''),
+                     COALESCE(remote_port, 0))
+        DO UPDATE SET active = 1,
+                      seen_count = port_owner_socket.seen_count + 1,
+                      last_seen_at = excluded.last_seen_at,
+                      inode = excluded.inode,
+                      owner_status = excluded.owner_status
+    """, (r["proto"], r["scope"], r["local_address"],
+          r["local_port"], r.get("remote_address") or "",
+          r.get("remote_port") or 0, r.get("pid"),
+          r.get("comm"), r.get("exe"), r["owner_status"],
+          r.get("inode"), at, at))
 
 
 def _tables_ready(conn) -> bool:
@@ -1249,8 +1290,16 @@ def sweep_now(session_id: str, reason: str = "on demand") -> dict:
         result = record_sweep(session_id)
     except Exception as e:                                   # noqa: BLE001
         logger.error(f"port_owner: on-demand sweep failed ({reason}): {e}")
+        _state["last_error"] = f"{type(e).__name__}: {e}"
         return {"ran": False, "reason": f"{type(e).__name__}: {e}",
                 "duration_ms": int((time.time() - started) * 1000)}
+    # A failed pass keeps its own error as the reason and is not counted as
+    # a sweep, or the log and status() report a sensor that writes nothing
+    # as healthy (PO-3).
+    if not result.get("ran"):
+        _state["last_error"] = result.get("reason")
+        return result
+    _state["last_error"] = None
     _state["last_at"] = _now()
     _state["sweeps"] += 1
     result["reason"] = reason
