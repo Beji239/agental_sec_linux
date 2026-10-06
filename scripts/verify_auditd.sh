@@ -769,8 +769,10 @@ kill -TERM -"$BOOT_PID" 2>/dev/null
 # A 15-SECOND GRACE, for the reason verify_ebpf_events.sh records: with three
 # seconds the shutdown line had not been written yet and the check read the
 # moment BEFORE the shutdown, reporting a clean shutdown as missing.
+# Up to two minutes: the final incident pass over a full database copy took
+# 68 s of a 76 s clean shutdown on 2026-10-06.
 SHUT=0
-for _ in $(seq 1 30); do
+for _ in $(seq 1 120); do
     if grep -q 'AgentalSec stopped cleanly' "$TMP/boot.out" 2>/dev/null; then
         SHUT=1; break
     fi
