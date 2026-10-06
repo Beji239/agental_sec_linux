@@ -208,6 +208,10 @@ What the tests here do cover:
 - **Each detection stays quiet on normal use.** The same rules run against
   everyday activity on a real home network, and the noisy ones were tuned
   until they stopped raising alarms about ordinary devices and services.
+- **File scanning, when ClamAV is installed.** Running programs and new
+  files in temporary and download folders are scanned against ClamAV's
+  signatures, tested with the standard EICAR test file. This finds known
+  malware families only; how much it catches depends on ClamAV's database.
 
 What they cannot tell you:
 
