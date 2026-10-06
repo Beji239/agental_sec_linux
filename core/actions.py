@@ -13,6 +13,7 @@
 import json
 import logging
 import os
+import pwd
 import shutil
 import subprocess
 import threading
@@ -1074,6 +1075,25 @@ def describe(verb: str, params: dict) -> str:
 _notify_warned = {}
 
 
+def _desktop_user():
+    """(uid, gid, home) of the user who ran sudo, when this runs as root.
+
+    Root has no session bus of its own, so a notice sent as root reaches
+    nobody. None when not root or when no desktop user can be named.
+    """
+    if os.geteuid() != 0:
+        return None
+    raw = os.environ.get("SUDO_UID") or os.environ.get("PKEXEC_UID") or ""
+    try:
+        uid = int(raw)
+        pw = pwd.getpwuid(uid)
+    except (ValueError, KeyError):
+        return None
+    if uid == 0:
+        return None
+    return uid, pw.pw_gid, pw.pw_dir
+
+
 def notify(title: str, body: str, urgency: str = "normal") -> dict:
     """
     Show a desktop notification. Returns {'sent': bool, 'reason': ...};
@@ -1099,7 +1119,17 @@ def notify(title: str, body: str, urgency: str = "normal") -> dict:
     # sudo does not always inherit them.
     env = dict(os.environ)
     env.setdefault("DISPLAY", ":0")
-    if not env.get("DBUS_SESSION_BUS_ADDRESS"):
+    as_user = _desktop_user()
+    run_as = {}
+    if as_user:
+        # Running as root under sudo: send it as the desktop user, on that
+        # user's own bus.
+        uid, gid, home = as_user
+        runtime = f"/run/user/{uid}"
+        env.update(XDG_RUNTIME_DIR=runtime, HOME=home,
+                   DBUS_SESSION_BUS_ADDRESS=f"unix:path={runtime}/bus")
+        run_as = {"user": uid, "group": gid, "extra_groups": []}
+    elif not env.get("DBUS_SESSION_BUS_ADDRESS"):
         runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
         bus = os.path.join(runtime, "bus")
         if os.path.exists(bus):
@@ -1111,7 +1141,7 @@ def notify(title: str, body: str, urgency: str = "normal") -> dict:
            title, body]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10,
-                              env=env)
+                              env=env, **run_as)
     except Exception as e:
         logger.warning(f"notify-send could not be run: {e}")
         return {"sent": False, "reason": f"notify-send could not be run: {e}"}
