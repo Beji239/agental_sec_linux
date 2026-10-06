@@ -1216,6 +1216,14 @@ _REGISTER: list[Detection] = [
        "back on is printed on the finding.",
        ("availability", "integrity")),
 
+    _d("AV-1001", 1, "malware_signature_found", "av_scanner", "file",
+       {"high"},
+       "ClamAV matched one of its malware signatures in a file: a running "
+       "program, or a new file in /tmp, /var/tmp, /dev/shm or a Downloads "
+       "folder. A match names a known family or a test file; malware ClamAV "
+       "has no signature for is not found this way.",
+       ("integrity", "confidentiality")),
+
     _d("AUD-1004", 1, "audit_daemon_stopped", "auditd", "file",
        {"medium"},
        "The audit daemon wrote DAEMON_END: the process that writes the "

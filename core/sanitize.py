@@ -392,6 +392,8 @@ UNTRUSTED_TOOLS = {
     # them. The file stays where it is; the STRING describing it is what
     # reaches the model.
     "restore_file",
+    # File names in a scan result are chosen by whoever wrote the file.
+    "scan_with_antivirus",
     # A cron line and a unit name were written by whoever planted them, and
     # these results repeat them.
     "disable_cron_line",

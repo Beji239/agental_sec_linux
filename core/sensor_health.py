@@ -471,6 +471,7 @@ DEPENDS: dict[str, tuple] = {
     "query_device_blocks":        ("remediation", CAP + "firewall_read"),
     "quarantine_file":            ("remediation",),
     "restore_file":               ("remediation",),
+    "scan_with_antivirus":        ("av_scanner",),
     "remove_ssh_key":             ("remediation",),
     "restore_ssh_key":            ("remediation",),
     "lock_account":               ("remediation",),

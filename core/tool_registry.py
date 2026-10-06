@@ -2781,7 +2781,9 @@ TOOL_MANIFEST = [
         "description": (
             "Ask for an indicator to be researched against structured sources: "
             "RDAP and ip-api for ownership, AbuseIPDB for reputation, URLhaus "
-            "and MalwareBazaar for malware, CIRCL and NVD for CVEs, the local "
+            "and MalwareBazaar for known malware samples by exact hash (not a "
+            "virus scan: scan_with_antivirus reads the file itself), CIRCL "
+            "and NVD for CVEs, the local "
             "IEEE registry for hardware prefixes, and LOLBAS for Windows "
             "binaries with a known abuse technique. Takes an IP, a domain, a "
             "CVE id, a MAC address, a file hash or a process name.\n\n"
@@ -3474,6 +3476,25 @@ TOOL_MANIFEST = [
         }
     },
     {
+        "name": "scan_with_antivirus",
+        "description": (
+            "Scan up to 20 files with ClamAV, now, and say which match a "
+            "malware signature. Read only: nothing is moved or deleted. Use "
+            "it on a file a finding names, a download, or a running "
+            "program's file. A clean answer means ClamAV knows no signature "
+            "for it, not that it is safe. If ClamAV is not installed the "
+            "answer says so and nothing was scanned."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "paths": {"type": "array", "items": {"type": "string"},
+                          "description": "Absolute file paths."},
+            },
+            "required": ["paths"]
+        }
+    },
+    {
         "name": "restore_ssh_key",
         "description": (
             "Put back a key remove_ssh_key took out, from its undo record. "
@@ -3584,9 +3605,11 @@ TOOL_MANIFEST = [
     {
         "name": "disable_service",
         "description": (
-            "Stop, disable and mask a SYSTEM systemd unit, so it does not "
-            "come back at boot or on demand. The response to a persistence "
-            "unit (LNX-4001); stop_service only stops it until the next boot. "
+            "Stop, disable and mask a systemd unit, so it does not come "
+            "back at boot, at login or on demand. Works on system units and "
+            "on units in the user's own manager (systemctl --user). The "
+            "response to a persistence unit (LNX-4001); stop_service only "
+            "stops it until the next boot. "
             "ALWAYS goes through the approval card. Security controls, "
             "logging, the session and this app's own units are refused. The "
             "name is an exact unit name such as 'evil.service'. Undo with "
@@ -7392,6 +7415,13 @@ def _dispatch(name: str, params: dict):
         if not mod:
             raise ToolUnavailable("remediation module not loaded")
         return mod.list_quarantined()
+
+    if name == "scan_with_antivirus":
+        mod = _modules.get("av_scanner")
+        if not mod:
+            raise ToolUnavailable("the antivirus scanner is not loaded "
+                                  "(sensors.av_scanner in config.json)")
+        return mod.scan(params.get("paths") or [])
 
     if name in CONTAINMENT_TOOLS:
         mod = _modules.get("remediation")

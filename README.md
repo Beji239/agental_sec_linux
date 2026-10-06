@@ -346,10 +346,12 @@ extends its view.
 - **It points you to a network, not a street.** The map places an address
   where its network is registered, which is good for "this left the
   country", not for finding a person.
-- **It works alongside an antivirus, not instead of one.** It does not scan
-  memory or files for malware. When a process raises a finding, its file is
-  hashed and looked up in public malware databases; a miss means the file is
-  unknown, not proven clean.
+- **It works alongside an antivirus, not instead of one.** With ClamAV
+  installed it scans running programs and new files in /tmp, /dev/shm and
+  Downloads against ClamAV's signatures, and checks each hit with
+  MalwareBazaar. It does not scan memory, and it finds only what those
+  signatures know. Without ClamAV, a suspicious program's hash is looked up
+  in MalwareBazaar alone, which matches only files already uploaded there.
 - **It is a watchman, not a vault.** It runs on the computer it protects, so
   anyone with full control of that computer could stop it. Its hash-chained
   journal makes later edits to its records visible, and its findings are

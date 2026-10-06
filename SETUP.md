@@ -145,6 +145,12 @@ removes it.
 
 ## 11. Optional sensors
 
+Malware scanning with ClamAV. Its own service keeps the signatures current:
+
+```bash
+sudo apt install clamav clamav-daemon
+```
+
 Remote Linux hosts over SSH:
 
 ```bash

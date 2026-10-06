@@ -226,6 +226,15 @@ def _hash_file(filepath: str) -> str | None:
         return None
 
 
+# Shared with the ClamAV scanner, so each file is hashed once.
+hash_file = _hash_file
+
+
+def paths_for_hash(file_hash: str) -> list:
+    """The files this process has hashed to file_hash, from the cache."""
+    return sorted({key[0] for key, h in list(_hash_cache.items()) if h == file_hash})
+
+
 def _is_suspicious_path(filepath: str) -> tuple[bool, str | None]:
     """
     Check if a file path is suspicious.

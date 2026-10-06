@@ -639,6 +639,213 @@ def _validated_unit_name(unit) -> str:
     return name
 
 
+# A USER UNIT DISABLED FOR GOOD. The root helper only reaches the system
+# manager, so a service in a user's own manager (systemctl --user) is
+# disabled and masked here, as that user: directly when the app runs as the
+# owner, through --machine=<user>@ when it runs as root under sudo.
+
+# Units of the desktop session itself, never disabled from here.
+USER_PROTECTED = ("agentalsec*", "dbus*", "pipewire*", "wireplumber*",
+                  "pulseaudio*", "xdg-*", "gvfs*", "at-spi*", "gnome-*",
+                  "cinnamon*", "plasma-*", "systemd-*", "gpg-agent*",
+                  "ssh-agent*", "default.target", "basic.target")
+
+
+def _user_target():
+    """(argv prefix, env, owner name) for the desktop user's manager."""
+    import pwd
+    if os.geteuid() == 0:
+        raw = os.environ.get("SUDO_UID") or os.environ.get("PKEXEC_UID") or ""
+        try:
+            name = pwd.getpwuid(int(raw)).pw_name
+        except (ValueError, KeyError):
+            return None, None, None
+        if name == "root":
+            return None, None, None
+        return ["systemctl", f"--machine={name}@", "--user"], dict(os.environ), name
+    name = pwd.getpwuid(os.getuid()).pw_name
+    return ["systemctl", "--user"], _manager_env("--user"), name
+
+
+def _user_unit_state(prefix, env, unit) -> dict:
+    try:
+        proc = subprocess.run(prefix + ["show", "--no-pager", "-p",
+                                        "LoadState,ActiveState,UnitFileState",
+                                        "--", unit],
+                              capture_output=True, text=True, timeout=30, env=env)
+    except Exception as e:                                  # noqa: BLE001
+        return {"error": str(e)}
+    if proc.returncode != 0:
+        return {"error": (proc.stderr or proc.stdout).strip()[:300]}
+    return dict(line.partition("=")[::2] for line in proc.stdout.splitlines()
+                if "=" in line)
+
+
+def user_unit_known(unit: str) -> bool:
+    """Is this a unit the desktop user's own manager has loaded?"""
+    try:
+        unit = _validated_unit_name(unit)
+    except ValueError:
+        return False
+    prefix, env, _ = _user_target()
+    if not prefix:
+        return False
+    return _user_unit_state(prefix, env, unit).get("LoadState") in ("loaded", "masked")
+
+
+def _user_unit_open(unit: str):
+    """(unit, prefix, env, owner, before) or a refusal dict."""
+    import fnmatch
+    try:
+        unit = _validated_unit_name(unit)
+    except ValueError as e:
+        return {"success": False, "refused": True, "error": str(e)}
+    for pattern in USER_PROTECTED:
+        if fnmatch.fnmatch(unit.lower(), pattern):
+            return {"success": False, "refused": True, "unit": unit,
+                    "error": (f"{unit} matches {pattern!r}, a unit of the "
+                              f"desktop session or of AgentalSec itself, which "
+                              f"is never disabled from here.")}
+    prefix, env, owner = _user_target()
+    if not prefix:
+        return {"success": False, "refused": True, "unit": unit,
+                "error": ("there is no desktop user to act for: the app runs "
+                          "as root without SUDO_UID or PKEXEC_UID.")}
+    return unit, prefix, env, owner, _user_unit_state(prefix, env, unit)
+
+
+def _run_step(prefix, env, verb, unit=None) -> dict:
+    argv = prefix + verb + (["--", unit] if unit else [])
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True,
+                              timeout=120, env=env)
+        return {"ran": " ".join(verb), "exit": proc.returncode,
+                "stderr": (proc.stderr or "").strip()[:300]}
+    except Exception as e:                                  # noqa: BLE001
+        return {"ran": " ".join(verb), "exit": None, "stderr": str(e)}
+
+
+def _held_dir(owner: str):
+    import pwd
+    pw = pwd.getpwnam(owner)
+    return os.path.join(pw.pw_dir, ".local", "state", "agental_sec",
+                        "held_units"), pw
+
+
+def _hold_unit_file(owner: str, path: str, unit: str) -> dict:
+    """Move a unit file out of the user's unit folder, keeping where it was.
+    mask cannot work on a file that lives where its own link would go."""
+    import json
+    held, pw = _held_dir(owner)
+    os.makedirs(held, mode=0o700, exist_ok=True)
+    # Run as root, every folder this created under the home goes to its owner.
+    d = held
+    while os.geteuid() == 0 and d.startswith(pw.pw_dir + os.sep):
+        if os.stat(d).st_uid == 0:
+            os.chown(d, pw.pw_uid, pw.pw_gid)
+        d = os.path.dirname(d)
+    dest = os.path.join(held, unit)
+    if os.path.lexists(dest):
+        return {"error": f"{dest} already exists, so the unit was not moved"}
+    os.rename(path, dest)
+    meta = os.path.join(held, unit + ".json")
+    with open(meta, "w", encoding="utf-8") as fh:
+        json.dump({"unit": unit, "original_path": path}, fh)
+    if os.geteuid() == 0:
+        os.chown(meta, pw.pw_uid, pw.pw_gid)
+    return {"held_at": dest, "original_path": path}
+
+
+def disable_user_unit(unit: str) -> dict:
+    """Stop and disable a user unit and keep it from starting again: masked,
+    or, when its file lives in the user's own unit folder, moved aside."""
+    opened = _user_unit_open(unit)
+    if isinstance(opened, dict):
+        return opened
+    unit, prefix, env, owner, before = opened
+    if before.get("LoadState") not in ("loaded", "masked"):
+        return {"success": False, "refused": True, "unit": unit,
+                "error": (f"{unit} is not a unit {owner}'s own manager has "
+                          f"loaded ({before.get('error') or before.get('LoadState')}). "
+                          f"Nothing ran.")}
+    frag = subprocess.run(
+        prefix + ["show", "-p", "FragmentPath", "--value", "--", unit],
+        capture_output=True, text=True, timeout=30, env=env).stdout.strip()
+    _, pw = _held_dir(owner)
+    user_dir = os.path.join(pw.pw_dir, ".config", "systemd", "user")
+    steps = [_run_step(prefix, env, ["disable", "--now"], unit)]
+    held = None
+    if frag and os.path.dirname(frag) == user_dir and os.path.isfile(frag) \
+            and not os.path.islink(frag):
+        held = _hold_unit_file(owner, frag, unit)
+        steps.append({"ran": f"moved {frag} to the holding folder",
+                      "exit": 0 if "held_at" in held else 1,
+                      "stderr": held.get("error", "")})
+        steps.append(_run_step(prefix, env, ["daemon-reload"]))
+    else:
+        steps.append(_run_step(prefix, env, ["mask"], unit))
+    after = _user_unit_state(prefix, env, unit)
+    if held and "held_at" in held:
+        ok = after.get("LoadState") == "not-found" and after.get("ActiveState") != "active"
+        how = (f"its unit file was moved to {held['held_at']}, so nothing can "
+               f"start it until enable_service puts it back")
+    else:
+        ok = after.get("ActiveState") in ("inactive", "failed") and \
+            after.get("UnitFileState") == "masked"
+        how = "read back as masked in the user's own manager"
+    out = {"success": ok, "unit": unit, "manager": "user", "owner": owner,
+           "before": before, "after": after, "steps": steps}
+    if ok:
+        out.update(disabled_and_masked=True,
+                   note=f"stopped and disabled; {how}. It does not start at the next login.")
+        if held:
+            out["held_at"] = held.get("held_at")
+    else:
+        out["error"] = f"{unit} did not read back as stopped and blocked, see steps and after"
+    return out
+
+
+def enable_user_unit(unit: str) -> dict:
+    """Undo disable_user_unit: put a held unit file back, unmask, enable.
+    It is not started."""
+    import json
+    opened = _user_unit_open(unit)
+    if isinstance(opened, dict):
+        return opened
+    unit, prefix, env, owner, before = opened
+    held_dir, pw = _held_dir(owner)
+    meta = os.path.join(held_dir, unit + ".json")
+    steps = []
+    if os.path.isfile(meta):
+        with open(meta, encoding="utf-8") as fh:
+            original = json.load(fh).get("original_path", "")
+        user_dir = os.path.join(pw.pw_dir, ".config", "systemd", "user")
+        if os.path.dirname(original) != user_dir or os.path.lexists(original):
+            return {"success": False, "refused": True, "unit": unit,
+                    "error": f"the held unit cannot go back to {original!r}: "
+                             f"it is outside the user's unit folder or something is there now"}
+        os.rename(os.path.join(held_dir, unit), original)
+        os.unlink(meta)
+        steps.append({"ran": f"moved the held file back to {original}", "exit": 0, "stderr": ""})
+        steps.append(_run_step(prefix, env, ["daemon-reload"]))
+    elif before.get("LoadState") not in ("loaded", "masked"):
+        return {"success": False, "refused": True, "unit": unit,
+                "error": f"{unit} is neither held nor loaded in {owner}'s manager. Nothing ran."}
+    steps.append(_run_step(prefix, env, ["unmask"], unit))
+    steps.append(_run_step(prefix, env, ["enable"], unit))
+    after = _user_unit_state(prefix, env, unit)
+    ok = after.get("LoadState") == "loaded" and \
+        after.get("UnitFileState") not in ("masked", "masked-runtime")
+    out = {"success": ok, "unit": unit, "manager": "user", "owner": owner,
+           "before": before, "after": after, "steps": steps}
+    if ok:
+        out.update(unmasked=True, note="back in place and enabled; not started")
+    else:
+        out["error"] = f"{unit} did not read back as enabled, see steps and after"
+    return out
+
+
+# ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 # WHAT IS RUNNING, FOR THE MODEL
 
 def list_units(manager: str = "", limit: int = 200) -> dict:

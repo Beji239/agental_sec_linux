@@ -4583,14 +4583,16 @@ class LinuxRemediation:
 
     def _contain(self, verb: str, args: list, *, done: str, rem_id: str,
                  entity_type: str, entity_key: str, title: str, reason: str,
-                 session_id: str = None) -> dict:
+                 session_id: str = None, runner=None) -> dict:
         from core import memory_engine as me
         if not (reason or "").strip():
             return {"success": False,
                     "error": "reason is required. Say what was found and why "
                              "this is the response."}
         args = [str(a) for a in args]
-        if _unelevated():
+        if runner is not None:
+            result = runner(*args)
+        elif _unelevated():
             result = _via_helper(verb, *args)
         else:
             from tools import action_helper as ah
@@ -4690,21 +4692,28 @@ class LinuxRemediation:
             title="Cron line enabled again in {path}", reason=reason,
             session_id=session_id)
 
+    # A unit in the user's own manager (systemctl --user) is handled there,
+    # as that user; anything else is a system unit for the root helper.
+
     def disable_service(self, unit: str, reason: str,
                         session_id: str = None) -> dict:
+        from tools import systemd_units as sd
         return self._contain(
             "disable_unit", [unit], done="disabled_and_masked",
             rem_id="REM-1025", entity_type="process", entity_key="unit",
             title="Service stopped, disabled and masked: {unit}",
-            reason=reason, session_id=session_id)
+            reason=reason, session_id=session_id,
+            runner=sd.disable_user_unit if sd.user_unit_known(unit) else None)
 
     def enable_service(self, unit: str, reason: str,
                        session_id: str = None) -> dict:
+        from tools import systemd_units as sd
         return self._contain(
             "enable_unit", [unit], done="unmasked",
             rem_id="REM-1026", entity_type="process", entity_key="unit",
             title="Service unmasked and enabled: {unit}", reason=reason,
-            session_id=session_id)
+            session_id=session_id,
+            runner=sd.enable_user_unit if sd.user_unit_known(unit) else None)
 
     # systemd units. L2, 2026-09-22.
 
@@ -5018,6 +5027,69 @@ class LinuxRemediation:
 # IT IS BLIND FOR THE ONE REAL FAILURE: the log exists and this account cannot
 # read it, which is the default on every install (root-only, 0600), and means
 # every answer would otherwise be an empty list that reads as a quiet machine.
+class LinuxAVScanner(_BaseAdapter):
+    """Wraps tools/av_scanner.py: ClamAV over running programs and the
+    folders a payload is dropped in. AV-1001 on a signature match."""
+
+    role = "av_scanner"
+
+    def __init__(self, session_id, config=None):
+        super().__init__(session_id, config)
+        from tools import av_scanner as av
+        self._scanner = av.Scanner(config)
+
+    @property
+    def poll_interval(self) -> int:
+        return int(((self.config or {}).get("sensors") or {})
+                   .get(self.role, {}).get("poll_interval", 900))
+
+    def poll(self):
+        from core import memory_engine as me
+        for f in self._scanner.run_pass():
+            if me.is_dismissed("file", f["entity_value"]):
+                continue
+            if me.finding_already_open(self.role, "file", f["entity_value"], f["title"]):
+                continue
+            me.save_finding(session_id=self.session_id, source=self.role,
+                            detection_id=f["detection_id"], severity=f["severity"],
+                            entity_type="file", entity_value=f["entity_value"],
+                            title=f["title"], description=f["description"],
+                            raw_data=f["raw_data"])
+            logger.warning(f"av_scanner: {f['title']}")
+
+    def _wait_for_next_poll(self):
+        from tools import av_scanner as av
+        av.wake.wait(self.poll_interval)
+        av.wake.clear()
+
+    def stop(self):
+        from tools import av_scanner as av
+        super().stop()
+        av.wake.set()
+
+    def scan(self, paths: list) -> dict:
+        """An on-demand scan of named files, for the agent."""
+        import os
+        from tools import av_scanner as av
+        asked = [str(p) for p in (paths or [])][:20]
+        # Files only: a folder, even "/", would have ClamAV walk all of it.
+        files = [p for p in asked if os.path.isfile(p) and not os.path.islink(p)]
+        out = av.scan_paths(files, timeout=int(self._scanner.cfg["scan_timeout_seconds"]))
+        skipped = [p for p in asked if p not in files]
+        if skipped:
+            out["not_scanned"] = {"paths": skipped,
+                                  "why": "not a regular file (a folder, a link or missing)"}
+        return out
+
+    def status(self) -> dict:
+        st = self._scanner.status()
+        st["running"] = self._running
+        st["role"] = self.role
+        st["state"] = ("NOT INSTALLED" if not st["engine"]["installed"]
+                       else "READABLE")
+        return st
+
+
 class LinuxAuditd(_BaseAdapter):
     """Wraps tools/auditd_monitor.py, which reads the kernel audit log."""
 

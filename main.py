@@ -759,6 +759,14 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
                          f"Windows counterpart: it reads the Linux kernel's "
                          f"own audit log, and tools.auditd_monitor is the only "
                          f"implementation of it.")
+    # Malware scanning with ClamAV, off only when config.json says so.
+    if (((config.get("sensors") or {}).get("av_scanner") or {})
+            .get("enabled", True)):
+        from adapters import LinuxAVScanner
+        modules["av_scanner"] = try_load(
+            "av_scanner", lambda: LinuxAVScanner(session_id, config))
+    else:
+        logger.info("av_scanner is switched off in config.json.")
     from adapters import LinuxAuditd
     modules["auditd"] = try_load("auditd",
                                  lambda: LinuxAuditd(session_id, config))

@@ -1741,7 +1741,9 @@ SOURCE_CATALOG = {
     },
     "malwarebazaar": {
         "host":    "mb-api.abuse.ch",
-        "answers": "whether a file hash matches a sample somebody has uploaded",
+        "answers": ("whether a file hash matches a sample somebody has "
+                    "uploaded. Not a virus scan: a new or changed file never "
+                    "matches. ClamAV, when installed, scans the file itself"),
         "why":     "the only hash source here. One source means a hit grades "
                    "`single_source`, which is honest: a hash either matches an "
                    "uploaded sample or it does not, and there is nothing to "
@@ -2205,7 +2207,22 @@ def store(result: dict, session_id: str = None) -> dict:
             json.dumps(result.get("tried") or []),
             result.get("gap"), session_id, _iso(_now()), _iso(expires),
         ))
+    if kind == "hash" and is_flagged(result.get("fields")):
+        _scan_flagged_hash(result["indicator"])
     return dict(result, expires_at=_iso(expires))
+
+
+def _scan_flagged_hash(file_hash: str):
+    """A known sample by hash: have ClamAV read that file and its folder now."""
+    try:
+        from tools import process_monitor_linux as pm
+        from tools import av_scanner as av
+        paths = pm.paths_for_hash(file_hash)
+        if paths:
+            av.request_scan(paths, folders=True,
+                            reason=f"MalwareBazaar lists {file_hash[:16]}...")
+    except Exception as e:                              # noqa: BLE001
+        logger.debug(f"could not ask for a scan of {file_hash}: {e}")
 
 
 # A MALWARE HIT IS A HEADLINE. TODO 41.7, owner's call 2026-09-04.
