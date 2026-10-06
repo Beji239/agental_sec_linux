@@ -217,11 +217,14 @@ What they cannot tell you:
 
 - **How often it catches malware nobody has seen before.** That depends on
   how the malware behaves, and only a large, varied set of real samples can
-  answer it.
+  answer it. ClamAV does not help here: a signature exists only for malware
+  that has already been seen.
 - **A detection rate.** No percentage is claimed, because no honest one could
   be measured in a home lab.
 
-So treat AgentalSec as a second pair of eyes beside an antivirus, and its
+With ClamAV installed, AgentalSec also scans files, but it is not a full
+antivirus: it scans on a schedule rather than at the moment a file is opened,
+and it does not scan memory. So treat it as a second pair of eyes, and its
 findings as leads to follow up. If you can test it in a proper malware lab,
 your results would be very welcome.
 
