@@ -75,11 +75,12 @@ apply() {
     install -o root -g root -m 0640 "$tmp" "$RULES_FILE" || { rm -f "$tmp"; die "could not write $RULES_FILE"; }
     rm -f "$tmp"
     say "  wrote $RULES_FILE ($(grep -c '^-w' "$RULES_FILE") watches)"
-    if ! augenrules --load; then
+    if ! augenrules --load >/dev/null; then
         die "augenrules could not load the rules. If the kernel rules are locked (-e 2), they load at the next boot."
     fi
     local loaded
-    loaded="$(auditctl -l 2>/dev/null | grep -c "key=$KEY")"
+    # auditctl -l prints a watch as "-k NAME" and a syscall rule as "key=NAME".
+    loaded="$(auditctl -l 2>/dev/null | grep -cE -- "(-k |key=)$KEY( |$)")"
     say "  the kernel now holds $loaded rule(s) keyed $KEY"
     (( loaded > 0 )) || die "no rule keyed $KEY is in force after the load"
     say ""
@@ -90,7 +91,7 @@ uninstall() {
     [[ "$(id -u)" == "0" ]] || die "--uninstall must run as root"
     rm -f "$RULES_FILE" && say "  removed $RULES_FILE"
     augenrules --load >/dev/null 2>&1 && say "  reloaded the remaining rules"
-    say "  the kernel now holds $(auditctl -l 2>/dev/null | grep -c "key=$KEY") rule(s) keyed $KEY"
+    say "  the kernel now holds $(auditctl -l 2>/dev/null | grep -cE -- "(-k |key=)$KEY( |$)") rule(s) keyed $KEY"
 }
 
 # Readable without root when the account is in the adm group: the load writes
