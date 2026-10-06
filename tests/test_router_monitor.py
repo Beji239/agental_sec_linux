@@ -59,6 +59,8 @@ import os
 import socket
 import sqlite3
 import sys
+
+import _skip
 import tempfile
 import threading
 from pathlib import Path
@@ -400,9 +402,13 @@ def run() -> list:
         # the map's spelling rather than the fact that a vendor is produced.
         # The unknown-prefix case is UNCHANGED and still the important one: a
         # prefix nobody registered must stay empty rather than be guessed at.
-        fail("a known prefix produces the registry's own name for the vendor",
-             by_address[DEVICE_A]["vendor"] == "Raspberry Pi Foundation",
-             str(by_address[DEVICE_A]["vendor"]))
+        from core import oui
+        if oui.lookup("b8:27:eb:11:22:33").get("status") == "no_data":
+            _skip.skip_part("the vendor check needs data/oui.csv, fetched at install time")
+        else:
+            fail("a known prefix produces the registry's own name for the vendor",
+                 by_address[DEVICE_A]["vendor"] == "Raspberry Pi Foundation",
+                 str(by_address[DEVICE_A]["vendor"]))
         fail("an unknown prefix stays empty rather than being guessed at",
              by_address[DEVICE_C]["vendor"] is None)
         fail("the entry type is decoded",
@@ -580,6 +586,7 @@ def main() -> int:
     print("ROUTER MONITOR TESTS")
     failures = run()
     if not failures:
+        _skip.exit_if_skipped()
         print("\nEverything behaved.")
         return 0
     print(f"\n{len(failures)} FAILURE(S):\n")

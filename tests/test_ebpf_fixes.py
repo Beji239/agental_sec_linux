@@ -54,6 +54,7 @@ from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import _skip                                          # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 
 import _isolate_db                                    # noqa: E402
@@ -551,7 +552,8 @@ print("\n[E-10] WHAT THIS HOST REFUSES, RECORDED SO IT IS NOT MISTAKEN FOR A BUG
 # The refusal is libbpf's, not this camera's, and the sentence the operator
 # sees must be the one that says so. This is a MEASUREMENT, not an assertion
 # about a defect: the load cannot succeed unelevated here.
-rb = CAM.RingBuffer(ROOT / "ebpf" / "ebpf_monitor.bpf.o")
+BPF_OBJ = ROOT / "ebpf" / "ebpf_monitor.bpf.o"
+rb = CAM.RingBuffer(BPF_OBJ)
 loaded = False
 refusal = ""
 try:
@@ -561,9 +563,12 @@ try:
           "exercised here, and the source check below is the one that holds)")
 except RuntimeError as exc:
     refusal = str(exc)
-    ok("the refusal the kernel gives is wrapped in a sentence that names the "
-       "verifier rather than the camera",
-       "KERNEL REFUSED THE PROGRAM" in refusal)
+    if not BPF_OBJ.exists():
+        _skip.skip_part("E-10 needs the built eBPF object, a fresh clone has none")
+    else:
+        ok("the refusal the kernel gives is wrapped in a sentence that names "
+           "the verifier rather than the camera",
+           "KERNEL REFUSED THE PROGRAM" in refusal)
 
 # STATED AS THE SOURCE FACT IT IS. The crash-loop this round's sibling fixed
 # (PM-10) was `bpf_get_error` being RESOLVED -- and ctypes looks a symbol up
@@ -753,5 +758,6 @@ if fails:
     for f in fails:
         print(f"  FAILED: {f}")
     sys.exit(1)
+_skip.exit_if_skipped()
 print("all checks passed")
 sys.exit(0)

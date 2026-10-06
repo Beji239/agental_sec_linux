@@ -201,6 +201,13 @@ def run_one(path: pathlib.Path, timeout: int):
         return {"name": path.name, "state": "PASS", "secs": secs,
                 "reason": "", "output": out}
 
+    # Exit 77 is a test saying it cannot run here (tests/_skip.py).
+    if p.returncode == 77:
+        said = re.findall(r"^SKIP: (.+)$", p.stderr or "", re.M)
+        return {"name": path.name, "state": "SKIP", "secs": secs,
+                "reason": said[-1] if said else "the test said it cannot run here",
+                "output": out}
+
     reason = why_skipped(p.stderr or "")
     if reason:
         return {"name": path.name, "state": "SKIP", "secs": secs,

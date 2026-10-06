@@ -55,6 +55,7 @@ import signal
 import socket
 import subprocess
 import sys
+import _skip
 import tempfile
 import time
 
@@ -523,23 +524,27 @@ def _with_config(block, fn):
 # WHAT THE OPERATOR ACTUALLY HAS, read through the guard's OWN reader so this
 # section cannot quietly disagree with the thing it is testing.
 real_cfg = adapters.read_operator_config()
-gateway = adapters._configured_router_from(real_cfg)
-check("the reader opens the file the app itself loads "
-      "(core/settings.CONFIG_PATH)",
-      adapters.read_operator_config() is not None
-      and core_settings.CONFIG_PATH.exists(), True)
-check("and a router is set in it, or this section proves nothing",
-      bool(gateway), True)
+gateway = (adapters._configured_router_from(real_cfg)
+           if real_cfg is not None else "")
+if not (core_settings.CONFIG_PATH.exists() and gateway):
+    _skip.skip_part('the real-gateway check needs a config.json with a router set')
+else:
+    check("the reader opens the file the app itself loads "
+          "(core/settings.CONFIG_PATH)",
+          adapters.read_operator_config() is not None
+          and core_settings.CONFIG_PATH.exists(), True)
+    check("and a router is set in it, or this section proves nothing",
+          bool(gateway), True)
 
-rem_adapter = LinuxRemediation("remfix-test")
-refusal = rem_adapter.block_device(gateway, "probe")
-check("THE REAL GATEWAY IS REFUSED", refusal.get("success"), False)
-check("and it is the gateway rule that refused, not another one",
-      "router named in config.json" in (refusal.get("error") or ""), True)
-check("and the sentence says a ban is not what this means",
-      "not what a device ban means" in (refusal.get("error") or ""), True)
-check("and nothing was written for a ban that did not happen",
-      "record_error" in refusal, False)
+    rem_adapter = LinuxRemediation("remfix-test")
+    refusal = rem_adapter.block_device(gateway, "probe")
+    check("THE REAL GATEWAY IS REFUSED", refusal.get("success"), False)
+    check("and it is the gateway rule that refused, not another one",
+          "router named in config.json" in (refusal.get("error") or ""), True)
+    check("and the sentence says a ban is not what this means",
+          "not what a device ban means" in (refusal.get("error") or ""), True)
+    check("and nothing was written for a ban that did not happen",
+          "record_error" in refusal, False)
 
 # THE CONTROL, and it is what stops the checks above passing for the wrong
 # reason: a guard that refused EVERY address would satisfy them. A DIFFERENT
@@ -565,7 +570,8 @@ check("and finds one that is set",
 check("and is not fooled by a config that cannot be read at all",
       _with_config({}, adapters._configured_router), "")
 check("an empty reason is still refused",
-      rem_adapter.block_device(gateway, "   ").get("success"), False)
+      LinuxRemediation("remfix-test").block_device("192.0.2.77", "   ").get("success"),
+      False)
 
 
 print("\n[REM-14] the privileged shim, which had no caller at all")
@@ -626,4 +632,6 @@ if fails:
 else:
     print("ALL CHECKS PASS")
 shutil.rmtree(WORK, ignore_errors=True)
+if not fails:
+    _skip.exit_if_skipped()
 sys.exit(1 if fails else 0)

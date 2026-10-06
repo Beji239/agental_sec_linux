@@ -48,6 +48,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import _skip
 import tempfile
 import time
 
@@ -183,6 +184,8 @@ def _finish(live_before):
 def main():
     print("test_test_scripts_restore_config.py -- LA-4 held by a test")
     print("the owner's config.json sha256 (never written by this file):")
+    if not LIVE.exists():
+        _skip.skip("needs a config.json, the scripts it checks swap that file")
     live_before = LIVE.read_bytes()
     print("  %s" % __import__("hashlib").sha256(live_before).hexdigest())
 

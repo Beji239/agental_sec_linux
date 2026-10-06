@@ -109,8 +109,8 @@ g = gw.Gateway({"gateway": {"host": "192.0.2.1"}},
                transport=transport_for(agent_variant("a")))
 caps = g.probe()["capabilities"]
 check("it reports what it can do, no brand needed", caps,
-      ["block", "blockmac", "counters", "dnslog", "leases", "log", "neighbors",
-       "persist", "sinkhole"])
+      ["appblock", "block", "blockmac", "counters", "dnslog", "leases", "log",
+       "neighbors", "persist", "sinkhole"])
 check("the firewall it found", g.probe_result["firewall"], "nft")
 leases = g.leases()
 check("dnsmasq leases parse, junk skipped",
@@ -279,7 +279,7 @@ check("a sinkhole is lower-cased and applied", (out["success"], out.get("domain"
       (True, "evil.example"))
 check("the query tool lists it", a.query("sinkholes")["sinkholed"], ["evil.example"])
 check("and the capabilities read as sentences",
-      len(a.query("capabilities")["can_do"]), 3)
+      len(a.query("capabilities")["can_do"]), 4)
 
 shutil.rmtree(tmp, ignore_errors=True)
 print()

@@ -52,6 +52,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import _skip                                          # noqa: E402
 
 fails = []
 
@@ -565,10 +566,13 @@ print("\n[NET-10] THE VENDOR COMES FROM THE REGISTRY THE APP ALREADY SHIPS")
 
 from core import oui                                  # noqa: E402
 _real = "00:1b:21:12:34:56"
-check("the registry resolves this host's gateway",
-      oui.lookup(_real).get("status"), "resolved")
-check("and the module now returns that name, not Unknown",
-      ns._oui_lookup(_real), oui.lookup(_real)["vendor"])
+if oui.lookup(_real).get("status") == "no_data":
+    _skip.skip_part("NET-10 needs data/oui.csv, fetched at install time")
+else:
+    check("the registry resolves this host's gateway",
+          oui.lookup(_real).get("status"), "resolved")
+    check("and the module now returns that name, not Unknown",
+          ns._oui_lookup(_real), oui.lookup(_real)["vendor"])
 check("a randomized address is still Unknown, because there IS no vendor",
       ns._oui_lookup("02:00:00:00:00:01"), "Unknown")
 check("an empty address is Unknown rather than raising",
@@ -843,4 +847,6 @@ check("the old ICMP-only header claim is gone",
 
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
+if not fails:
+    _skip.exit_if_skipped()
 sys.exit(1 if fails else 0)

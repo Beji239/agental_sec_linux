@@ -30,6 +30,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import _skip
 import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -247,10 +248,15 @@ _root = pathlib.Path(__file__).resolve().parent.parent
 check("core/dpapi.py is gone", (_root / "core" / "dpapi.py").exists(), False)
 check("and the name it had here is gone too",
       (_root / "core" / "dpapi_linux.py").exists(), False)
-check("the reference copy is beside the two source folders",
-      (_root.parent / "agental_sec_win32_reference" / "core"
-       / "dpapi.py").exists(), True)
+if not (_root.parent / "agental_sec_win32_reference").is_dir():
+    _skip.skip_part("the Windows reference folder is local, not in a clone")
+else:
+    check("the reference copy is beside the two source folders",
+          (_root.parent / "agental_sec_win32_reference" / "core"
+           / "dpapi.py").exists(), True)
 
 
 print("\n" + ("ALL PASS" if not fails else f"FAILURES: {fails}"))
+if not fails:
+    _skip.exit_if_skipped()
 sys.exit(1 if fails else 0)

@@ -30,6 +30,7 @@ import sys, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+import _skip                                          # noqa: E402
 
 fails = []
 def check(label, got, want):
@@ -361,11 +362,14 @@ check("and there is a launcher that asks for it",
 # password. T1_FIREWALL_TRUTH.md is where that is written down, and it says it
 # in those words rather than leaving the reader to infer it from a missing
 # result.
-t1 = (ROOT / "T1_FIREWALL_TRUTH.md").read_text(encoding="utf-8")
-check("the handoff says which part is not yet proven",
-      "not yet proven against the real firewall" in t1, True)
-check("and names it as needing the owner's password, not as done",
-      "needs your password" in t1, True)
+if not ((ROOT / "T1_FIREWALL_TRUTH.md").exists()):
+    _skip.skip_part('the firewall handoff note is a private working file, not in a clone')
+else:
+    t1 = (ROOT / "T1_FIREWALL_TRUTH.md").read_text(encoding="utf-8")
+    check("the handoff says which part is not yet proven",
+          "not yet proven against the real firewall" in t1, True)
+    check("and names it as needing the owner's password, not as done",
+          "needs your password" in t1, True)
 check("and there is a way to look before trusting it",
       (ROOT / "scripts" / "verify_firewall.py").exists(), True)
 # The look-before-trusting script has to refuse to run the refusal-path tests
@@ -376,4 +380,6 @@ check("and that check refuses to measure refusals as root",
       "Refusing to run the refusal-path tests as root" in _vf, True)
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
+if not fails:
+    _skip.exit_if_skipped()
 sys.exit(1 if fails else 0)

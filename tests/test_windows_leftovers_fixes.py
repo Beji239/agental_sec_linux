@@ -46,6 +46,7 @@ Runs anywhere Linux does. No network, no database of its own, no root.
 import os
 import pathlib
 import sys
+import _skip
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -169,54 +170,57 @@ check("core/dpapi_linux.py is renamed rather than left under a Windows name",
       (ROOT / "core" / "dpapi_linux.py").exists(), False)
 check("and the module that replaces it is here",
       (ROOT / "core" / "secret_crypto.py").exists(), True)
-for moved in ("core/privilege.py", "core/dpapi.py"):
-    check(f"the reference folder kept {moved}", (_ref / moved).exists(), True)
+if not (_ref.is_dir()):
+    _skip.skip_part('the Windows reference folder is local, not in a clone')
+else:
+    for moved in ("core/privilege.py", "core/dpapi.py"):
+        check(f"the reference folder kept {moved}", (_ref / moved).exists(), True)
 
-# AND NOTHING LIVE REACHES THE REFERENCE FOLDER. Asserted by running the
-# tree's OWN audit script rather than by re-listing filenames here: a hand-typed
-# list of "files that may name it" drifts the moment somebody writes a comment,
-# which is what happened to the first draft of this check. The script exists for
-# this question (scripts/audit_windows_leftovers.py), its two conclusion lines
-# are the claim, and it fails loudly if the folder was deleted rather than
-# moved.
-import subprocess as _sp                                  # noqa: E402
+    # AND NOTHING LIVE REACHES THE REFERENCE FOLDER. Asserted by running the
+    # tree's OWN audit script rather than by re-listing filenames here: a hand-typed
+    # list of "files that may name it" drifts the moment somebody writes a comment,
+    # which is what happened to the first draft of this check. The script exists for
+    # this question (scripts/audit_windows_leftovers.py), its two conclusion lines
+    # are the claim, and it fails loudly if the folder was deleted rather than
+    # moved.
+    import subprocess as _sp                                  # noqa: E402
 
-_audit = _sp.run([sys.executable,
-                  str(ROOT / "scripts" / "audit_windows_leftovers.py")],
-                 capture_output=True, text=True, cwd=str(ROOT), timeout=120)
-check("the tree's own leftovers audit runs", _audit.returncode, 0)
-_lines = (_audit.stdout or "").splitlines()
-
-
-def _conclusion(prefix):
-    hits = [ln for ln in _lines if ln.strip().startswith(prefix)]
-    return hits[0].strip() if hits else "(the script did not report it)"
+    _audit = _sp.run([sys.executable,
+                      str(ROOT / "scripts" / "audit_windows_leftovers.py")],
+                     capture_output=True, text=True, cwd=str(ROOT), timeout=120)
+    check("the tree's own leftovers audit runs", _audit.returncode, 0)
+    _lines = (_audit.stdout or "").splitlines()
 
 
-check("the audit says nothing LIVE imports from the reference folder",
-      _conclusion("LIVE modules that IMPORT from it:"),
-      "LIVE modules that IMPORT from it: 0")
-check("and it found the reference folder rather than a deletion",
-      any("reference: agental_sec_win32_reference/" in ln for ln in _lines),
-      True)
-check("and it reports no win32/ folder left inside the tree",
-      any("a win32/ folder inside the tree: none" in ln for ln in _lines), True)
-# Every mention it does report is a path in prose, which is the WANTED case: the
-# four refusal arms and the module headers name where the Windows file is KEPT,
-# so an operator reading one goes to the right place instead of nowhere.
-_named_line = _conclusion("LIVE modules that NAME it in prose:")
-_named = int(_named_line.split(":")[1])
-# The script prints each one, indented, under the count. THIS CHECK IS THE
-# PAIR: the count and the list have to agree, because a count nobody can check
-# is the "prose number nobody measured" fault this project keeps finding. Both
-# sides are read off the script's OWN output, so neither is typed here.
-_printed = [ln.strip() for ln in _lines
-            if ln.strip().endswith(".py") and ln.startswith("      ")]
-print(f"    {_named} live file(s) name the reference folder in prose: "
-      f"{', '.join(_printed)}")
-check("the count and the printed list agree", len(_printed), _named)
-check_true("every one of them is a file that exists",
-           all((ROOT / p).is_file() for p in _printed))
+    def _conclusion(prefix):
+        hits = [ln for ln in _lines if ln.strip().startswith(prefix)]
+        return hits[0].strip() if hits else "(the script did not report it)"
+
+
+    check("the audit says nothing LIVE imports from the reference folder",
+          _conclusion("LIVE modules that IMPORT from it:"),
+          "LIVE modules that IMPORT from it: 0")
+    check("and it found the reference folder rather than a deletion",
+          any("reference: agental_sec_win32_reference/" in ln for ln in _lines),
+          True)
+    check("and it reports no win32/ folder left inside the tree",
+          any("a win32/ folder inside the tree: none" in ln for ln in _lines), True)
+    # Every mention it does report is a path in prose, which is the WANTED case: the
+    # four refusal arms and the module headers name where the Windows file is KEPT,
+    # so an operator reading one goes to the right place instead of nowhere.
+    _named_line = _conclusion("LIVE modules that NAME it in prose:")
+    _named = int(_named_line.split(":")[1])
+    # The script prints each one, indented, under the count. THIS CHECK IS THE
+    # PAIR: the count and the list have to agree, because a count nobody can check
+    # is the "prose number nobody measured" fault this project keeps finding. Both
+    # sides are read off the script's OWN output, so neither is typed here.
+    _printed = [ln.strip() for ln in _lines
+                if ln.strip().endswith(".py") and ln.startswith("      ")]
+    print(f"    {_named} live file(s) name the reference folder in prose: "
+          f"{', '.join(_printed)}")
+    check("the count and the printed list agree", len(_printed), _named)
+    check_true("every one of them is a file that exists",
+               all((ROOT / p).is_file() for p in _printed))
 
 # [2] THE LINUX TOOLING SURVIVED, DRIVEN
 
@@ -339,4 +343,6 @@ check("so does search_logs", sh.depends_on("search_logs"), ("event_monitor",))
 
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
+if not fails:
+    _skip.exit_if_skipped()
 sys.exit(1 if fails else 0)

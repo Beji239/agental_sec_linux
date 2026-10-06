@@ -271,7 +271,8 @@ check("and .255 on a known /23 is a device, not a guess",
 with me._get_conn() as c:
     c.execute("""INSERT INTO presence_sweep(session_id, subnet, method,
                  outcome, targets, responded)
-                 VALUES('s1','172.20.0.0/24','icmp','ok',254,9)""")
+                 VALUES('s1', ?, 'icmp', 'ok', 254, 9)""",
+              (BCAST_24.rsplit(".", 1)[0] + ".0/24",))
 check("the swept subnet gives the exact broadcast",
       BCAST_24 in perf.local_broadcasts(), True)
 
