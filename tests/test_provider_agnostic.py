@@ -103,7 +103,7 @@ def provider_check(status=200, body=None, names=None):
 
 def configure(model, url="https://gateway.example.com/api/v1/chat/completions",
               key="test-key"):
-    al.init_agent({"deepseek": {"model": model, "api_url": url}}, key)
+    al.init_agent({"provider": {"model": model, "api_url": url}}, key)
 
 
 _real_httpx = al.httpx
@@ -118,7 +118,7 @@ try:
           al.model_display_name("vendor/model-chat"), "model-chat")
     check("and the old substring replace really did produce the bad one "
           "(this is the bug, reproduced)",
-          "vendor/model-chat".replace("deepseek-", ""), "vendor/chat")
+          "vendor/model-chat".replace("model-", ""), "vendor/chat")
 
     print("\n[1b] and the rule is about slashes, not about any vendor")
     # Every one of these is a real id from a real provider. Not one of them
@@ -179,7 +179,7 @@ try:
     # that name in the request.
     # The real shape of it: the key is absent from config, not empty. Under
     # the old code this line alone produced "model-chat".
-    al.init_agent({"deepseek": {"api_url": "https://example.test/v1"}}, "test-key")
+    al.init_agent({"provider": {"api_url": "https://example.test/v1"}}, "test-key")
     check("a config with NO model key invents nothing", al._model, "")
     configure("", key="test-key")
     check("an empty model key invents nothing either", al._model, "")

@@ -10,7 +10,7 @@ nothing. I updated the two call sites that passed the variable, _tools_payload
 
     "tools": _tools_payload("api"),
 
-It sat inside _stream_deepseek, which is the function that builds the request
+It sat inside _stream_openai, which is the function that builds the request
 body for every chat turn. Seventy two tests passed. The suite was green on two
 machines. Then the first real question after the boot raised
 
@@ -24,7 +24,7 @@ the empty answer handling, and every one of them stopped short of the one dict
 that gets posted. A function nobody calls in tests is a function that only
 production calls first.
 
-So this file runs _stream_deepseek FOR REAL, with httpx replaced by a fake
+So this file runs _stream_openai FOR REAL, with httpx replaced by a fake
 that captures what was about to go on the wire and answers with a canned
 stream. No network, no key, no provider.
 
@@ -99,12 +99,12 @@ class _FakeClient:
 
 
 def run_turn(messages=None):
-    """Drive _stream_deepseek to completion and return the chunks it yielded."""
+    """Drive _stream_openai to completion and return the chunks it yielded."""
     _FakeClient.captured = {}
 
     async def go():
         out = []
-        async for chunk in al._stream_deepseek(
+        async for chunk in al._stream_openai(
                 messages if messages is not None else
                 [{"role": "user", "content": "hello"}]):
             out.append(chunk)
@@ -113,7 +113,7 @@ def run_turn(messages=None):
     return asyncio.run(go())
 
 
-al.init_agent({"deepseek": {"model": "test-model",
+al.init_agent({"provider": {"model": "test-model",
                             "api_url": "https://example.invalid/v1/chat"}},
               "test-key")
 _real_httpx = al.httpx

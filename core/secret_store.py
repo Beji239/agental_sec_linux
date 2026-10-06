@@ -35,8 +35,6 @@ def decrypt_failures() -> list[tuple[str, str]]:
     return list(_DECRYPT_FAILURES)
 
 ENV_API_KEY      = "AGENTAL_API_KEY"
-# The old name for the same key. Still read, so an existing .env keeps working.
-ENV_DEEPSEEK_KEY = "AGENTAL_DEEPSEEK_API_KEY"
 ENV_APP_KEY      = "AGENTAL_APP_API_KEY"
 
 # The router's SNMP read community string.
@@ -120,8 +118,7 @@ def load_dotenv(path: Path) -> int:
 
 def resolve(config: dict, project_root: Path) -> dict:
     """
-    Return {"api_key": str, "app_api_key": str, "legacy": [names]}, plus
-    "deepseek_api_key", the old name for api_key.
+    Return {"api_key": str, "app_api_key": str, "legacy": [names]}.
 
     `legacy` lists any secret that had to be read out of config.json, so the
     caller can warn once at startup instead of on every use.
@@ -139,11 +136,9 @@ def resolve(config: dict, project_root: Path) -> dict:
 
     legacy = []
 
-    model_key = (os.environ.get(ENV_API_KEY, "").strip()
-                 or os.environ.get(ENV_DEEPSEEK_KEY, "").strip())
+    model_key = os.environ.get(ENV_API_KEY, "").strip()
     if not model_key:
         model_key = ((config.get("provider") or {}).get("api_key")
-                     or (config.get("deepseek") or {}).get("api_key")
                      or "").strip()
         if model_key:
             legacy.append("model provider API key")
@@ -171,7 +166,6 @@ def resolve(config: dict, project_root: Path) -> dict:
 
     return {
         "api_key":          model_key,
-        "deepseek_api_key": model_key,
         "app_api_key":      app_key,
         "legacy":           legacy,
     }
@@ -256,9 +250,8 @@ def secrets_in_config(config: dict) -> list[tuple[str, str]]:
     "is config.json safe to commit?" should be asked of.
     """
     found = []
-    for section in ("provider", "deepseek"):
-        if ((config.get(section) or {}).get("api_key") or "").strip():
-            found.append(("model provider API key", ENV_API_KEY))
+    if ((config.get("provider") or {}).get("api_key") or "").strip():
+        found.append(("model provider API key", ENV_API_KEY))
     if (config.get("api_key") or "").strip():
         found.append(("app API key", ENV_APP_KEY))
     return found
@@ -288,7 +281,6 @@ def write_env_template(path: Path, app_key: str = "") -> bool:
         "# is provider.model. They can point at an OpenAI-style chat API\n"
         "# (DeepSeek, OpenAI, OpenRouter, a server on this machine) or at the\n"
         "# Anthropic Messages API, and this is whatever that service expects.\n"
-        "# AGENTAL_DEEPSEEK_API_KEY, the old name, is still read.\n"
         f"{ENV_API_KEY}=\n"
         "\n"
         "# AgentalSec's own REST API key. Any 64-char hex string.\n"
@@ -356,11 +348,10 @@ def strip_from_config(config: dict) -> tuple[dict, bool]:
     cleaned = {k: v for k, v in config.items() if k != "api_key"}
     changed = "api_key" in config
 
-    for section in ("provider", "deepseek"):
-        ds = dict(cleaned.get(section) or {})
-        if ds.pop("api_key", None) is not None:
-            changed = True
-        if ds or section in cleaned:
-            cleaned[section] = ds
+    ds = dict(cleaned.get("provider") or {})
+    if ds.pop("api_key", None) is not None:
+        changed = True
+    if ds or "provider" in cleaned:
+        cleaned["provider"] = ds
 
     return cleaned, changed

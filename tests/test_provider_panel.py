@@ -231,9 +231,8 @@ try:
     print("\n[8] the panel stopped calling it the DeepSeek key")
     cat = {k["env"]: k for k in st.key_catalog()}
     row = cat.get("AGENTAL_API_KEY", {})
-    check("the variable is the neutral one, the old one is still read",
-          ("AGENTAL_API_KEY" in cat, row.get("legacy_env")),
-          (True, "AGENTAL_DEEPSEEK_API_KEY"))
+    check("the variable is the neutral one, and no old name is read",
+          ("AGENTAL_API_KEY" in cat, row.get("legacy_env")), (True, None))
     check("but the label names no vendor",
           "deepseek" in (row.get("label") or "").lower(), False)
     check("it says what it is instead", row.get("label"),

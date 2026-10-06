@@ -181,10 +181,8 @@ _CODE_KEYS = [
     },
     {
         "env":      "AGENTAL_API_KEY",
-        # The old name, AGENTAL_DEEPSEEK_API_KEY, is still read so an existing
-        # .env keeps working. This is whatever key the provider endpoint
-        # expects, DeepSeek, Anthropic, OpenAI or a gateway.
-        "legacy_env": "AGENTAL_DEEPSEEK_API_KEY",
+        # Whatever key the provider endpoint expects, Anthropic, OpenAI or a
+        # gateway.
         "label":    "Model provider API key",
         "group":    "core",
         # FLIPPED TO REQUIRED 2026-09-14 with the removal of local mode.
@@ -290,8 +288,6 @@ def key_catalog() -> list[dict]:
     out = []
     for e in entries:
         raw = os.environ.get(e["env"], "").strip()
-        if not raw and e.get("legacy_env"):
-            raw = os.environ.get(e["legacy_env"], "").strip()
         out.append({
             **e,
             "present":     bool(raw),
@@ -386,8 +382,6 @@ def set_key(env_name: str, value: str) -> dict:
     # needs handing over explicitly. Doing it here is what lets the panel say
     # 'live' honestly for that row.
     if entry["env"] == "AGENTAL_API_KEY":
-        # The old variable would otherwise outlive a clear and keep the key.
-        os.environ.pop("AGENTAL_DEEPSEEK_API_KEY", None)
         try:
             from core import agent_loop
             agent_loop.apply_api_key(val)
@@ -683,12 +677,8 @@ def _choices_for(path: str) -> list[str]:
 
 
 def _cfg_leaf(cfg: dict, block: str, leaf: str):
-    """One config value. The provider block falls back to the old
-    "deepseek" block, so a config written before the rename still shows."""
-    val = (cfg.get(block) or {}).get(leaf)
-    if block == "provider" and val in (None, ""):
-        val = (cfg.get("deepseek") or {}).get(leaf)
-    return val
+    """One config value."""
+    return (cfg.get(block) or {}).get(leaf)
 
 
 def config_fields(config: dict) -> list[dict]:

@@ -181,19 +181,22 @@ st_ = al.model_status()
 check("status says which API", st_["api_style"], "anthropic")
 check("status model", st_["model"], "model-test")
 
-print("\n[5] config and key names, old and new")
-check("old section still read",
-      al.provider_section({"deepseek": {"model": "a", "api_url": "u"}})["model"], "a")
-check("new section overrides old",
-      al.provider_section({"deepseek": {"model": "a"}, "provider": {"model": "b"}})["model"], "b")
-check("blank new value does not shadow old",
-      al.provider_section({"deepseek": {"model": "a"}, "provider": {"model": ""}})["model"], "a")
+print("\n[5] only the provider section and AGENTAL_API_KEY are read")
+check("the provider section is read",
+      al.provider_section({"provider": {"model": "a", "api_url": "u"}})["model"], "a")
+check("a blank value is left out",
+      "model" in al.provider_section({"provider": {"model": ""}}), False)
+check("the old deepseek section is not read",
+      al.provider_section({"deepseek": {"model": "a"}}), {})
 import os                                    # noqa: E402
+import pathlib                               # noqa: E402
+import tempfile                              # noqa: E402
 os.environ.pop("AGENTAL_API_KEY", None)
 os.environ["AGENTAL_DEEPSEEK_API_KEY"] = "old"
-check("old env var still read",
-      ss.resolve.__doc__ is not None and
-      (os.environ.get(ss.ENV_API_KEY) or os.environ.get(ss.ENV_DEEPSEEK_KEY)), "old")
+with tempfile.TemporaryDirectory() as _d:
+    _got = ss.resolve({}, pathlib.Path(_d))["api_key"]
+os.environ.pop("AGENTAL_DEEPSEEK_API_KEY", None)
+check("the old env var is not read", _got, "")
 
 print()
 print("ALL CHECKS PASSED" if not fails else f"FAILED: {fails}")

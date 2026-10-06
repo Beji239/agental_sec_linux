@@ -3142,11 +3142,10 @@ async function updateStatusPills() {
     //
     // THE COLOUR. Two states could not describe five. "Could not check" was
     // being drawn as OFFLINE, in red, on a setup that works.
-    const fullName  = d.model_name || d.deepseek_model || '';
+    const fullName  = d.model_name || '';
     const shortName = d.model_display || fullName;
     const state     = d.model_state ||
-                      (((d.model_ok !== undefined) ? d.model_ok : d.deepseek)
-                        ? 'ok' : 'offline');
+                      (d.model_ok ? 'ok' : 'offline');
 
     const AI_PILL = {
       ok:         ['ok',    `AI: ${shortName.toUpperCase()}`],

@@ -515,9 +515,6 @@ def register_routes(app):
             # fallback. model_mode went with local mode on 2026-09-14: there
             # is one backend, so the key would have served null forever and a
             # null that used to mean something is worse than an absent key.
-            "deepseek":      ds_check.get("connected"),
-            "deepseek_model":ds_check.get("model"),
-            "deepseek_error":ds_check.get("error"),
             "model_name":    ds_check.get("model"),
             "model_ok":      ds_check.get("connected"),
             "model_error":   ds_check.get("error"),

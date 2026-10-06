@@ -56,9 +56,8 @@ DEFAULT_API_CONTEXT = 128_000
 
 # Provider API, loaded from config at init. Two wire formats are spoken, the
 # OpenAI chat shape and the native Anthropic Messages shape, see
-# core/provider_api. The config section is "provider" ("deepseek" is still
-# read for older config files). _model and _api_url have no default so an
-# unset one reads as unset.
+# core/provider_api. The config section is "provider". _model and _api_url
+# have no default so an unset one reads as unset.
 _api_key:  str = None
 _api_url:  str = ""
 _api_style_cfg: str = "auto"
@@ -468,29 +467,24 @@ _killed_pids: set[int] = set()
 # INIT
 
 def provider_section(config: dict) -> dict:
-    """The provider settings from a config dict. The old "deepseek" section
-    is read first and any filled-in "provider" value overrides it."""
-    legacy = config.get("deepseek") or {}
-    new = config.get("provider") or {}
-    merged = dict(legacy)
-    merged.update({k: v for k, v in new.items() if v not in ("", None)})
-    return merged
+    """The provider settings from a config dict."""
+    return {k: v for k, v in (config.get("provider") or {}).items()
+            if v not in ("", None)}
 
 
-def init_agent(config: dict, deepseek_api_key: str = "", api_key: str = ""):
+def init_agent(config: dict, api_key: str = ""):
     """
     Called once by main.py after config and secrets are loaded.
 
     The key arrives from core.secret_store, not from config.json, config.json
     no longer carries secrets. It is passed rather than imported so this
-    module stays testable without touching the environment. The keyword
-    deepseek_api_key is the old name for the same thing and still works.
+    module stays testable without touching the environment.
     """
     global _api_key, _api_url, _model, _max_output_tokens, _api_context
     global _api_style_cfg
 
     ds = provider_section(config)
-    _api_key = api_key or deepseek_api_key or ds.get("api_key", "")
+    _api_key = api_key or ds.get("api_key", "")
     _api_style_cfg = (ds.get("api_style") or "auto").strip().lower()
     _api_url = provider_api.normalise_url(
         (ds.get("api_url") or "").strip(), api_style())
@@ -775,7 +769,7 @@ async def _run_turn(user_message: str) -> AsyncGenerator[str, None]:
             if stopped_by:
                 break
 
-        # Call DeepSeek, streaming with tools
+        # Call the provider, streaming with tools
         response_text   = ""
         tool_calls_made = []
 
@@ -1402,9 +1396,6 @@ async def _stream_openai(messages: list, allowlist=None,
         logger.error(f"Unexpected streaming error: {e}", exc_info=True)
         yield {"type": "error", "message": f"Unexpected error: {e}"}
 
-
-# Old name, kept so anything that still reaches for it keeps working.
-_stream_deepseek = _stream_openai
 
 
 # ANTHROPIC MESSAGES BACKEND
