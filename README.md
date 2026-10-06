@@ -217,8 +217,8 @@ What they cannot tell you:
 
 - **How often it catches malware nobody has seen before.** That depends on
   how the malware behaves, and only a large, varied set of real samples can
-  answer it. ClamAV does not help here: a signature exists only for malware
-  that has already been seen.
+  answer it. ClamAV covers known malware; new malware is left to the
+  behaviour-based detections.
 - **A detection rate.** No percentage is claimed, because no honest one could
   be measured in a home lab.
 
