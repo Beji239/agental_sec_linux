@@ -98,6 +98,34 @@ QUEUEABLE = {
         "blurb":    "Make the router's resolver answer one domain with "
                     "nothing, for every device that uses it.",
     },
+    # Containment through the root helper. Their undos are not filable.
+    "remove_ssh_key": {
+        "required": ("user", "fingerprint", "reason"),
+        "needs":    ("user", "fingerprint"),
+        "blurb":    "Take one SSH key, by fingerprint, out of an account's "
+                    "authorized_keys.",
+    },
+    "lock_account": {
+        "required": ("user", "reason"),
+        "needs":    ("user",),
+        "blurb":    "Lock an account so it cannot log in by password or key.",
+    },
+    "remove_group_member": {
+        "required": ("user", "group", "reason"),
+        "needs":    ("user", "group"),
+        "blurb":    "Take an account out of a group that can become root.",
+    },
+    "disable_cron_line": {
+        "required": ("path", "line", "reason"),
+        "needs":    ("path", "line"),
+        "blurb":    "Comment out one cron line, keeping its text.",
+    },
+    "disable_service": {
+        "required": ("unit", "reason"),
+        "needs":    ("unit",),
+        "blurb":    "Stop, disable and mask a systemd unit so it does not "
+                    "start again at boot.",
+    },
 }
 
 # The verbs the model can file and the owner can read, in one place, so the
@@ -1060,6 +1088,13 @@ def describe(verb: str, params: dict) -> str:
         domain = params.get("domain")
         return (f"Sinkhole {domain} at the router's resolver"
                 if domain not in (None, "") else missing("domain"))
+    if verb in ("remove_ssh_key", "lock_account", "remove_group_member",
+                "disable_cron_line", "disable_service"):
+        from core import tool_registry
+        need = QUEUEABLE[verb]["needs"]
+        gap = [k for k in need if params.get(k) in (None, "")]
+        return (missing(" and ".join(gap)) if gap
+                else tool_registry.permission_summary(verb, params))
     if verb == "stop_service":
         unit = params.get("unit")
         return (f"Stop the systemd unit {unit}"

@@ -1622,6 +1622,16 @@ def register_routes(app):
         else:
             return jsonify({"success": False,
                             "error": "Name a hardware address or an IP."}), 400
+        if not block and mac and out.get("success"):
+            # A restored device is no longer held on the cut off page.
+            try:
+                g = gwmod._gateway()
+                if g.has("message") and any(m["target"] == mac for m in
+                                            g.messages()["messages"]):
+                    g.unmessage(mac)
+                    out["message_lifted"] = True
+            except Exception as e:
+                logger.debug(f"Could not lift the message for {mac}: {e}")
         mon = lan_live.get()
         if mon is not None:
             try:
@@ -1683,6 +1693,88 @@ def register_routes(app):
     @require_api_key
     def lan_app_unblock():
         return _lan_app(False)
+
+    # Messages shown on the router's own page, and what devices answered.
+    # Owner controls like the blocks above, so not in the tool manifest.
+
+    def _lan_gateway():
+        gwmod = get_modules().get("gateway")
+        if gwmod is None or not getattr(gwmod, "enabled", False):
+            return None, (jsonify({"success": False, "supported": False,
+                                   "error": "The router agent is not enabled."}), 409)
+        g = gwmod._gateway()
+        try:
+            if not g.has("message"):
+                return None, (jsonify({
+                    "success": False, "supported": False,
+                    "error": ("The router agent does not offer messages. It "
+                              "needs version 8 and uhttpd: re-run "
+                              "scripts/install_gateway_agent.sh --enroll.")}), 409)
+        except Exception as e:
+            return None, (jsonify({"success": False, "supported": False,
+                                   "error": f"The router could not be asked: {e}"}), 409)
+        return g, None
+
+    @app.route("/api/lan/messages")
+    @require_api_key
+    def lan_messages():
+        g, err = _lan_gateway()
+        if err:
+            return err
+        from tools import gateway as gw
+        try:
+            state = g.messages()
+            state["replies"] = g.replies()
+        except gw.GatewayError as e:
+            return jsonify({"success": False, "supported": True, "error": str(e)}), 409
+        state.update(success=True, supported=True,
+                     max_bytes=gw.MAX_MESSAGE_BYTES)
+        return jsonify(state)
+
+    @app.route("/api/lan/message", methods=["POST"])
+    @require_api_key
+    def lan_message():
+        g, err = _lan_gateway()
+        if err:
+            return err
+        from tools import gateway as gw
+        data = request.get_json(silent=True) or {}
+        target = (data.get("target") or "").strip().lower()
+        try:
+            out = g.message(target, data.get("text") or "",
+                            keep=bool(data.get("keep")) and target != "all")
+        except gw.GatewayError as e:
+            return jsonify({"success": False, "error": str(e)}), 409
+        logger.info(f"Live LAN message to {target}")
+        return jsonify(dict(out, success=True))
+
+    @app.route("/api/lan/unmessage", methods=["POST"])
+    @require_api_key
+    def lan_unmessage():
+        g, err = _lan_gateway()
+        if err:
+            return err
+        from tools import gateway as gw
+        target = ((request.get_json(silent=True) or {}).get("target") or "").strip().lower()
+        try:
+            out = g.unmessage(target)
+        except gw.GatewayError as e:
+            return jsonify({"success": False, "error": str(e)}), 409
+        return jsonify(dict(out, success=True))
+
+    @app.route("/api/lan/reply/clear", methods=["POST"])
+    @require_api_key
+    def lan_reply_clear():
+        g, err = _lan_gateway()
+        if err:
+            return err
+        from tools import gateway as gw
+        rid = ((request.get_json(silent=True) or {}).get("id") or "").strip()
+        try:
+            out = g.clear_reply(rid)
+        except gw.GatewayError as e:
+            return jsonify({"success": False, "error": str(e)}), 409
+        return jsonify(dict(out, success=True))
 
     @app.route("/api/router/status")
     @require_api_key

@@ -1,5 +1,5 @@
 # tests/test_gateway_apps.py
-# Router agent version 7: one app blocked on one device, against real
+# Router agent version 8: one app blocked on one device, against real
 # nftables in a private network namespace. Both ways the sets are filled
 # (dnsmasq nftset, and the query log), the resolver file, the saved state,
 # restore after the table is lost, and the refusals.
@@ -90,7 +90,7 @@ MAC = "aa:bb:cc:00:00:01"
 print("\n[probe, with a dnsmasq that fills nft sets]")
 g = agent("nftset", True)
 p = g.probe()
-check("agent version", p["agent_version"], "7")
+check("agent version", p["agent_version"], "8")
 check("appblock offered", "appblock" in p["capabilities"], True)
 check("mode", p["appblock"], "nftset")
 check("the apps it knows", "whatsapp" in p["apps"] and "telegram" in p["apps"], True)

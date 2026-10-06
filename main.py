@@ -896,7 +896,7 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
         "gateway", lambda: LinuxGateway(session_id, config))
     try:
         from tools import lan_live
-        logger.info(f"Live LAN monitor: {lan_live.start(config)}")
+        logger.info(f"Live LAN monitor: {lan_live.start(config, session_id)}")
     except Exception as e:
         logger.error(f"Live LAN monitor did not start: {e}")
 

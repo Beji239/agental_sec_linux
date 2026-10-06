@@ -72,7 +72,7 @@ print("\n[probe]")
 p = g.probe()
 check("version 2 capabilities", [c for c in ("blockmac", "counters", "persist") if c in p["capabilities"]],
       ["blockmac", "counters", "persist"])
-check("agent version", p["agent_version"], "7")
+check("agent version", p["agent_version"], "8")
 check("portal tools listed", isinstance(p["portal_tools"], list), True)
 
 print("\n[hardware address blocks]")

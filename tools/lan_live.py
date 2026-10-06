@@ -28,6 +28,9 @@ DEFAULTS = {
     "history_minutes": 30,
     "dns_poll_seconds": 30,
     "inventory_poll_seconds": 60,
+    # Findings worth waking the agent for, see tools/lan_alerts.py.
+    "alerts": True,
+    "upload_floor_mb": 250,
 }
 # Each poll is an SSH login on the router, so no setting polls faster.
 MIN_POLL_SECONDS = 30
@@ -74,12 +77,17 @@ def _minute(ts: float) -> str:
 class LanLive:
     """One router, watched live. Thread-safe reads through snapshot()."""
 
-    def __init__(self, config: dict, gateway=None, store=True):
+    def __init__(self, config: dict, gateway=None, store=True,
+                 session_id: str = None, alerts=None):
         from tools import gateway as gw
         self.config = config
         self.cfg = settings(config)
         self.g = gateway or gw.Gateway(config)
         self.store = store
+        if alerts is None and store and self.cfg["alerts"]:
+            from tools import lan_alerts
+            alerts = lan_alerts.LanAlerts(session_id, self.cfg["upload_floor_mb"])
+        self.alerts = alerts
         self.router_ip = (config.get("gateway") or {}).get("host")
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -173,6 +181,26 @@ class LanLive:
                                polls=self.status["polls"] + 1)
             self._last_ok = now
         self._flush()
+        self._run_alerts(now)
+
+    def _run_alerts(self, now):
+        """Hand this poll to the alert checks, outside the lock."""
+        if not self.alerts:
+            return
+        with self._lock:
+            inventory = {ip: dict(v) for ip, v in self.inventory.items()}
+            blocked = set(self.blocked)
+            devices = {ip: {"up_total": d["up_total"]}
+                       for ip, d in self.devices.items()}
+            flows = [{k: f[k] for k in ("device", "remote", "port", "proto")}
+                     for f in self.flows.values()]
+            names = {k: self.names[k] for f in flows
+                     for k in ((f["device"], f["remote"]), f["remote"])
+                     if k in self.names}
+        try:
+            self.alerts.check(now, inventory, blocked, devices, flows, names)
+        except Exception as e:
+            logger.warning(f"Live LAN alerts failed: {e}")
 
     # Inputs
 
@@ -515,13 +543,13 @@ def get() -> "LanLive | None":
     return _monitor
 
 
-def start(config: dict) -> dict:
+def start(config: dict, session_id: str = None) -> dict:
     global _monitor
     cfg = settings(config)
     gw_block = (config or {}).get("gateway") or {}
     if not (cfg["enabled"] and gw_block.get("enabled") and gw_block.get("host")):
         return {"started": False, "reason": "gateway or lan_live is not enabled"}
     if _monitor is None:
-        _monitor = LanLive(config)
+        _monitor = LanLive(config, session_id=session_id)
     _monitor.start()
     return {"started": True}

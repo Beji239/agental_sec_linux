@@ -352,7 +352,8 @@ DOCUMENTATION_NETS = [
 
 IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 SECRET_RES = [
-    (re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"), "an API key"),
+    # OpenSSH's security key types (sk-ecdsa-sha2-..., sk-ssh-...) are not keys.
+    (re.compile(r"\bsk-(?!ecdsa-sha2-|ssh-)[A-Za-z0-9_-]{16,}\b"), "an API key"),
     (re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])"), "a 64-hex key"),
 ]
 WIN_USER_RE = re.compile(r"[A-Za-z]:\\+Users\\+([^\\\"'\s,]+)", re.I)

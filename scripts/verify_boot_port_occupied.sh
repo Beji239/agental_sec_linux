@@ -18,7 +18,7 @@ USER_SITE="$OWNER_HOME/.local/lib/python$(python3 -c 'import sys; print("%d.%d" 
 LOGFILE="$ROOT/logs/agental_sec_linux.log"
 TMP=$(mktemp -d /tmp/agental_port_ours_root.XXXXXX)
 PORT=$(python3 -c "import json;print(json.load(open('$ROOT/config.json'))['flask']['port'])")
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 chown -R "$OWNER:$OWNER" "$TMP"
 
 PASS=0; FAIL=0

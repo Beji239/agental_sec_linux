@@ -15,6 +15,7 @@
 #   log        logread, journalctl, or a syslog file
 #   dnslog     dnsmasq query lines in that log (log-queries must be on)
 #   appblock   nft, and dnsmasq built with nftset or logging its answers
+#   message    nft with nat, and uhttpd for the page
 #
 # Verbs:
 #   probe, version
@@ -23,18 +24,21 @@
 #   counters, restore
 #   sinkholes, sinkhole <domain>, unsinkhole <domain>
 #   apps, blockapp <mac> <app>, unblockapp <mac> <app>, apprefresh
+#   messages, message <mac or all> <hex>, messagekeep <mac> <hex>
+#   unmessage <mac or all>, replies, clearreply <id>
 #
 # Reply: the first line is "OK <verb>" or "ERR <reason>", then the body.
 # With nft, blocks are kept in STATE_FILE and put back by `restore`, which
 # the boot script and the first `counters` after a reboot both run.
 # App blocks are kept there too. Sinkholes last until the router reboots.
+# Messages are kept in MSG_DIR and come back with `restore` as well.
 
 set -f
 umask 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/sbin:/usr/local/bin
 export PATH LC_ALL=C
 
-VERSION=7
+VERSION=8
 NFT_TABLE=agentalsec_gw
 IPT_CHAIN=AGENTALSEC_GW
 PF_TABLE=agentalsec_block
@@ -47,6 +51,13 @@ MAX_COUNTED=256
 MAX_BLOCKS=512
 MAX_APP_BLOCKS=256
 MAX_LINES=2000
+PORTAL_PORT=2050
+PORTAL_WWW=$STATE_DIR/portal
+MSG_DIR=$STATE_DIR/messages
+REPLY_DIR=$STATE_DIR/replies
+PORTAL_IP_FILE=$STATE_DIR/portal_ip
+MAX_MSG_BYTES=600
+MAX_REPLIES=200
 LEASE_FILES="/tmp/dhcp.leases /var/lib/misc/dnsmasq.leases /var/lib/dnsmasq/dnsmasq.leases /var/db/dnsmasq.leases /var/lib/kea/kea-leases4.csv /var/db/kea/kea-leases4.csv"
 LOG_FILES="/var/log/messages /var/log/syslog /var/log/system/latest.log"
 
@@ -72,7 +83,7 @@ ARG1=${2:-}
 ARG2=${3:-}
 [ $# -le 3 ] || fail "too many arguments"
 case "$VERB" in
-    blockapp|unblockapp) ;;
+    blockapp|unblockapp|message|messagekeep) ;;
     *) [ -z "$ARG2" ] || fail "too many arguments" ;;
 esac
 
@@ -243,6 +254,7 @@ restore_state() {
         done < "$STATE_FILE"
     fi
     RESTORED=$n; SKIPPED=$bad
+    portal_restore
     # The resolver's app list lives in a directory a reboot clears.
     if [ -n "$apps" ]; then
         apps_conf_write || record "$APPS_CONF_ERR"
@@ -387,6 +399,8 @@ do_counters() {
         nft add rule inet $NFT_TABLE devcount ip saddr "$a" counter 2>/dev/null
         nft add rule inet $NFT_TABLE devcount ip daddr "$a" counter 2>/dev/null
     done
+    # The page could not start at boot before the address was up.
+    [ -n "$(msg_targets)" ] && [ -z "$(portal_pids)" ] && portal_restore
     ok counters; echo "restored=$restored"; echo "mac_rules=$(mac_rules_ok && echo yes || echo no)"; echo "--"
     nft list chain inet $NFT_TABLE devcount 2>/dev/null | awk '
         $1=="ip" && ($2=="saddr" || $2=="daddr") {
@@ -697,6 +711,249 @@ do_apprefresh() {
     ok apprefresh; echo "addresses=$ADDED"
 }
 
+# MESSAGES TO ONE DEVICE OR EVERY DEVICE
+# A device's plain web requests (port 80) are sent to a page on this router
+# that shows the owner's message with an OK button and a reply box. Phones
+# open that page by themselves when they check for a captive portal. A
+# message made with messagekeep stays after OK, which is what a cut off
+# device is shown; the hardware address block lets that page through.
+# The text arrives as hex, since the request takes no punctuation, and the
+# page decodes and escapes it.
+
+portal_ip() {
+    ip=$(printf '%s' "${SSH_CONNECTION:-}" | awk '{print $3}')
+    if is_v4 "$ip"; then
+        mkdir -p "$STATE_DIR"
+        [ "$(cat "$PORTAL_IP_FILE" 2>/dev/null)" = "$ip" ] || echo "$ip" > "$PORTAL_IP_FILE"
+        echo "$ip"; return
+    fi
+    ip=$(cat "$PORTAL_IP_FILE" 2>/dev/null)
+    is_v4 "$ip" && echo "$ip"
+}
+
+portal_iface() {
+    have ip && ip -o -4 addr show 2>/dev/null | awk -v a="$1" '{split($4, p, "/"); if (p[1] == a) {print $2; exit}}'
+}
+
+uhttpd_ok() { have uhttpd && uhttpd -h 2>&1 | grep -q -- '-E'; }
+
+portal_pids() {
+    for p in $(pidof uhttpd 2>/dev/null); do
+        tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null | grep -q -- "$PORTAL_WWW" && echo "$p"
+    done
+}
+
+portal_page_write() {
+    mkdir -p "$PORTAL_WWW/cgi-bin" "$MSG_DIR" "$REPLY_DIR" || return 1
+    cat > "$PORTAL_WWW/cgi-bin/msg.new" <<'PAGE_EOF'
+#!/bin/sh
+# The page a messaged device is shown, written by the AgentalSec agent.
+umask 077
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+D=/etc/agentalsec
+T=agentalsec_gw
+mac=$(ip neigh show "$REMOTE_ADDR" 2>/dev/null | awk '{for (i=1; i<NF; i++) if ($i == "lladdr") {print $(i+1); exit}}')
+printf '%s' "$mac" | grep -Eq '^([0-9a-f]{2}:){5}[0-9a-f]{2}$' || mac=""
+f=""
+[ -n "$mac" ] && [ -f "$D/messages/$mac.hex" ] && f="$D/messages/$mac.hex"
+[ -z "$f" ] && [ -f "$D/messages/all.hex" ] && f="$D/messages/all.hex"
+
+text() {
+    awk 'BEGIN { for (i = 0; i < 256; i++) h[sprintf("%02x", i)] = i }
+    { for (i = 1; i < length($0); i += 2) { c = h[substr($0, i, 2)]
+        if (c == 38) printf "&amp;"; else if (c == 60) printf "&lt;"
+        else if (c == 62) printf "&gt;"; else if (c == 34) printf "&quot;"
+        else if (c == 39) printf "&#39;"; else if (c == 10) printf "<br>"
+        else if (c >= 32) printf "%c", c } }' "$1"
+}
+
+head_out() {
+    printf 'Status: 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n\r\n'
+    printf '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A message for you</title>'
+    printf '<style>body{font-family:sans-serif;max-width:32em;margin:2em auto;padding:0 1em;line-height:1.5}p.m{font-size:1.2em;padding:1em;border:1px solid #888;border-radius:8px}textarea{width:100%%;min-height:5em;box-sizing:border-box}button{font-size:1.1em;padding:.5em 1.4em;margin:.4em .4em 0 0}</style></head><body>'
+}
+
+if [ "$REQUEST_METHOD" = POST ] && [ -n "$mac" ]; then
+    n=${CONTENT_LENGTH:-0}
+    case $n in ''|*[!0-9]*) n=0 ;; esac
+    [ "$n" -le 2000 ] || n=2000
+    body=$(head -c "$n" | tr -cd 'A-Za-z0-9%+._=&*-')
+    if [ "$(ls "$D/replies" 2>/dev/null | wc -l)" -lt 200 ]; then
+        printf '%s\n' "$body" > "$D/replies/$(date +%s)-$(printf '%s' "$mac" | tr ':' '-')-$$"
+    fi
+    case "&$body&" in
+        *"&action=ok&"*)
+            if [ "$f" = "$D/messages/$mac.hex" ] && [ ! -f "$D/messages/$mac.keep" ]; then
+                nft delete element inet $T msgmac "{ $mac }" 2>/dev/null
+                rm -f "$D/messages/${mac:?}.hex"
+            elif [ "$f" = "$D/messages/all.hex" ]; then
+                nft add element inet $T msgdone "{ $mac }" 2>/dev/null
+                grep -qxF "$mac" "$D/messages/all.done" 2>/dev/null || echo "$mac" >> "$D/messages/all.done"
+            fi ;;
+    esac
+    head_out
+    printf '<h1>Thank you</h1><p>Your answer was sent.</p></body></html>\n'
+    exit 0
+fi
+
+head_out
+if [ -n "$f" ]; then
+    printf '<h1>A message for you</h1><p class="m">'
+    text "$f"
+    printf '</p><form method="post" action="/cgi-bin/msg"><input type="hidden" name="action" value="ok"><button type="submit">OK</button></form>'
+    printf '<form method="post" action="/cgi-bin/msg"><input type="hidden" name="action" value="reply"><p><label for="r">Reply</label></p><textarea id="r" name="reply" maxlength="500"></textarea><br><button type="submit">Send</button></form>'
+else
+    printf '<h1>No message</h1><p>There is nothing for this device right now.</p>'
+fi
+printf '</body></html>\n'
+PAGE_EOF
+    chmod 755 "$PORTAL_WWW/cgi-bin/msg.new" && mv "$PORTAL_WWW/cgi-bin/msg.new" "$PORTAL_WWW/cgi-bin/msg"
+}
+
+# Sets PORTAL_ERR and returns 1 when the redirect could not be put in place.
+portal_nft() {
+    a=$1
+    err=$(nft_load <<EOF
+table inet $NFT_TABLE {
+    set msgmac { type ether_addr; }
+    set msgdone { type ether_addr; }
+    set portalip { type ipv4_addr; }
+    chain portal { type nat hook prerouting priority -101; policy accept; }
+}
+EOF
+) || { PORTAL_ERR="nft refused the message redirect: $(nft_err "$err")"; return 1; }
+    nft add element inet $NFT_TABLE portalip "{ $a }" 2>/dev/null
+    if ! nft list chain inet $NFT_TABLE portal 2>/dev/null | grep -q 'comment "msg"'; then
+        err=$(nft add rule inet $NFT_TABLE portal ether saddr @msgmac meta nfproto ipv4 tcp dport 80 dnat ip to "$a:$PORTAL_PORT" comment '"msg"' 2>&1) \
+            || { PORTAL_ERR="nft refused the message redirect: $(nft_err "$err")"; return 1; }
+    fi
+    # A device blocked by hardware address may still reach the page.
+    if mac_rules_ok && ! nft list chain inet $NFT_TABLE prerouting 2>/dev/null | grep -q '@portalip'; then
+        nft insert rule inet $NFT_TABLE prerouting ether saddr @blockedmac ip daddr @portalip tcp dport $PORTAL_PORT accept 2>/dev/null
+    fi
+    return 0
+}
+
+portal_all_rule() {
+    a=$1; dev=$(portal_iface "$a")
+    nft -a list chain inet $NFT_TABLE portal 2>/dev/null | grep -q 'comment "msgall"' && return 0
+    [ -n "$dev" ] || { PORTAL_ERR="no interface holds $a"; return 1; }
+    err=$(nft add rule inet $NFT_TABLE portal iifname "$dev" ether saddr != @msgdone meta nfproto ipv4 ip daddr != @portalip tcp dport 80 dnat ip to "$a:$PORTAL_PORT" comment '"msgall"' 2>&1) \
+        || { PORTAL_ERR="nft refused the redirect for every device: $(nft_err "$err")"; return 1; }
+}
+
+portal_all_del() {
+    for h in $(nft -a list chain inet $NFT_TABLE portal 2>/dev/null | grep 'comment "msgall"' | awk '{print $NF}'); do
+        nft delete rule inet $NFT_TABLE portal handle "$h" 2>/dev/null
+    done
+}
+
+portal_server() {
+    a=$1
+    [ -n "$(portal_pids)" ] && return 0
+    uhttpd -p "$a:$PORTAL_PORT" -h "$PORTAL_WWW" -x /cgi-bin -E /cgi-bin/msg -t 15 -T 15 >/dev/null 2>&1
+    sleep 1
+    [ -n "$(portal_pids)" ] || { PORTAL_ERR="uhttpd did not stay running on $a:$PORTAL_PORT"; return 1; }
+}
+
+# Everything a message needs. Sets PORTAL_ERR and returns 1 on a refusal.
+portal_ensure() {
+    PORTAL_ERR=""
+    [ "$(fw_backend)" = nft ] || { PORTAL_ERR="messages need nft"; return 1; }
+    uhttpd_ok || { PORTAL_ERR="messages need uhttpd"; return 1; }
+    a=$(portal_ip); [ -n "$a" ] || { PORTAL_ERR="this router's own address could not be told"; return 1; }
+    nft_ensure; [ $? -eq 2 ] && restore_state
+    portal_page_write || { PORTAL_ERR="could not write the page under $PORTAL_WWW"; return 1; }
+    portal_nft "$a" || return 1
+    portal_server "$a"
+}
+
+msg_targets() { ls "$MSG_DIR" 2>/dev/null | sed -n 's/\.hex$//p'; }
+
+portal_restore() {
+    [ -n "$(msg_targets)" ] || return 0
+    portal_ensure || { record "$PORTAL_ERR"; return 1; }
+    for t in $(msg_targets); do
+        if [ "$t" = all ]; then portal_all_rule "$(portal_ip)"
+        elif is_mac "$t"; then nft add element inet $NFT_TABLE msgmac "{ $t }" 2>/dev/null; fi
+    done
+    while read -r m; do
+        is_mac "$m" && nft add element inet $NFT_TABLE msgdone "{ $m }" 2>/dev/null
+    done < "$MSG_DIR/all.done" 2>/dev/null
+    return 0
+}
+
+in_set() { nft list set inet $NFT_TABLE "$1" 2>/dev/null | tr -d '{},;' | grep -qw "$2"; }
+
+do_message() {
+    target=$1; hex=$2; keep=$3
+    [ "$target" = all ] || check_mac "$target"
+    [ "$target" = all ] && [ "$keep" = yes ] && fail "messagekeep is for one device"
+    printf '%s' "$hex" | grep -Eq '^([0-9a-f][0-9a-f])+$' || fail "the message must be hex"
+    [ ${#hex} -le $((MAX_MSG_BYTES * 2)) ] || fail "the message is longer than $MAX_MSG_BYTES bytes"
+    portal_ensure || fail "$PORTAL_ERR"
+    printf '%s\n' "$hex" > "$MSG_DIR/$target.hex" || fail "could not write the message"
+    if [ "$target" = all ]; then
+        nft flush set inet $NFT_TABLE msgdone 2>/dev/null
+        : > "$MSG_DIR/all.done"
+        c=$(caller_mac); [ -n "$c" ] && { nft add element inet $NFT_TABLE msgdone "{ $c }"; echo "$c" > "$MSG_DIR/all.done"; }
+        portal_all_rule "$(portal_ip)" || fail "$PORTAL_ERR"
+        nft list chain inet $NFT_TABLE portal 2>/dev/null | grep -q 'comment "msgall"' || fail "the redirect is not there when read back"
+    else
+        if [ "$keep" = yes ]; then : > "$MSG_DIR/$target.keep"; else rm -f "${MSG_DIR:?}/${target:?}.keep"; fi
+        nft add element inet $NFT_TABLE msgmac "{ $target }" || fail "nft refused to add $target"
+        in_set msgmac "$target" || fail "$target is not in the redirect set when read back"
+    fi
+    record "message to $target"
+    ok "$VERB"; echo "target=$target"; echo "keep=${keep:-no}"; echo "port=$PORTAL_PORT"
+    echo "server=$([ -n "$(portal_pids)" ] && echo running || echo stopped)"; echo "verified=read_back"
+}
+
+do_unmessage() {
+    target=$1
+    [ "$target" = all ] || is_mac "$target" || fail "'$target' is not one hardware address or all"
+    [ -f "$MSG_DIR/$target.hex" ] || { ok unmessage; echo "target=$target"; echo "was_set=no"; return; }
+    rm -f "${MSG_DIR:?}/${target:?}.hex" "${MSG_DIR:?}/${target:?}.keep"
+    if [ "$target" = all ]; then
+        portal_all_del; rm -f "${MSG_DIR:?}/all.done"; nft flush set inet $NFT_TABLE msgdone 2>/dev/null
+    else
+        nft delete element inet $NFT_TABLE msgmac "{ $target }" 2>/dev/null
+        in_set msgmac "$target" && fail "$target is still redirected after the delete"
+    fi
+    if [ -z "$(msg_targets)" ]; then
+        for p in $(portal_pids); do kill "$p" 2>/dev/null; done
+    fi
+    record "message removed from $target"
+    ok unmessage; echo "target=$target"; echo "was_set=yes"; echo "verified=read_back"
+}
+
+# Body lines: target, keep or once, how many said OK, hex
+do_messages() {
+    ok messages; echo "port=$PORTAL_PORT"
+    echo "server=$([ -n "$(portal_pids)" ] && echo running || echo stopped)"; echo "--"
+    for t in $(msg_targets); do
+        k=once; [ -f "$MSG_DIR/$t.keep" ] && k=keep
+        d=0; [ "$t" = all ] && d=$(grep -c . "$MSG_DIR/all.done" 2>/dev/null)
+        printf '%s %s %s %s\n' "$t" "$k" "${d:-0}" "$(head -c $((MAX_MSG_BYTES * 2)) "$MSG_DIR/$t.hex")"
+    done
+}
+
+# Body lines: id body, the body as the page received it, url encoded.
+do_replies() {
+    ok replies; echo "--"
+    for f in $(ls "$REPLY_DIR" 2>/dev/null | head -n $MAX_REPLIES); do
+        printf '%s %s\n' "$f" "$(head -c 2000 "$REPLY_DIR/$f" | tr -cd 'A-Za-z0-9%+._=&*-')"
+    done
+}
+
+do_clearreply() {
+    printf '%s' "$1" | grep -Eq '^[0-9]+-[0-9a-f-]+-[0-9]+$' || fail "'$1' is not a reply id"
+    rm -f "${REPLY_DIR:?}/${1:?}"
+    [ -e "$REPLY_DIR/$1" ] && fail "the reply is still there after the delete"
+    ok clearreply; echo "id=$1"
+}
+
 # READS
 lease_file() { for f in $LEASE_FILES; do [ -r "$f" ] && { echo "$f"; return; }; done; }
 
@@ -750,6 +1007,7 @@ do_probe() {
     echo "apps=$APPS"
     echo "caller=$CALLER"
     echo "portal_tools=$(portal_tools)"
+    [ "$fw" = nft ] && uhttpd_ok && { echo "cap=message"; echo "portal_port=$PORTAL_PORT"; }
 }
 
 case "$VERB" in
@@ -791,5 +1049,11 @@ case "$VERB" in
     blockapp) [ -n "$ARG2" ] || fail "blockapp needs a hardware address and an app"; do_blockapp "$ARG1" "$ARG2" ;;
     unblockapp) [ -n "$ARG2" ] || fail "unblockapp needs a hardware address and an app"; do_unblockapp "$ARG1" "$ARG2" ;;
     apprefresh) do_apprefresh ;;
+    messages) do_messages ;;
+    message) [ -n "$ARG2" ] || fail "message needs a hardware address or all, and the text"; do_message "$ARG1" "$ARG2" no ;;
+    messagekeep) [ -n "$ARG2" ] || fail "messagekeep needs a hardware address and the text"; do_message "$ARG1" "$ARG2" yes ;;
+    unmessage) [ -n "$ARG1" ] || fail "unmessage needs a hardware address or all"; do_unmessage "$ARG1" ;;
+    replies) do_replies ;;
+    clearreply) [ -n "$ARG1" ] || fail "clearreply needs an id"; do_clearreply "$ARG1" ;;
     *) fail "no verb named '$VERB'" ;;
 esac

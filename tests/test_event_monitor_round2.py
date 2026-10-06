@@ -537,9 +537,10 @@ print("\n  the ids are not reused and nothing was retired to make room:")
 # (the router agent's action records) 94, REM-1013 and REM-1014 (blocks by
 # hardware address at the router) 96, REM-1015 and REM-1016 (one app on
 # one device) 98, LNX-4004 to LNX-4006 (autorun entries added, changed,
-# removed) 101.
+# removed) 101, REM-1017 to REM-1026 (containment through the root helper)
+# 111, LAN-1008 to LAN-1011 (live LAN alerts) 115.
 check("the register grew by exactly four",
-      len(det.summary(include_retired=True)), 101)
+      len(det.summary(include_retired=True)), 115)
 check("and the retired set is unchanged",
       sorted(r["detection_id"] for r in det.summary(include_retired=True)
              if r["retired"]), ["EVT-1001", "PRC-1002", "PRT-1001"])

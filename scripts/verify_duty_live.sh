@@ -24,7 +24,7 @@ OWNER_HOME="$(getent passwd "$OWNER" | cut -d: -f6)"
 USER_SITE="$OWNER_HOME/.local/lib/python$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')/site-packages"
 PORT=5199
 TMP=$(mktemp -d /tmp/agental_duty_live.XXXXXX)
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 
 # The live config, copied so the test's port change touches ONLY the copy.
 cp "$ROOT/config.json" "$TMP/config.json"

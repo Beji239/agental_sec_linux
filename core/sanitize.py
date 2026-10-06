@@ -392,6 +392,12 @@ UNTRUSTED_TOOLS = {
     # them. The file stays where it is; the STRING describing it is what
     # reaches the model.
     "restore_file",
+    # A cron line and a unit name were written by whoever planted them, and
+    # these results repeat them.
+    "disable_cron_line",
+    "restore_cron_line",
+    "disable_service",
+    "enable_service",
     # The incident ledger, added 2026-09-17 with the tools themselves. Every
     # field on an incident row is inherited from the findings that produced it:
     # titles, entity values, and for a process incident the process name, all

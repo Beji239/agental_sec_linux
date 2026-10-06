@@ -50,7 +50,7 @@ USER_SITE="$OWNER_HOME/.local/lib/python$(python3 -c 'import sys; print("%d.%d" 
 PORT=5199
 TMP=$(mktemp -d /tmp/agental_cm_live.XXXXXX)
 
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 
 # THE COPY IS MADE FRESH AND ITS INDEX IS EMPTIED, ON PURPOSE.
 #

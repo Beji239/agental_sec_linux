@@ -83,6 +83,13 @@ ok()   { echo "  [PASS] $1"; PASS=$((PASS+1)); }
 no()   { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 skip() { echo "  [SKIP] $1"; SKIP=$((SKIP+1)); }
 chk()  { if [[ "$2" == "1" ]]; then ok "$1"; else no "$1"; fi; }
+# The not-installed warnings can only be seen on a machine without auditd.
+AUDITD_INSTALLED=0
+command -v auditd >/dev/null 2>&1 && command -v auditctl >/dev/null 2>&1 && AUDITD_INSTALLED=1
+chk_absent() {
+    if (( AUDITD_INSTALLED )); then skip "$1 (auditd is installed here, so this case cannot occur)"
+    else chk "$1" "$2"; fi
+}
 
 # ONE READER FOR EVERY FLAG FILE, defined with the other helpers so no section
 # can use it before it exists -- which is exactly what happened when these sat
@@ -360,7 +367,7 @@ chk "  and the enriched half's own FIELDS were lifted, not just its type" \
     "$(flagB ENRICHED_FIELDS_LIFTED)"
 chk "the override is NAMED as the reason for the path" \
     "$(flagB OVERRIDE_NAMED)"
-chk "and a configured log on a host with no auditd is WARNED about" \
+chk_absent "and a configured log on a host with no auditd is WARNED about" \
     "$(flagB WARNED)"
 chk "THE KERNEL'S OWN SWITCH is read out of the log, not guessed" \
     "$([[ "$(flagB KERNEL_ENABLED)" == "1" ]] && echo 1 || echo 0)"
@@ -448,7 +455,7 @@ chk "  with the same columns the migrated one has" "$(flagC FRESH_COLUMNS)"
 echo
 echo "D. the real app boots with the reader in its module table"
 
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 # The reference copy was taken in the LA-4 head, above, before anything was
 # written; this is only the scratch copy the boot will read.
 cp "$ROOT/config.json" "$TMP/config.json"
@@ -627,7 +634,7 @@ PY
     # THE HEADLINE, ON THE ONE SURFACE A PERSON LOOKS AT. It is READABLE and
     # recent and the audit userspace is not installed, so the sentence has to
     # be about the file rather than about a subsystem that does not exist.
-    chk "the headline does NOT claim an uninstalled subsystem is recording" \
+    chk_absent "the headline does NOT claim an uninstalled subsystem is recording" \
         "$(python3 - "$TMP/au.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -636,7 +643,7 @@ bad = "the audit subsystem is recording" in n
 print(0 if bad else 1)
 PY
 )"
-    chk "and the coverage block carries the warning about the configured path" \
+    chk_absent "and the coverage block carries the warning about the configured path" \
         "$(python3 - "$TMP/au.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -739,9 +746,9 @@ chk "and it is not blind, because a readable file is readable" \
 # THE HEADLINE MUST NOT CLAIM A SUBSYSTEM IS RECORDING when the audit
 # userspace is not installed. This is a fixture run, so nothing is recording,
 # and the first version of this adapter said otherwise.
-chk "and its headline does NOT claim the subsystem is recording" \
+chk_absent "and its headline does NOT claim the subsystem is recording" \
     "$(grep -q 'STATUS_NOTE=.*the audit subsystem is recording' "$TMP/trip.txt" && echo 0 || echo 1)"
-chk "  because it says instead that the userspace is not installed" \
+chk_absent "  because it says instead that the userspace is not installed" \
     "$(grep -q 'STATUS_NOTE=.*AUDIT USERSPACE IS NOT INSTALLED' "$TMP/trip.txt" && echo 1 || echo 0)"
 chk "query_audit_events is in the manifest" \
     "$(grep -q 'TOOL_IN_MANIFEST=1' "$TMP/trip.txt" && echo 1 || echo 0)"

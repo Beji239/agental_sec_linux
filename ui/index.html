@@ -2349,6 +2349,8 @@
         <span class="pill" id="lan-status">connecting</span>
         <span class="pill" id="lan-count"></span>
         <span class="pill" id="lan-blocked-count" style="display:none"></span>
+        <span style="flex:1"></span>
+        <button class="lan-btn" id="lan-msg-all" data-msg="all" data-name="every device" style="display:none">Message everyone</button>
       </div>
       <table class="data-table lan-table">
         <thead><tr>
@@ -2360,6 +2362,22 @@
         <tbody id="lan-body"><tr><td colspan="9">Loading.</td></tr></tbody>
       </table>
       <div class="lan-note" id="lan-note"></div>
+    </div>
+
+    <div class="card" id="lan-msg-compose" style="display:none">
+      <div class="card-title" id="lan-msg-title">Message</div>
+      <textarea class="input" id="lan-msg-text" maxlength="600" rows="3" style="width:100%;box-sizing:border-box;"></textarea>
+      <label id="lan-msg-keep-wrap" style="display:block;margin:6px 0;font-size:12px;">
+        <input type="checkbox" id="lan-msg-keep"> Keep showing it after OK, for a device that is cut off</label>
+      <button class="lan-btn" id="lan-msg-send">Send</button>
+      <button class="lan-btn" id="lan-msg-cancel">Cancel</button>
+      <div class="lan-note">The device sees it the next time it opens a plain web page or joins the Wi-Fi; phones show it as a sign-in page. Secure (https) pages cannot be interrupted, so it can take a while.</div>
+    </div>
+
+    <div class="card" id="lan-msg-card" style="display:none">
+      <div class="card-title">Messages and replies</div>
+      <div id="lan-msg-list"></div>
+      <div id="lan-msg-replies" style="margin-top:10px;"></div>
     </div>
 
     <div id="lan-detail" style="display:none">
@@ -8993,12 +9011,87 @@ function lanSpark(points) {
 function startLanLive() {
   if (lanTimer) return;
   loadLan();
+  loadLanMessages();
   lanTimer = setInterval(loadLan, 5000);
+  lanMsgTimer = setInterval(loadLanMessages, 20000);
 }
 
 function stopLanLive() {
   if (lanTimer) { clearInterval(lanTimer); lanTimer = null; }
+  if (lanMsgTimer) { clearInterval(lanMsgTimer); lanMsgTimer = null; }
 }
+
+// MESSAGES. Shown on the router's own page to one device or every device;
+// replies come back from that page. Refreshed every 20 seconds.
+let lanMsg = { supported: false, messages: [], replies: [] };
+let lanMsgTimer = null;
+let lanMsgTarget = null;
+
+function lanNameForMac(mac) {
+  const d = ((lanLast && lanLast.devices) || []).find(x => x.mac === mac);
+  return d ? lanName(d) : mac;
+}
+
+async function loadLanMessages() {
+  let d;
+  try {
+    d = await fetch('/api/lan/messages', { headers: authHeaders() }).then(r => r.json());
+  } catch (e) { return; }
+  lanMsg = { supported: !!d.supported, messages: d.messages || [], replies: d.replies || [],
+             error: d.success ? null : d.error };
+  document.getElementById('lan-msg-all').style.display = lanMsg.supported ? '' : 'none';
+  const card = document.getElementById('lan-msg-card');
+  card.style.display = (lanMsg.supported && (lanMsg.messages.length || lanMsg.replies.length || lanMsg.error)) ? '' : 'none';
+  const list = lanMsg.messages.map(m => {
+    const who = m.target === 'all' ? 'Every device' : lanNameForMac(m.target);
+    const extra = m.target === 'all' ? ` (${m.acknowledged} said OK)` : (m.keep ? ' (stays after OK)' : '');
+    return `<div class="lan-sub" style="margin:4px 0"><b>${esc(who)}</b>${esc(extra)}: ${esc(m.text)}
+      <button class="lan-btn" data-unmsg="${esc(m.target)}">Remove</button></div>`;
+  }).join('');
+  const reps = lanMsg.replies.map(r => {
+    const what = r.action === 'ok' ? 'pressed OK' : 'replied: ' + r.text;
+    return `<div class="lan-sub" style="margin:4px 0">${esc(fmtTime(new Date(r.at * 1000)))}
+      <b>${esc(lanNameForMac(r.mac))}</b> ${esc(what)}
+      <button class="lan-btn" data-clear-reply="${esc(r.id)}">Delete</button></div>`;
+  }).join('');
+  document.getElementById('lan-msg-list').innerHTML = list ||
+    (lanMsg.error ? `<div class="lan-sub">${esc(lanMsg.error)}</div>` : '<div class="lan-sub">No message is showing.</div>');
+  document.getElementById('lan-msg-replies').innerHTML = reps ? '<div class="card-title" style="font-size:12px">Replies</div>' + reps : '';
+}
+
+function lanMsgOpen(target, name) {
+  lanMsgTarget = target;
+  document.getElementById('lan-msg-title').textContent = 'Message to ' + name;
+  document.getElementById('lan-msg-keep-wrap').style.display = target === 'all' ? 'none' : '';
+  document.getElementById('lan-msg-keep').checked = false;
+  const box = document.getElementById('lan-msg-compose');
+  box.style.display = '';
+  document.getElementById('lan-msg-text').focus();
+}
+
+async function lanMsgPost(url, body) {
+  try {
+    const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+                                 body: JSON.stringify(body) }).then(r => r.json());
+    if (!r.success) alert('Not done: ' + (r.error || 'the router refused'));
+    return !!r.success;
+  } catch (e) { alert('Not done: ' + e); return false; }
+}
+
+document.getElementById('lan-msg-send').addEventListener('click', async () => {
+  const text = document.getElementById('lan-msg-text').value.trim();
+  if (!text || !lanMsgTarget) return;
+  const ok = await lanMsgPost('/api/lan/message', { target: lanMsgTarget, text,
+                                                    keep: document.getElementById('lan-msg-keep').checked });
+  if (ok) {
+    document.getElementById('lan-msg-text').value = '';
+    document.getElementById('lan-msg-compose').style.display = 'none';
+    loadLanMessages(); loadLan();
+  }
+});
+document.getElementById('lan-msg-cancel').addEventListener('click', () => {
+  document.getElementById('lan-msg-compose').style.display = 'none';
+});
 
 async function loadLan() {
   let d;
@@ -9036,6 +9129,9 @@ async function loadLan() {
                  : (x.present ? '<span class="lan-tag">online</span>' : '<span class="lan-tag amber">not seen</span>'))
                  + (nApps ? `<span class="lan-tag red">${nApps} app${nApps === 1 ? '' : 's'} blocked</span>` : '');
     const canAct = !!(x.mac || x.ip);
+    const waiting = lanMsg.messages.some(m => m.target === x.mac);
+    const msgBtn = lanMsg.supported && x.mac
+      ? `<button class="lan-btn" data-msg="${esc(x.mac)}" data-name="${esc(name)}">Message</button> ` : '';
     const btn = x.blocked
       ? `<button class="lan-btn restore" data-act="unblock" data-ip="${esc(x.ip)}" data-mac="${esc(x.blocked_by === 'mac' ? x.mac : '')}">Restore</button>`
       : `<button class="lan-btn cut" data-act="block" data-ip="${esc(x.ip)}" data-mac="${esc(x.mac || '')}" ${canAct ? '' : 'disabled'}>Cut internet</button>`;
@@ -9048,7 +9144,7 @@ async function loadLan() {
       <td class="lan-rate">${lanBytes(x.down_total)}</td>
       <td class="lan-rate">${x.connections === null ? '<span class="lan-sub">could not read</span>' : x.connections}</td>
       <td>${lanSpark(x.spark)}</td>
-      <td>${btn}</td></tr>`;
+      <td style="white-space:nowrap">${waiting ? '<span class="lan-tag amber">message waiting</span> ' : ''}${msgBtn}${btn}</td></tr>`;
   });
   document.getElementById('lan-body').innerHTML = rows.join('') ||
     '<tr><td colspan="9">The router reports no devices yet.</td></tr>';
@@ -9209,7 +9305,23 @@ async function lanEnforce(btn) {
   loadLan();
 }
 
-document.addEventListener('click', ev => {
+document.addEventListener('click', async ev => {
+  const mb = ev.target.closest('#page-lan button[data-msg]');
+  if (mb) { ev.stopPropagation(); lanMsgOpen(mb.dataset.msg, mb.dataset.name || mb.dataset.msg); return; }
+  const um = ev.target.closest('#page-lan button[data-unmsg]');
+  if (um) {
+    ev.stopPropagation();
+    if (confirm('Stop showing this message?') && await lanMsgPost('/api/lan/unmessage', { target: um.dataset.unmsg })) {
+      loadLanMessages(); loadLan();
+    }
+    return;
+  }
+  const cr = ev.target.closest('#page-lan button[data-clear-reply]');
+  if (cr) {
+    ev.stopPropagation();
+    if (await lanMsgPost('/api/lan/reply/clear', { id: cr.dataset.clearReply })) loadLanMessages();
+    return;
+  }
   const btn = ev.target.closest('#page-lan button[data-act]');
   if (btn) { ev.stopPropagation(); lanEnforce(btn); return; }
   const row = ev.target.closest('#page-lan tr.lan-row');

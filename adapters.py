@@ -4250,10 +4250,8 @@ class LinuxRemediation:
             fields = ah._stat_fields(pid)
             if fields is None:
                 return {"success": False, "error": "Process no longer exists"}
-            result = _via_helper("kill", str(pid), fields[0], str(fields[2]))
-            if result.get("success") and include_children:
-                result["note"] = ("The root helper ends one process; its "
-                                  "children were not included.")
+            result = _via_helper("kill_tree" if include_children else "kill",
+                                 str(pid), fields[0], str(fields[2]))
         if not result.get("success"):
             return result
 
@@ -4578,6 +4576,135 @@ class LinuxRemediation:
             result["record_error"] = (f"The block was lifted. The record of "
                                       f"it was NOT written: {e}")
         return result
+
+    # CONTAINMENT. Each one is a single verb of the root helper, which holds
+    # the guards, reads the change back and keeps an undo record. Unelevated
+    # it goes through the pkexec session; run as root the same code runs here.
+
+    def _contain(self, verb: str, args: list, *, done: str, rem_id: str,
+                 entity_type: str, entity_key: str, title: str, reason: str,
+                 session_id: str = None) -> dict:
+        from core import memory_engine as me
+        if not (reason or "").strip():
+            return {"success": False,
+                    "error": "reason is required. Say what was found and why "
+                             "this is the response."}
+        args = [str(a) for a in args]
+        if _unelevated():
+            result = _via_helper(verb, *args)
+        else:
+            from tools import action_helper as ah
+            reply = ah.handle(verb, args)
+            result = {"success": bool(reply.get("ok")),
+                      "via": "in process, the app runs as root"}
+            if reply.get("ok"):
+                result.update(reply.get("result") or {})
+            else:
+                result.update(error=reply.get("refused") or "no reason given",
+                              refused=True)
+        if not result.get("success") or not result.get(done):
+            return result
+        entity = str(result.get(entity_key) or "")
+        try:
+            me.save_finding(
+                session_id=session_id or self.session_id,
+                source="remediation",
+                detection_id=rem_id,
+                severity="info",
+                entity_type=entity_type,
+                entity_value=entity,
+                title=title.format(**{k: result.get(k) for k in
+                                      ("user", "group", "path", "unit",
+                                       "fingerprint")}),
+                description=reason,
+                raw_data={k: v for k, v in result.items()
+                          if k not in ("before", "after", "steps")},
+            )
+        except Exception as e:
+            logger.error(f"{verb} was done but could not be recorded: {e}")
+            result["record_error"] = (
+                f"The change was made. The record of it was NOT written: {e}.")
+        return result
+
+    def remove_ssh_key(self, user: str, fingerprint: str, reason: str,
+                       session_id: str = None) -> dict:
+        return self._contain(
+            "remove_ssh_key", [user, fingerprint], done="removed",
+            rem_id="REM-1017", entity_type="user", entity_key="user",
+            title="SSH key removed from {user}: {fingerprint}",
+            reason=reason, session_id=session_id)
+
+    def restore_ssh_key(self, undo_id: str, reason: str,
+                        session_id: str = None) -> dict:
+        return self._contain(
+            "restore_ssh_key", [undo_id], done="restored",
+            rem_id="REM-1018", entity_type="user", entity_key="user",
+            title="SSH key put back for {user}: {fingerprint}",
+            reason=reason, session_id=session_id)
+
+    def lock_account(self, user: str, reason: str,
+                     session_id: str = None) -> dict:
+        return self._contain(
+            "lock_account", [user], done="locked",
+            rem_id="REM-1019", entity_type="user", entity_key="user",
+            title="Account locked: {user}", reason=reason,
+            session_id=session_id)
+
+    def unlock_account(self, undo_id: str, reason: str,
+                       session_id: str = None) -> dict:
+        return self._contain(
+            "unlock_account", [undo_id], done="restored",
+            rem_id="REM-1020", entity_type="user", entity_key="user",
+            title="Account unlocked: {user}", reason=reason,
+            session_id=session_id)
+
+    def remove_group_member(self, user: str, group: str, reason: str,
+                            session_id: str = None) -> dict:
+        return self._contain(
+            "remove_group_member", [user, group], done="removed",
+            rem_id="REM-1021", entity_type="user", entity_key="user",
+            title="{user} taken out of the {group} group", reason=reason,
+            session_id=session_id)
+
+    def restore_group_member(self, undo_id: str, reason: str,
+                             session_id: str = None) -> dict:
+        return self._contain(
+            "restore_group_member", [undo_id], done="restored",
+            rem_id="REM-1022", entity_type="user", entity_key="user",
+            title="{user} put back in the {group} group", reason=reason,
+            session_id=session_id)
+
+    def disable_cron_line(self, path: str, line: str, reason: str,
+                          session_id: str = None) -> dict:
+        return self._contain(
+            "disable_cron_line", [path, line], done="disabled",
+            rem_id="REM-1023", entity_type="file", entity_key="path",
+            title="Cron line disabled in {path}", reason=reason,
+            session_id=session_id)
+
+    def restore_cron_line(self, undo_id: str, reason: str,
+                          session_id: str = None) -> dict:
+        return self._contain(
+            "restore_cron_line", [undo_id], done="restored",
+            rem_id="REM-1024", entity_type="file", entity_key="path",
+            title="Cron line enabled again in {path}", reason=reason,
+            session_id=session_id)
+
+    def disable_service(self, unit: str, reason: str,
+                        session_id: str = None) -> dict:
+        return self._contain(
+            "disable_unit", [unit], done="disabled_and_masked",
+            rem_id="REM-1025", entity_type="process", entity_key="unit",
+            title="Service stopped, disabled and masked: {unit}",
+            reason=reason, session_id=session_id)
+
+    def enable_service(self, unit: str, reason: str,
+                       session_id: str = None) -> dict:
+        return self._contain(
+            "enable_unit", [unit], done="unmasked",
+            rem_id="REM-1026", entity_type="process", entity_key="unit",
+            title="Service unmasked and enabled: {unit}", reason=reason,
+            session_id=session_id)
 
     # systemd units. L2, 2026-09-22.
 

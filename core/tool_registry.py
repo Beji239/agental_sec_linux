@@ -2337,7 +2337,11 @@ TOOL_MANIFEST = [
                                      "block_device",
                                      "block_port", "quarantine_file",
                                      "gateway_block_device",
-                                     "gateway_sinkhole_domain"))),
+                                     "gateway_sinkhole_domain",
+                                     "remove_ssh_key", "lock_account",
+                                     "remove_group_member",
+                                     "disable_cron_line",
+                                     "disable_service"))),
                     "description": "Which action to propose."
                 },
                 "params": {
@@ -2347,7 +2351,13 @@ TOOL_MANIFEST = [
                                     "kill_process {pid, reason}; block_device "
                                     "{ip, reason}; block_port {port, "
                                     "direction, reason}; quarantine_file "
-                                    "{file_path, reason}.")
+                                    "{file_path, reason}; remove_ssh_key "
+                                    "{user, fingerprint, reason}; "
+                                    "lock_account {user, reason}; "
+                                    "remove_group_member {user, group, "
+                                    "reason}; disable_cron_line {path, line, "
+                                    "reason}; disable_service {unit, "
+                                    "reason}.")
                 },
                 "reason": {
                     "type": "string",
@@ -3035,6 +3045,13 @@ TOOL_MANIFEST = [
                                   "a recycled pid taking down something "
                                   "else."},
                 "include_children": {"type": "boolean", "description":
+                                     "Also end every process it started, "
+                                     "children and their children. The tree "
+                                     "is frozen first so nothing in it can "
+                                     "start a replacement. Protected "
+                                     "processes inside it are left alone and "
+                                     "named."},
+                "include_children": {"type": "boolean", "description":
                                      "Also end every process this one "
                                      "started. Only when the operator asked "
                                      "for the whole tree; the card says so."},
@@ -3430,6 +3447,173 @@ TOOL_MANIFEST = [
                 "reason": {"type": "string", "description": "Why this file should be restored"},
             },
             "required": ["folder", "reason"]
+        }
+    },
+
+    # CONTAINMENT. Each removes something an attack leaves behind, through the
+    # root helper, which reads the change back and keeps an undo record. The
+    # undos lower protection again, so they are gated as well.
+    {
+        "name": "remove_ssh_key",
+        "description": (
+            "Take ONE key out of an account's authorized_keys, named by its "
+            "SHA256 fingerprint, leaving every other key. The response to an "
+            "SSH key added (LNX-1011, LNX-2002). ALWAYS goes through the "
+            "approval card. Get the fingerprint from the finding or from "
+            "'ssh-keygen -lf' output; never guess it. Sessions already open "
+            "with the key stay open. Returns an undo_id for restore_ssh_key."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user": {"type": "string", "description": "The account whose authorized_keys holds the key."},
+                "fingerprint": {"type": "string", "description": "SHA256:<43 characters>, as ssh-keygen -lf prints it."},
+                "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."},
+            },
+            "required": ["user", "fingerprint", "reason"]
+        }
+    },
+    {
+        "name": "restore_ssh_key",
+        "description": (
+            "Put back a key remove_ssh_key took out, from its undo record. "
+            "REQUIRES APPROVAL: it gives the key's holder access again."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"undo_id": {"type": "string", "description": "The undo_id the original action returned, also kept in its REM action record."}, "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."}},
+            "required": ["undo_id", "reason"]
+        }
+    },
+    {
+        "name": "lock_account",
+        "description": (
+            "Lock an account: its password is locked and the account expired, "
+            "so new logins by password OR key are refused. The response to an "
+            "account created (LNX-1009). ALWAYS goes through the approval "
+            "card. Refused for root and for the operator's own account. "
+            "Running sessions and processes of that account keep running; "
+            "end them separately if needed. Returns an undo_id for "
+            "unlock_account."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user": {"type": "string", "description": "The account name."},
+                "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."},
+            },
+            "required": ["user", "reason"]
+        }
+    },
+    {
+        "name": "unlock_account",
+        "description": (
+            "Put an account lock_account locked back exactly as it was before, "
+            "from its undo record. REQUIRES APPROVAL."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"undo_id": {"type": "string", "description": "The undo_id the original action returned, also kept in its REM action record."}, "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."}},
+            "required": ["undo_id", "reason"]
+        }
+    },
+    {
+        "name": "remove_group_member",
+        "description": (
+            "Take an account out of a privileged group: sudo, wheel, adm, "
+            "docker, lxd, libvirt, disk or shadow, and no other. The response "
+            "to LNX-1017. ALWAYS goes through the approval card. Refused for "
+            "root and the operator's own account. A session already logged in "
+            "keeps the group until it ends. Returns an undo_id for "
+            "restore_group_member."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user": {"type": "string"},
+                "group": {"type": "string", "enum": ["sudo", "wheel", "adm", "docker", "lxd", "libvirt", "disk", "shadow"]},
+                "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."},
+            },
+            "required": ["user", "group", "reason"]
+        }
+    },
+    {
+        "name": "restore_group_member",
+        "description": (
+            "Put back a group membership remove_group_member took away, from "
+            "its undo record. REQUIRES APPROVAL."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"undo_id": {"type": "string", "description": "The undo_id the original action returned, also kept in its REM action record."}, "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."}},
+            "required": ["undo_id", "reason"]
+        }
+    },
+    {
+        "name": "disable_cron_line",
+        "description": (
+            "Comment out ONE cron line, keeping its text, in /etc/crontab, a "
+            "file in /etc/cron.d or a user crontab in /var/spool/cron/crontabs. "
+            "The response to a suspicious cron job (LNX-4002). ALWAYS goes "
+            "through the approval card. The line must be given exactly as it "
+            "is in the file, copied from the finding. A job already running "
+            "is not stopped. Returns an undo_id for restore_cron_line."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "The cron file, as an absolute path."},
+                "line": {"type": "string", "description": "The whole line, exactly as written in the file."},
+                "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."},
+            },
+            "required": ["path", "line", "reason"]
+        }
+    },
+    {
+        "name": "restore_cron_line",
+        "description": (
+            "Make a cron line disable_cron_line commented out active again, "
+            "from its undo record. REQUIRES APPROVAL."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"undo_id": {"type": "string", "description": "The undo_id the original action returned, also kept in its REM action record."}, "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."}},
+            "required": ["undo_id", "reason"]
+        }
+    },
+    {
+        "name": "disable_service",
+        "description": (
+            "Stop, disable and mask a SYSTEM systemd unit, so it does not "
+            "come back at boot or on demand. The response to a persistence "
+            "unit (LNX-4001); stop_service only stops it until the next boot. "
+            "ALWAYS goes through the approval card. Security controls, "
+            "logging, the session and this app's own units are refused. The "
+            "name is an exact unit name such as 'evil.service'. Undo with "
+            "enable_service."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "unit": {"type": "string"},
+                "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."},
+            },
+            "required": ["unit", "reason"]
+        }
+    },
+    {
+        "name": "enable_service",
+        "description": (
+            "Unmask and enable a unit disable_service masked. It is not "
+            "started. REQUIRES APPROVAL."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "unit": {"type": "string"},
+                "reason": {"type": "string", "description": "Why, with the evidence: the finding, what it showed, and why this is the response."},
+            },
+            "required": ["unit", "reason"]
         }
     },
 
@@ -4319,6 +4503,22 @@ def tool_schema(name: str) -> dict:
     return {}
 
 
+# Containment tools and the arguments each passes to the remediation module
+# besides reason and session_id.
+CONTAINMENT_TOOLS = {
+    "remove_ssh_key":       ("user", "fingerprint"),
+    "restore_ssh_key":      ("undo_id",),
+    "lock_account":         ("user",),
+    "unlock_account":       ("undo_id",),
+    "remove_group_member":  ("user", "group"),
+    "restore_group_member": ("undo_id",),
+    "disable_cron_line":    ("path", "line"),
+    "restore_cron_line":    ("undo_id",),
+    "disable_service":      ("unit",),
+    "enable_service":       ("unit",),
+}
+
+
 # PERMISSION-GATED TOOL NAMES
 # agent_loop.py checks this before executing
 PERMISSION_GATED = {
@@ -4351,6 +4551,18 @@ PERMISSION_GATED = {
     # would make. Gated like the originals.
     "unblock_port",
     "restore_file",
+
+    # Containment and its undos.
+    "remove_ssh_key",
+    "restore_ssh_key",
+    "lock_account",
+    "unlock_account",
+    "remove_group_member",
+    "restore_group_member",
+    "disable_cron_line",
+    "restore_cron_line",
+    "disable_service",
+    "enable_service",
 
     # Adopting a device's self-reported name as its inventory label.
     #
@@ -4684,6 +4896,34 @@ def permission_summary(name: str, params: dict = None) -> str:
     if name == "restore_file":
         return (f"Move the quarantined file in '{params.get('folder','?')}' back "
                 f"to its original location")
+    if name == "remove_ssh_key":
+        return (f"Remove the SSH key {params.get('fingerprint','?')} from "
+                f"{params.get('user','?')}'s authorized_keys")
+    if name == "restore_ssh_key":
+        return f"Put back the SSH key removed under {params.get('undo_id','?')}"
+    if name == "lock_account":
+        return (f"Lock the account {params.get('user','?')}: no new logins by "
+                f"password or key")
+    if name == "unlock_account":
+        return (f"Unlock the account locked under {params.get('undo_id','?')}, "
+                f"back to how it was")
+    if name == "remove_group_member":
+        return (f"Take {params.get('user','?')} out of the "
+                f"{params.get('group','?')} group")
+    if name == "restore_group_member":
+        return (f"Put back the group membership removed under "
+                f"{params.get('undo_id','?')}")
+    if name == "disable_cron_line":
+        return (f"Disable this cron line in {params.get('path','?')}:\n"
+                f"{params.get('line','?')}")
+    if name == "restore_cron_line":
+        return (f"Make the cron line disabled under {params.get('undo_id','?')} "
+                f"active again")
+    if name == "disable_service":
+        return (f"Stop, disable and mask {params.get('unit','?')} so it does "
+                f"not start again")
+    if name == "enable_service":
+        return f"Unmask and enable {params.get('unit','?')} (not started)"
     if name == "arm_payload_capture":
         # ADDED 2026-09-26. There was NO branch here, so this function's
         # fallback `return name` shipped, and the approval card an operator
@@ -7152,6 +7392,14 @@ def _dispatch(name: str, params: dict):
         if not mod:
             raise ToolUnavailable("remediation module not loaded")
         return mod.list_quarantined()
+
+    if name in CONTAINMENT_TOOLS:
+        mod = _modules.get("remediation")
+        if not mod:
+            raise ToolUnavailable("remediation module not loaded")
+        args = {k: params[k] for k in CONTAINMENT_TOOLS[name]}
+        return getattr(mod, name)(**args, reason=params["reason"],
+                                  session_id=sid)
 
     if name == "restore_file":
         mod = _modules.get("remediation")

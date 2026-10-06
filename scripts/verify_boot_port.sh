@@ -29,7 +29,7 @@ KEEP=0
 
 TMP=$(mktemp -d /tmp/agental_port_verify.XXXXXX)
 PORT=$(python3 -c "import json;print(json.load(open('$ROOT/config.json'))['flask']['port'])")
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 
 PASS=0; FAIL=0
 ok() { echo "  [PASS] $1"; PASS=$((PASS+1)); }

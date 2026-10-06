@@ -38,7 +38,7 @@ OWNER_HOME="$(getent passwd "$OWNER" | cut -d: -f6)"
 USER_SITE="$OWNER_HOME/.local/lib/python$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')/site-packages"
 PORT=5299
 TMP=$(mktemp -d /tmp/agental_t9_live.XXXXXX)
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 
 # THE COPY'S OWN FIXTURE IS MADE FRESH, AND THIS IS A FIX.
 #

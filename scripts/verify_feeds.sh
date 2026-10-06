@@ -196,7 +196,7 @@ if [[ "$LIVE_LINKS" != "1" ]]; then
     exit 2
 fi
 
-cp "$ROOT/agental_sec.db" "$COPYDB"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$COPYDB"
 # The reference copy was taken above, in the LA-4 head, so the trap could see
 # it from the first line of the run; taking it twice is what LA-4 removed.
 

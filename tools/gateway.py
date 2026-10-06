@@ -24,6 +24,7 @@ import re
 import socket
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -54,11 +55,12 @@ TIMEOUT = 30
 REUSE_SECONDS = 1.0
 CAPABILITIES = ("block", "sinkhole", "leases", "neighbors", "conntrack",
                 "log", "dnslog", "blockmac", "counters", "persist",
-                "appblock")
+                "appblock", "message")
 VERBS = {"probe", "version", "leases", "neighbors", "conntrack", "log",
          "dnslog", "blocks", "block", "unblock", "sinkholes", "sinkhole",
          "unsinkhole", "blockmac", "unblockmac", "counters", "restore",
-         "apps", "blockapp", "unblockapp", "apprefresh"}
+         "apps", "blockapp", "unblockapp", "apprefresh", "messages",
+         "message", "messagekeep", "unmessage", "replies", "clearreply"}
 # What the dashboard calls each app the agent knows. An app the agent
 # reports and this table lacks is shown by its agent name.
 APP_LABELS = {
@@ -70,8 +72,12 @@ APP_LABELS = {
     "steam": "Steam", "reddit": "Reddit", "signal": "Signal",
 }
 _APP_RE = re.compile(r"^[a-z0-9]{1,32}$")
-_ARG_RE = re.compile(r"^[A-Za-z0-9.:_-]{1,253}$")
+_ARG_RE = re.compile(r"^[A-Za-z0-9.:_-]{1,1200}$")
 _MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
+_REPLY_ID_RE = re.compile(r"^(\d+)-((?:[0-9a-f]{2}-){5}[0-9a-f]{2})-\d+$")
+_HEX_RE = re.compile(r"^(?:[0-9a-f]{2})*$")
+# The agent takes up to 600 bytes, sent as hex.
+MAX_MESSAGE_BYTES = 600
 
 
 class GatewayError(Exception):
@@ -426,6 +432,63 @@ class Gateway:
     def app_refresh(self) -> dict:
         self._need("appblock")
         return self._run("apprefresh")["fields"]
+
+    # Messages, shown on the router's own page to one device or every device.
+
+    def messages(self) -> dict:
+        self._need("message")
+        r = self._run("messages")
+        out = []
+        for line in r["body"][:1000]:
+            parts = line.split()
+            if len(parts) != 4 or not (parts[0] == "all" or _MAC_RE.match(parts[0])):
+                continue
+            if not parts[2].isdigit() or not _HEX_RE.match(parts[3]):
+                continue
+            out.append({"target": parts[0], "keep": parts[1] == "keep",
+                        "acknowledged": int(parts[2]),
+                        "text": bytes.fromhex(parts[3]).decode("utf-8", "replace")})
+        return {"server": r["fields"].get("server"),
+                "port": r["fields"].get("port"), "messages": out}
+
+    def message(self, target: str, text: str, keep: bool = False) -> dict:
+        self._need("message")
+        target = "all" if target == "all" else _mac(target)
+        clean = "".join(c for c in (text or "") if c == "\n" or c >= " ").strip()
+        data = clean.encode("utf-8")
+        if not data:
+            raise GatewayError("A message needs some text.")
+        if len(data) > MAX_MESSAGE_BYTES:
+            raise GatewayError(f"The message is {len(data)} bytes; the router "
+                               f"takes up to {MAX_MESSAGE_BYTES}.")
+        verb = "messagekeep" if keep else "message"
+        return self._run(verb, target, data.hex())["fields"]
+
+    def unmessage(self, target: str) -> dict:
+        self._need("message")
+        return self._run("unmessage", "all" if target == "all" else _mac(target))["fields"]
+
+    def replies(self) -> list:
+        """[{id, at, mac, action, text}], newest first."""
+        self._need("message")
+        out = []
+        for line in self._run("replies")["body"][:500]:
+            rid, _, body = line.partition(" ")
+            m = _REPLY_ID_RE.match(rid)
+            if not m:
+                continue
+            q = urllib.parse.parse_qs(body, max_num_fields=10)
+            out.append({"id": rid, "at": int(m.group(1)),
+                        "mac": m.group(2).replace("-", ":"),
+                        "action": (q.get("action") or [""])[0][:16],
+                        "text": (q.get("reply") or [""])[0][:500]})
+        return sorted(out, key=lambda r: -r["at"])
+
+    def clear_reply(self, reply_id: str) -> dict:
+        self._need("message")
+        if not _REPLY_ID_RE.match(reply_id or ""):
+            raise GatewayError(f"{reply_id!r} is not a reply id.")
+        return self._run("clearreply", reply_id)["fields"]
 
 
 # Parsers. Bounded, and every value is kept as text the device chose.

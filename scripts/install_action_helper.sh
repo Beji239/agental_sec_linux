@@ -28,6 +28,9 @@ HELPER_DST="$HELPER_DIR/action_helper.py"
 POLICY_FILE="/usr/share/polkit-1/actions/org.agentalsec.action-helper.policy"
 LOG_DIR="/var/log/agentalsec"
 VAULT_DIR="/var/lib/agental_sec/quarantine"
+UNDO_DIR="/var/lib/agental_sec/undo"
+BOOT_UNIT="agentalsec-blocks.service"
+BOOT_UNIT_FILE="/etc/systemd/system/$BOOT_UNIT"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -54,7 +57,7 @@ POLICY_CONTENT="$(cat <<EOF
   <vendor>AgentalSec</vendor>
   <action id="org.agentalsec.action-helper">
     <description>Carry out actions approved in AgentalSec</description>
-    <message>AgentalSec needs your password to carry out actions you approve: block an address, stop a service, end a process or quarantine a file. It is asked once per run of the app.</message>
+    <message>AgentalSec needs your password to carry out actions you approve: block an address, stop or disable a service, end a process, quarantine a file, remove an SSH key, lock an account, change a privileged group or disable a cron line. It is asked once per run of the app.</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>
@@ -66,6 +69,25 @@ POLICY_CONTENT="$(cat <<EOF
 EOF
 )"
 
+# Puts the helper's saved blocks back at boot, before the network comes up.
+UNIT_CONTENT="$(cat <<EOF
+# Installed by scripts/install_action_helper.sh.
+[Unit]
+Description=AgentalSec, restore the blocks approved in the app
+DefaultDependencies=no
+After=local-fs.target nftables.service
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=$HELPER_DST restore_blocks
+
+[Install]
+WantedBy=multi-user.target
+EOF
+)"
+
 plan() {
     say "AgentalSec root action helper"
     say ""
@@ -73,7 +95,9 @@ plan() {
     say "1. install $HELPER_DST (root:root, 0755)"
     say "2. create $POLICY_FILE:"
     printf '%s\n' "$POLICY_CONTENT" | sed 's/^/     /'
-    say "3. create $LOG_DIR and $VAULT_DIR (root:root, 0700)"
+    say "3. create $LOG_DIR, $VAULT_DIR and $UNDO_DIR (root:root, 0700)"
+    say "4. install and enable $BOOT_UNIT_FILE, which puts saved blocks back at boot:"
+    printf '%s\n' "$UNIT_CONTENT" | sed 's/^/     /'
     say ""
     say "WHAT IT GRANTS: the app may start that one file as root after you type"
     say "your password, once per run. Only on the local desktop session: the"
@@ -87,8 +111,16 @@ apply() {
     install -d -o root -g root -m 0755 "$HELPER_DIR" || die "could not create $HELPER_DIR"
     install -o root -g root -m 0755 "$HELPER_SRC" "$HELPER_DST" || die "could not install the helper"
     say "  installed $HELPER_DST"
-    install -d -o root -g root -m 0700 "$LOG_DIR" "$VAULT_DIR" || die "could not create $LOG_DIR or $VAULT_DIR"
-    say "  created $LOG_DIR and $VAULT_DIR"
+    install -d -o root -g root -m 0700 "$LOG_DIR" "$VAULT_DIR" "$UNDO_DIR" || die "could not create $LOG_DIR, $VAULT_DIR or $UNDO_DIR"
+    say "  created $LOG_DIR, $VAULT_DIR and $UNDO_DIR"
+    local unit_tmp
+    unit_tmp="$(mktemp)" || die "mktemp failed"
+    printf '%s\n' "$UNIT_CONTENT" > "$unit_tmp"
+    install -o root -g root -m 0644 "$unit_tmp" "$BOOT_UNIT_FILE" || { rm -f "$unit_tmp"; die "could not install $BOOT_UNIT_FILE"; }
+    rm -f "$unit_tmp"
+    systemctl daemon-reload && systemctl enable "$BOOT_UNIT" >/dev/null 2>&1 \
+        && say "  installed and enabled $BOOT_UNIT" \
+        || die "could not enable $BOOT_UNIT"
     local tmp
     tmp="$(mktemp)" || die "mktemp failed"
     printf '%s\n' "$POLICY_CONTENT" > "$tmp"
@@ -107,9 +139,12 @@ apply() {
 uninstall() {
     [[ "$(id -u)" == "0" ]] || die "--uninstall must run as root"
     rm -f "$POLICY_FILE" && say "  removed $POLICY_FILE"
+    systemctl disable "$BOOT_UNIT" >/dev/null 2>&1
+    rm -f "$BOOT_UNIT_FILE" && systemctl daemon-reload && say "  removed $BOOT_UNIT_FILE"
     rm -f "$HELPER_DST" && say "  removed $HELPER_DST"
-    say "  left $LOG_DIR and $VAULT_DIR: they hold the record and any"
-    say "  quarantined files. Remove them by hand once nothing in them is needed."
+    say "  left $LOG_DIR, $VAULT_DIR and $UNDO_DIR: they hold the record, any"
+    say "  quarantined files and the undo records. Remove them by hand once"
+    say "  nothing in them is needed."
     say "  Blocks the helper made stay until reboot, or: sudo nft delete table inet agentalsec_helper"
 }
 
@@ -144,6 +179,11 @@ verify() {
         dir="$(dirname "$dir")"
     done
     local out
+    if systemctl is-enabled --quiet "$BOOT_UNIT" 2>/dev/null; then
+        say "  [PASS] $BOOT_UNIT is enabled, so blocks come back after a reboot"
+    else
+        say "  [FAIL] $BOOT_UNIT is not enabled, so blocks last until reboot"; fails=$((fails+1))
+    fi
     out="$("$HELPER_DST" block_ip 203.0.113.9 2>&1)"
     if printf '%s' "$out" | grep -q '"ok": false'; then
         say "  [PASS] run without pkexec, it refuses and changes nothing"

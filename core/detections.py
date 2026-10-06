@@ -993,6 +993,48 @@ _REGISTER: list[Detection] = [
        (),
        kind="action_record"),
 
+    # Containment through the root helper. Each removal keeps an undo record,
+    # and its undo is a separate record because it lowers protection again.
+    _d("REM-1017", 1, "ssh_key_removed", "remediation", "user", {"info"},
+       "This app took one key, named by its fingerprint, out of an account's "
+       "authorized_keys. Sessions already open with it are not closed.",
+       (), kind="action_record"),
+    _d("REM-1018", 1, "ssh_key_restored", "remediation", "user", {"info"},
+       "This app put back an SSH key it had removed.",
+       (), kind="action_record"),
+    _d("REM-1019", 1, "account_locked", "remediation", "user", {"info"},
+       "This app locked an account's password and expired it, so new logins "
+       "by password or key are refused. Running sessions are not ended.",
+       (), kind="action_record"),
+    _d("REM-1020", 1, "account_unlocked", "remediation", "user", {"info"},
+       "This app put an account it had locked back as it was.",
+       (), kind="action_record"),
+    _d("REM-1021", 1, "privileged_group_removed", "remediation", "user",
+       {"info"},
+       "This app took an account out of a group that can become root or read "
+       "what root reads. Logged-in sessions keep the group until they end.",
+       (), kind="action_record"),
+    _d("REM-1022", 1, "privileged_group_restored", "remediation", "user",
+       {"info"},
+       "This app put back a group membership it had removed.",
+       (), kind="action_record"),
+    _d("REM-1023", 1, "cron_line_disabled", "remediation", "file", {"info"},
+       "This app commented out one cron line, keeping the text. A job already "
+       "running from it is not stopped.",
+       (), kind="action_record"),
+    _d("REM-1024", 1, "cron_line_restored", "remediation", "file", {"info"},
+       "This app made a cron line it had disabled active again.",
+       (), kind="action_record"),
+    _d("REM-1025", 1, "service_disabled", "remediation", "process", {"info"},
+       "This app stopped, disabled and masked a systemd unit, read back as "
+       "masked, so it does not start again at boot or on demand.",
+       (), kind="action_record"),
+    _d("REM-1026", 1, "service_enabled", "remediation", "process", {"info"},
+       "This app unmasked and enabled a unit it had disabled. It was not "
+       "started.",
+       (), kind="action_record"),
+
+    # ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
     # PORTED FROM THE WINDOWS REGISTER 2026-09-21. These nine are raised by
     # tools/lan_watch.py, tools/dns_inspector.py and tools/feed_matcher.py,
     # which arrived with the tools port. THEY WERE NOT IN THIS REGISTER, and
@@ -1258,6 +1300,28 @@ _REGISTER: list[Detection] = [
        "resolution, even on a network that uses only IPv4.",
        ("confidentiality",)),
 
+    # The live LAN monitor, through the router. High ones wake the duty loop.
+    _d("LAN-1008", 1, "new_device_live", "lan_live", "ip", {"high"},
+       "The router lists a hardware address the device inventory has never "
+       "held. Raised once per address, within a minute of it joining.",
+       ("confidentiality", "integrity")),
+    _d("LAN-1009", 1, "unusual_upload", "lan_live", "ip", {"high"},
+       "A device sent far more out through the router in ten minutes than "
+       "its own last week says is normal, or past a fixed limit while it has "
+       "under a day of history.",
+       ("confidentiality",)),
+    _d("LAN-1010", 1, "threat_feed_contact_lan", "lan_live", "ip",
+       {"high", "medium"},
+       "A device on the network has a connection through the router to an "
+       "address, or a name it looked up, on a threat feed. Medium when the "
+       "feed's own list is old.",
+       ("confidentiality", "integrity")),
+    _d("LAN-1011", 1, "blocked_device_returned", "lan_live", "ip",
+       {"high", "medium"},
+       "A blocked device came back under a new address. High when only its "
+       "old address was blocked, so it is online again; medium when the "
+       "router still blocks its hardware address.",
+       ("integrity",)),
 
     # feed_matcher, TODO 113.4
     #

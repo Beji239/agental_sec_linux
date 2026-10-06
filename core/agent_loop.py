@@ -1900,7 +1900,14 @@ def _build_permission_card(tool_name: str, params: dict, call_id: str) -> dict:
         "params":         params,
         "reason":         params.get("reason", "No reason provided"),
         "requires_admin": tool_name in {"kill_process", "block_port",
-                                        "stop_service"},
+                                        "stop_service", "disable_service",
+                                        "enable_service", "remove_ssh_key",
+                                        "restore_ssh_key", "lock_account",
+                                        "unlock_account",
+                                        "remove_group_member",
+                                        "restore_group_member",
+                                        "disable_cron_line",
+                                        "restore_cron_line"},
         "kind":           "suppression" if is_suppression else "destructive",
     }
 

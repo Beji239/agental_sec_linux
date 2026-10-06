@@ -309,7 +309,7 @@ fi
 echo
 echo "B. the real app boots with the reader in its module table"
 
-cp "$ROOT/agental_sec.db" "$TMP/test.db"
+python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 # The reference copy was taken in the LA-4 head, above, before anything was
 # written; this is only the scratch copy the boot will read.
 cp "$ROOT/config.json" "$TMP/config.json"
