@@ -187,6 +187,40 @@ Alerts that turn out to be harmless can be silenced for one rule on one
 device or file, without hiding anything else about it, so the next real
 alert stands out.
 
+## How well it detects malware
+
+Because of my own limits, I could not test AgentalSec against its full
+detection capabilities. I built and tested it in a home lab: one home
+network, a handful of computers, phones and consoles, and no real malware.
+That is enough to show that each detection works as designed. It is not
+enough to say how much real malware it would catch.
+
+Measuring that takes a malware lab: a large collection of real, current
+samples, run one after another on isolated machines that can be wiped, with
+a record of which ones were caught. Running real malware on my home network
+would put every device on it at risk, so I never did.
+
+What the tests here do cover:
+
+- **Each detection fires.** Harmless stand-ins play the part of an attack: a
+  program started from a temporary folder, a fake program wearing a system
+  name, a regular check-in to a test server, a domain from a threat feed.
+- **Each detection stays quiet on normal use.** The same rules run against
+  everyday activity on a real home network, and the noisy ones were tuned
+  until they stopped raising alarms about ordinary devices and services.
+
+What they cannot tell you:
+
+- **How often it catches malware nobody has seen before.** That depends on
+  how the malware behaves, and only a large, varied set of real samples can
+  answer it.
+- **A detection rate.** No percentage is claimed, because no honest one could
+  be measured in a home lab.
+
+So treat AgentalSec as a second pair of eyes beside an antivirus, and its
+findings as leads to follow up. If you can test it in a proper malware lab,
+your results would be very welcome.
+
 ## Keeping itself honest
 
 - Important writes go into a **hash-chained tamper journal**, so a later edit
