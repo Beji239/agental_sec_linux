@@ -234,6 +234,27 @@ with me._get_conn() as conn:
         "SELECT detection_id FROM findings WHERE source = 'remediation' ORDER BY id")]
 check("each change is an action record", recs, ["REM-1013", "REM-1014"])
 
+print("a device that has left the router keeps its inventory name")
+me.save_known_device("192.0.2.40", mac="00:00:5e:00:53:40", hostname="ps5")
+with me._get_conn() as conn:
+    conn.execute("UPDATE known_devices SET known_as = 'PlayStation', "
+                 "device_type = 'console' WHERE ip = '192.0.2.40'")
+with m._lock:
+    m.devices["192.0.2.40"] = dict(next(iter(m.devices.values())))
+    m.inventory.pop("192.0.2.40", None)
+snap = client.get("/api/lan/live", headers=h).get_json()
+row = next(x for x in snap["devices"] if x["ip"] == "192.0.2.40")
+check("named from the inventory row for its IP",
+      (row["present"], row["known_as"], row["device_type"], row["mac"], row["hostname"]),
+      (False, "PlayStation", "console", "00:00:5e:00:53:40", "ps5"))
+res = client.get("/api/lan/device?ip=192.0.2.40", headers=h).get_json()
+check("and in the detail panel", (res.get("known_as"), res.get("mac")),
+      ("PlayStation", "00:00:5e:00:53:40"))
+me.retire_device("192.0.2.40", "gone")
+snap = client.get("/api/lan/live", headers=h).get_json()
+row = next(x for x in snap["devices"] if x["ip"] == "192.0.2.40")
+check("a retired row lends no name", (row.get("known_as"), row["mac"]), (None, None))
+
 print()
 if fails:
     print(f"{len(fails)} FAILED: {fails}")

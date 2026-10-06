@@ -1517,18 +1517,42 @@ def register_routes(app):
     # The live LAN monitor (tools/lan_live). Live numbers come from memory;
     # the 24 hour series comes from lan_traffic_minute.
 
-    def _lan_labels() -> dict:
+    def _lan_labeller():
+        """
+        Returns a function that names one live row from the inventory.
+
+        Matched by MAC first. A device that has left the router's client
+        list keeps its counters here but loses its MAC, so it falls back to
+        the inventory row for its IP and takes the MAC from there. Retired
+        and merged rows are skipped so a stale address does not lend a name.
+        """
         from core import oui
-        labels = {}
+        by_mac, by_ip = {}, {}
         try:
             for d in me.query_known_devices():
                 if d.get("mac"):
-                    labels[d["mac"].lower()] = {
-                        "known_as": d.get("known_as"),
-                        "device_type": d.get("device_type")}
+                    by_mac[d["mac"].lower()] = d
+                if (d.get("ip") and not d.get("retired_at")
+                        and not d.get("merged_into")):
+                    by_ip[d["ip"]] = d
         except Exception as e:
             logger.debug(f"Known devices unavailable for the live view: {e}")
-        return labels, oui
+
+        def label(row: dict) -> None:
+            mac = (row.get("mac") or "").lower()
+            inv = by_mac.get(mac) if mac else by_ip.get(row.get("ip"))
+            if inv:
+                row["known_as"] = inv.get("known_as")
+                row["device_type"] = inv.get("device_type")
+                if not mac and inv.get("mac"):
+                    mac = inv["mac"].lower()
+                    row["mac"] = mac
+                if not row.get("hostname"):
+                    row["hostname"] = inv.get("hostname")
+            v = oui.lookup(mac) if mac else {"vendor": None, "status": "unknown"}
+            row["vendor"] = v.get("vendor") or (inv or {}).get("vendor")
+            row["randomized_mac"] = v.get("status") == "randomized"
+        return label
 
     @app.route("/api/lan/live")
     @require_api_key
@@ -1541,13 +1565,9 @@ def register_routes(app):
                                        "needs gateway.enabled with a host in "
                                        "config.json.")})
         snap = mon.snapshot()
-        labels, oui = _lan_labels()
+        label = _lan_labeller()
         for d in snap["devices"]:
-            mac = (d.get("mac") or "").lower()
-            d.update(labels.get(mac) or {})
-            v = oui.lookup(mac) if mac else {"vendor": None, "status": "unknown"}
-            d["vendor"] = v.get("vendor")
-            d["randomized_mac"] = v.get("status") == "randomized"
+            label(d)
         snap["running"] = True
         from tools import gateway as gw
         snap["app_labels"] = gw.APP_LABELS
@@ -1580,12 +1600,7 @@ def register_routes(app):
         except Exception as e:
             out["day"], out["recent_flows"] = [], []
             out["store_error"] = str(e)
-        labels, oui = _lan_labels()
-        mac = (out.get("mac") or "").lower()
-        out.update(labels.get(mac) or {})
-        v = oui.lookup(mac) if mac else {}
-        out["vendor"] = v.get("vendor")
-        out["randomized_mac"] = v.get("status") == "randomized"
+        _lan_labeller()(out)
         return jsonify(out)
 
     def _lan_enforce(block: bool):
