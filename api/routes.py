@@ -450,6 +450,11 @@ def register_routes(app):
     # screen.
     _model_check_cache = {"at": 0.0, "value": None, "epoch": -1}
     MODEL_CHECK_TTL = 30.0
+    # A healthy provider is re-checked every five minutes, not every 30 s:
+    # the page polls status every 8 s, and that was a model list fetch about
+    # twice a minute for a green pill. A failing one keeps the short wait so
+    # its recovery shows quickly. A save still refreshes at once (epoch).
+    MODEL_CHECK_TTL_OK = 300.0
 
     def _cached_model_check():
         # THE CACHE ALSO HAS TO NOTICE A SAVE. 2026-09-15.
@@ -463,9 +468,13 @@ def register_routes(app):
         import time as _t
         now = _t.monotonic()
         epoch = agent_loop.provider_epoch()
-        if (_model_check_cache["value"] is not None
+        cached = _model_check_cache["value"]
+        ttl = (MODEL_CHECK_TTL_OK
+               if isinstance(cached, dict) and cached.get("connected")
+               else MODEL_CHECK_TTL)
+        if (cached is not None
                 and _model_check_cache["epoch"] == epoch
-                and now - _model_check_cache["at"] < MODEL_CHECK_TTL):
+                and now - _model_check_cache["at"] < ttl):
             return _model_check_cache["value"]
         value = asyncio.run(agent_loop.check_model())
         _model_check_cache.update({"at": now, "value": value, "epoch": epoch})

@@ -560,7 +560,7 @@ def for_display(value, _depth: int = 0):
     return value
 
 
-def cap_result(payload: str) -> str:
+def cap_result(payload: str, limit: int = None) -> str:
     """
     Cut an over-sized tool result and SAY SO. Nothing else.
 
@@ -576,7 +576,8 @@ def cap_result(payload: str) -> str:
     it and nobody would notice, because a missing cap has no symptom until it
     has a big one.
     """
-    if len(payload) > MAX_RESULT_LEN:
+    limit = limit or MAX_RESULT_LEN
+    if len(payload) > limit:
         # WHAT THIS USED TO SAY, and why it was not enough. 2026-09-13.
         #
         # It appended '..."[result truncated]"' and nothing else. So a reader
@@ -591,9 +592,9 @@ def cap_result(payload: str) -> str:
         # that has to fit itself first. See process_monitor._fit_process_rows.
         # This is the last resort underneath that, and it says so plainly
         # rather than implying the reader has the whole thing.
-        dropped = len(payload) - MAX_RESULT_LEN
+        dropped = len(payload) - limit
         payload = (
-            payload[:MAX_RESULT_LEN] +
+            payload[:limit] +
             f'\n\n[THIS RESULT WAS CUT AND IS INCOMPLETE. {dropped} of '
             f'{len(payload)} characters are missing from the END. The last '
             f'entry above is a fragment, this is no longer valid JSON, and '

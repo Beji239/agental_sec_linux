@@ -2419,6 +2419,38 @@ def untrusted_sources_this_turn() -> list[str]:
 
 UNATTENDED_MAX_ROUNDS = 12     # lower than chat's 25: cost, and no one waiting
 
+# LOOP-15, 2026-10-05. Every call resends the whole conversation, so a tool
+# result read in round one was paid for again on every later round. Measured:
+# one investigation spent 624,169 prompt tokens over 8 calls and 32 tool
+# calls, and a default query_threat_map alone is about 44,000 tokens. So an
+# unattended result is capped at 40,000 characters, and results more than two
+# rounds old are cut to an excerpt the model has already read in full.
+UNATTENDED_RESULT_CHARS = 40_000
+UNATTENDED_OLD_RESULT_CHARS = 3_000
+UNATTENDED_FULL_ROUNDS = 2
+
+
+def _shorten_old_results(messages: list, aged: list, current_round: int):
+    """
+    Cut tool results more than UNATTENDED_FULL_ROUNDS rounds old to an
+    excerpt, once each, before the next call. An untrusted result is replaced
+    by a note rather than cut, so a fence is never left open.
+    """
+    for idx, arrived, tr in aged:
+        if tr.get("shortened") or current_round - arrived <= UNATTENDED_FULL_ROUNDS:
+            continue
+        tr["shortened"] = True
+        content = messages[idx]["content"] or ""
+        if len(content) <= UNATTENDED_OLD_RESULT_CHARS:
+            continue
+        note = (f"[EARLIER RESULT OF {tr.get('name')}, SHORTENED. You read it "
+                f"in full {current_round - arrived} rounds ago; "
+                f"{len(content):,} characters were here. Call the tool again, "
+                f"narrowly, if a detail from it is needed.]")
+        messages[idx]["content"] = (
+            note if tr.get("untrusted")
+            else content[:UNATTENDED_OLD_RESULT_CHARS] + "\n" + note)
+
 
 def run_unattended(instruction: str, session_id: str, allowlist=None,
                    extra_system: str = "") -> dict:
@@ -2457,6 +2489,7 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
         {"role": "system", "content": SYSTEM_PROMPT + extra_system},
         {"role": "user", "content": instruction},
     ]
+    aged = []   # (message index, round it arrived in, result), for shortening
 
     def _run_rounds() -> str:
         """The async body, run to completion on a private event loop.
@@ -2483,6 +2516,7 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
         nonlocal error
 
         for _round in range(UNATTENDED_MAX_ROUNDS + 1):
+            _shorten_old_results(messages, aged, _round)
             round_usage = {}
             response_text = ""
             calls = []
@@ -2592,7 +2626,8 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
 
                 payload = json.dumps(result)
                 if result.get("untrusted"):
-                    payload = sanitize.fence(payload)
+                    payload = sanitize.fence(sanitize.cap_result(
+                        payload, UNATTENDED_RESULT_CHARS))
                     # Same branch swap as the chat loop above, see the long
                     # note on it: a trusted result used to be the one recorded
                     # as a source. Kept in step because the duty loop writes
@@ -2600,8 +2635,11 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
                     # the same lie wherever it is written.
                     _untrusted_seen.add(name)
                 else:
-                    payload = sanitize.cap_result(payload)
-                results.append({"tool_use_id": call_id, "content": payload})
+                    payload = sanitize.cap_result(payload,
+                                                  UNATTENDED_RESULT_CHARS)
+                results.append({"tool_use_id": call_id, "content": payload,
+                                "name": name,
+                                "untrusted": bool(result.get("untrusted"))})
 
             messages.append({
                 "role": "assistant",
@@ -2616,6 +2654,7 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
                 messages.append({"role": "tool",
                                  "tool_call_id": tr["tool_use_id"],
                                  "content": tr["content"]})
+                aged.append((len(messages) - 1, _round, tr))
 
         error = (f"the unattended turn hit its {UNATTENDED_MAX_ROUNDS}-round "
                  f"ceiling without concluding. That is a real failure: it "

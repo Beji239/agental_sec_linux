@@ -122,8 +122,11 @@ to 40 a day. Config: `incident_watcher`.
   different tools and writes a report.
 
 It is capped at three investigations an hour and a daily token ceiling
-(`duty_loop.daily_token_ceiling`); when a cap is reached it examines nothing
-and records why. It works with a smaller set of mostly read-only tools, and
+(`duty_loop.daily_token_ceiling`); when a cap is reached it examines nothing,
+records why once, and waits until the budget allows work again instead of
+retrying every minute. In an investigation, long tool results are capped and
+results from earlier rounds are shortened, because every call resends the
+whole conversation. It works with a smaller set of mostly read-only tools, and
 anything that would change your system becomes a request on the Actions tab,
 exactly as in the chat. Every change still goes through you. Its reports,
 and every wake-up including the ones that found nothing to do, are on the

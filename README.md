@@ -146,6 +146,47 @@ once, by a separate worker, and recorded.
 Connecting a model, the full list of gated actions and the duty loop:
 [docs/ANALYST.md](docs/ANALYST.md).
 
+## How it helps stop an attack
+
+AgentalSec finds the problem, works out what is happening, proposes the
+response and carries it out the moment you approve. It never acts on its own.
+A typical case, from start to finish:
+
+1. **A sensor sees it.** A program on this machine starts calling the same
+   unknown server every minute, or a device on your network looks up a domain
+   that a threat feed lists.
+2. **The incident watcher groups it.** Related findings become one incident,
+   so ten alerts about one cause are one case. A high severity incident sends
+   a desktop notice, and a burst inside ten minutes arrives as one notice.
+3. **The analyst investigates.** For a high severity incident the duty loop
+   wakes at once. It reads the evidence through its tools: the program and its
+   file, where it connects, the threat feeds, what that device normally does.
+   Then it writes a report with its verdict on the Agents tab.
+4. **It proposes the response.** The request appears on the Actions tab,
+   saying what it would do and why. Nothing has run yet.
+5. **You decide.** Approve, and a separate worker carries it out once and
+   records it, even if the dashboard is closed. Deny, and nothing happens.
+
+The responses it can propose, from the narrowest to the widest:
+
+- **On this machine:** end a process, stop a service, quarantine a file
+  (moved to a vault, and restorable), switch off a background app.
+- **At this machine's firewall:** block a port, or a device's traffic to and
+  from this computer.
+- **On the router,** with the router agent: cut a device off the whole
+  network, or sinkhole a domain so that no device can reach it. From the LAN
+  tab you can also block a single app, such as TikTok or Fortnite, for one
+  device.
+
+A block on this computer's firewall protects this computer only. A block on
+the router protects every device on your network, which is why a router with
+the agent is the recommended setup ([Best setup](#best-setup)). Blocks,
+quarantines and background app changes can be undone from the Actions tab.
+
+Alerts that turn out to be harmless can be silenced for one rule on one
+device or file, without hiding anything else about it, so the next real
+alert stands out.
+
 ## Keeping itself honest
 
 - Important writes go into a **hash-chained tamper journal**, so a later edit

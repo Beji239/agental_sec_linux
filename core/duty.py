@@ -1784,6 +1784,32 @@ def _next_regular_moment(now: datetime = None) -> dict:
                      f"at {local.strftime('%Z') or local.tzname()}.")}
 
 
+def _held_by_budget(now: datetime):
+    """
+    Hold urgent work while the budget is shut, after its one refusal row.
+
+    LOOP-14, 2026-10-05. Once the ceiling was spent, every poll picked the
+    next untried urgent incident and wrote a `budget` row for it: 110 on
+    2026-10-05, one a minute. The first refusal still runs and writes its
+    row, so the limit is on record; later ones wait for the window to reopen,
+    which the poll sees through budget_state, a few indexed counts.
+    """
+    try:
+        state = budget_state(urgent=True)
+    except Exception as e:                              # noqa: BLE001
+        logger.error(f"budget check failed on a poll, not holding: {e}")
+        return None
+    if state.get("may_spend"):
+        _duty_state["budget_refused_at"] = None
+        return None
+    if _duty_state.get("budget_refused_at") is None:
+        _duty_state["budget_refused_at"] = _sql_ts(now)
+        return None
+    return {"outcome": "not_due", "held_by_budget": True,
+            "budget_refused_at": _duty_state["budget_refused_at"],
+            "reasons": state.get("reasons")}
+
+
 def _tick_once(session_id: str, modules: dict = None,
                now: datetime = None) -> dict:
     """
@@ -1863,6 +1889,9 @@ def _tick_once(session_id: str, modules: dict = None,
         cooled = emergency_cooled_down(emergency.get("peer"),
                                        emergency.get("n") or 0, now)
         if not cooled.get("cooled"):
+            held = _held_by_budget(now)
+            if held:
+                return dict(held, schedule=schedule, emergency=emergency)
             logger.warning("DUTY EMERGENCY: %s", emergency.get("reason"))
             return _run("emergency", emergency=emergency)
         # THE SAME FLOOD, ALREADY HANDLED THIS HOUR. No row: the run that
@@ -1877,6 +1906,9 @@ def _tick_once(session_id: str, modules: dict = None,
         logger.error(f"urgent incident check failed on a poll: {e}")
         urgent = None
     if urgent:
+        held = _held_by_budget(now)
+        if held:
+            return dict(held, schedule=schedule, emergency=emergency)
         logger.warning("DUTY URGENT INCIDENT #%s: %s (%s)", urgent.get("id"),
                        urgent.get("title"), urgent.get("severity"))
         return _run("emergency", incident_id=urgent["id"], urgent=True)
@@ -2337,6 +2369,9 @@ _duty_thread = None
 _duty_stop = threading.Event()
 _duty_state = {
     "running": False,
+    # When the budget last refused an urgent run. While it stays shut, later
+    # urgent incidents wait without a run row each (LOOP-14).
+    "budget_refused_at": None,
     "session_id": None,
     "modules": None,
     "last_error": None,
@@ -2374,7 +2409,9 @@ def _tick_once_state(result: dict) -> None:
     if result.get("outcome") == "not_due":
         sched = result.get("schedule") or {}
         _duty_state["last_skip"] = {
-            "reason": "not due",
+            "reason": ("budget spent, urgent work waits for it to reopen: "
+                       + "; ".join(result.get("reasons") or [])
+                       if result.get("held_by_budget") else "not due"),
             "local_hour": sched.get("local_hour"),
             "next_hour": sched.get("next_hour"),
             "next_is_tomorrow": sched.get("next_is_tomorrow"),
