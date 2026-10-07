@@ -1974,6 +1974,11 @@ def register_routes(app):
             entity_type=entity_type,
             entity_value=entity_value,
         )
+        try:
+            from core import baseline_text
+            rows = baseline_text.describe_all(rows)
+        except Exception as e:                          # noqa: BLE001
+            logger.warning(f"Baseline sentences could not be built: {e}")
         return jsonify(rows)
 
     @app.route("/api/behavioral/deviations")

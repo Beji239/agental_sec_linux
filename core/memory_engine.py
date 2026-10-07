@@ -135,8 +135,8 @@ VALID_BEHAVIOR_KEYS = {
         "beacon_interval", "beacon_destinations", "connection_count",
         "avg_packet_size", "active_hours", "open_ports_inbound",
         "open_ports_outbound", "typical_dest_ports", "typical_dest_ips",
-        "volume_per_session", "first_seen", "user_action_history",
-        "operator_answer",
+        "volume_per_session", "volume_per_hour", "first_seen",
+        "user_action_history", "operator_answer",
     },
     "process": {
         "typical_parent", "typical_network_ports", "typical_paths",
@@ -4445,6 +4445,7 @@ def write_behavioral_observation(
     context: str = None,
     basis: str = None,
     basis_ref: str = None,
+    written_by: str = "model",
 ) -> dict:
     """
     Write a behavioral observation to behavioral_session.
@@ -4495,6 +4496,11 @@ def write_behavioral_observation(
     """
     _validate_entity(entity_type, entity_value, behavior_key)
     _validate_behavior_value(behavior_key, behavior_value)
+    # 'system' is the app's own sensors (core/auto_observe); the model's tool
+    # call cannot set it.
+    if written_by not in ("model", "system"):
+        return {"success": False,
+                "error": f"written_by must be model or system, not {written_by!r}"}
 
     basis = (basis or "").strip().lower() or "model_conclusion"
     if basis not in VALID_OBSERVATION_BASIS:
@@ -4516,8 +4522,9 @@ def write_behavioral_observation(
     # answer is still knowable.
     sources = []
     try:
-        from core import agent_loop
-        sources = agent_loop.untrusted_sources_this_turn()
+        if written_by == "model":
+            from core import agent_loop
+            sources = agent_loop.untrusted_sources_this_turn()
     except Exception as e:          # never block a write on provenance
         logger.debug(f"provenance unavailable: {e}")
 
@@ -4527,9 +4534,9 @@ def write_behavioral_observation(
                 (session_id, entity_type, entity_value, behavior_key,
                  behavior_value, context, written_by,
                  evidence_untrusted, evidence_sources, basis, basis_ref)
-            VALUES (?, ?, ?, ?, ?, ?, 'model', ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (session_id, entity_type, entity_value, behavior_key,
-              str(behavior_value), context,
+              str(behavior_value), context, written_by,
               1 if sources else 0,
               json.dumps(sources) if sources else None,
               basis, basis_ref))
@@ -4754,6 +4761,9 @@ DEFAULT_THRESHOLDS = {"low": 2, "medium": 4, "high": 6}
 MAX_SESSION_THRESHOLD = 100
 
 
+_thresholds_scope = None
+
+
 def confidence_thresholds() -> dict:
     """
     Read confidence_session_thresholds, validate it, or fall back.
@@ -4764,6 +4774,10 @@ def confidence_thresholds() -> dict:
     half the operator meant is how you end up enforcing something nobody
     chose.
     """
+    # Set by a rollup for its own duration, so its hundreds of baselines do
+    # not each read the preference again.
+    if _thresholds_scope is not None:
+        return dict(_thresholds_scope)
     raw = get_preference("confidence_session_thresholds")
     if raw is None:
         return dict(DEFAULT_THRESHOLDS)

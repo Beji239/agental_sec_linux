@@ -49,6 +49,9 @@ _last_rollup_error: str = None
 # would be a cycle. One copy, in the module that owns the preference.
 _confidence_thresholds = me.confidence_thresholds
 
+# (session, entity type, value, key) -> the newest observation id rolled up.
+_rolled = {}
+
 
 # INIT
 
@@ -519,6 +522,15 @@ def _confidence_rank(confidence: str) -> int:
 # Called by background thread (hourly), shutdown handler, and model via trigger_rollup tool
 
 def run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "full") -> dict:
+    """See _run_rollup. The thresholds read once for the pass are always
+    released afterwards, error or not."""
+    try:
+        return _run_rollup(session_id, trigger_reason, scope)
+    finally:
+        me._thresholds_scope = None
+
+
+def _run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "full") -> dict:
     """
     Merge behavioral_session into behavioral_baseline.
     scope='full'    , all entities in session
@@ -579,6 +591,16 @@ def run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "fu
     # the model facing function: that one is capped because there is a context
     # window on the other end of it. This is Python reading its own table to
     # compute an aggregate, and there is no reason for that to be limited.
+    # The app's own measurements for this window, so baselines grow every
+    # session and not only when the model writes something down.
+    try:
+        from core import auto_observe
+        written = auto_observe.observe(session_id)
+        logger.info(f"Rollup [{trigger_reason}]: {written['written']} measured "
+                    f"observation(s) from the sensors.")
+    except Exception as e:                              # noqa: BLE001
+        logger.warning(f"Rollup [{trigger_reason}]: auto observation failed: {e}")
+
     observations = me.all_session_observations(session_id)
 
     # Said out loud, because the old number was the thing that hid this.
@@ -610,6 +632,9 @@ def run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "fu
         }
 
     # Group observations by (entity_type, entity_value, behavior_key)
+    # One reading of the thresholds for the whole pass.
+    me._thresholds_scope = _confidence_thresholds()
+
     groups: dict[tuple, list] = {}
     for obs in observations:
         key = (obs["entity_type"], obs["entity_value"], obs["behavior_key"])
@@ -619,6 +644,13 @@ def run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "fu
     baselines_created = 0
 
     for (entity_type, entity_value, behavior_key), obs_list in groups.items():
+        # The same observations as at the last rollup of this session give the
+        # same baseline, so a group with nothing new is not written again.
+        newest = max((o.get("id") or 0) for o in obs_list)
+        mark = (session_id, entity_type, entity_value, behavior_key)
+        if _rolled.get(mark) == newest:
+            continue
+        _rolled[mark] = newest
 
         # Attempt to parse numeric values for statistical summary
         numeric_values = []

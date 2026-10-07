@@ -2228,13 +2228,12 @@
         reason to look. And silence is never approval: an alert nobody answered
         stays unreviewed, it does not become normal.
       </div>
-      <div class="row" style="margin-bottom:14px;">
-        <input class="input" id="baseline-filter" placeholder="Filter by IP or process..." style="width:240px;" oninput="loadBaselines()">
+      <div class="row" style="margin-bottom:14px;align-items:center;gap:12px;">
+        <input class="input" id="baseline-filter" placeholder="Filter by name, IP or program..." style="width:260px;" oninput="loadBaselines()">
+        <label style="font-size:12px;"><input type="checkbox" id="baseline-show-old" onchange="loadBaselines()"> show old addresses</label>
+        <span class="lan-sub" id="baseline-summary"></span>
       </div>
-      <table class="data-table">
-        <thead><tr><th>Entity</th><th>Type</th><th>Key</th><th>Confidence</th><th>Normal</th><th>Notes</th><th>Updated</th></tr></thead>
-        <tbody id="baseline-tbody"></tbody>
-      </table>
+      <div id="baseline-cards"></div>
     </div>
     <div class="card" style="margin-top:0;">
       <div class="card-title">Recent Deviations</div>
@@ -5793,24 +5792,53 @@ async function triggerPcap() {
 // BEHAVIORAL
 
 async function loadBaselines() {
-  const filter = document.getElementById('baseline-filter').value.trim();
+  const filter = document.getElementById('baseline-filter').value.trim().toLowerCase();
+  const showOld = document.getElementById('baseline-show-old').checked;
+  const box = document.getElementById('baseline-cards');
   try {
-    let url = '/api/behavioral/baseline';
-    if (filter) url += `?entity_value=${encodeURIComponent(filter)}`;
-    const rows  = await fetch(url, { headers: authHeaders() }).then(r=>r.json());
-    const tbody = document.getElementById('baseline-tbody');
-    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">No baselines yet.</td></tr>'; return; }
-    tbody.innerHTML = rows.map(r => `
-      <tr>
-        <td>${esc(r.entity_value||'')}</td>
-        <td>${esc(r.entity_type||'')}</td>
-        <td>${esc(r.behavior_key||'')}</td>
-        <td><span class="sev-badge sev-${r.confidence==='high'?'low':r.confidence==='medium'?'medium':'info'}">${r.confidence||'low'}</span></td>
-        <td>${r.flagged_as_normal ? '<span style="color:var(--green)">✓</span>' : '-'}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.model_notes||'')}">${esc((r.model_notes||'').substring(0,60))}</td>
-        <td>${fmtTime(r.last_updated)}</td>
-      </tr>`).join('');
-  } catch(e) {}
+    const rows = await fetch('/api/behavioral/baseline', { headers: authHeaders() }).then(r=>r.json());
+    // One card per thing, its normals as sentences, and how far learning has got.
+    const groups = {};
+    rows.forEach(r => {
+      const key = r.entity_type + '|' + r.entity_value;
+      (groups[key] = groups[key] || { name: r.display_name || r.entity_value,
+                                      type: r.type_word || r.entity_type,
+                                      stale: !!r.stale, rows: [] }).rows.push(r);
+    });
+    let list = Object.values(groups);
+    const oldCount = list.filter(g => g.stale).length;
+    if (!showOld) list = list.filter(g => !g.stale);
+    if (filter) list = list.filter(g => (g.name + ' ' + g.type).toLowerCase().includes(filter));
+    list.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+    document.getElementById('baseline-summary').textContent =
+      `Learning what is normal for ${Object.keys(groups).length - oldCount} thing(s)`
+      + (oldCount ? `, plus ${oldCount} at old addresses${showOld ? '' : ' (hidden)'}` : '') + '.';
+    if (!list.length) {
+      box.innerHTML = '<div class="empty-state">Nothing learned yet. It fills in by itself as the app runs.</div>';
+      return;
+    }
+    box.innerHTML = list.map(g => `
+      <div class="card" style="margin:0 0 10px 0;padding:12px 14px;${g.stale ? 'opacity:0.6;' : ''}">
+        <div style="font-weight:600;margin-bottom:6px;">${esc(g.name)}
+          <span class="lan-sub" style="font-weight:400;"> ${esc(g.type)}</span></div>
+        ${g.rows.map(r => {
+          const p = r.progress || { seen: 0, needed: 6 };
+          const pct = Math.min(100, Math.round(100 * p.seen / Math.max(1, p.needed)));
+          const level = r.confidence === 'high' ? 'well known'
+                      : r.confidence === 'medium' ? 'getting to know it' : 'still learning';
+          return `<div style="display:flex;gap:12px;align-items:baseline;margin:3px 0;">
+            <div style="flex:1;">${esc(r.summary || ('no plain description yet: ' + r.behavior_key))}
+              ${r.agent_note ? `<div class="lan-sub">Agent's note: ${esc(r.agent_note.substring(0, 200))}</div>` : ''}</div>
+            <div class="lan-sub" style="white-space:nowrap;" title="Seen in ${p.seen} of the ${p.needed} sessions needed to call it well known">
+              ${level}, ${p.seen} of ${p.needed} sessions
+              <span style="display:inline-block;width:60px;height:5px;background:var(--bg3);border-radius:3px;vertical-align:middle;">
+                <span style="display:block;width:${pct}%;height:5px;background:var(--green);border-radius:3px;"></span></span>
+            </div></div>`;
+        }).join('')}
+      </div>`).join('');
+  } catch(e) {
+    box.innerHTML = '<div class="empty-state">The baselines could not be read.</div>';
+  }
 }
 
 async function loadDeviations() {
