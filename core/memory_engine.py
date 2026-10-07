@@ -1864,7 +1864,7 @@ def query_presence(ip: str = None, since: str = None,
         # Built here rather than in SQL because the chain has to be resolved,
         # and _canonical_id already owns that logic including its cycle guard.
         merge_rows = conn.execute(
-            "SELECT id, ip, merged_into FROM known_devices"
+            "SELECT id, ip, mac, merged_into FROM known_devices"
         ).fetchall()
         by_id  = {r["id"]: r for r in merge_rows}
         canon: dict[str, str] = {}
@@ -1877,6 +1877,15 @@ def query_presence(ip: str = None, since: str = None,
                 root = by_id[root]["merged_into"]
             if root in by_id and by_id[root]["ip"] != r["ip"]:
                 canon[r["ip"]] = by_id[root]["ip"]
+
+        # PRESENCE BY MAC. A device that moved address (a new router, a new
+        # lease) answers for every row with its MAC, merged or not, so an old
+        # row does not read as missing while the device is right here.
+        mac_addrs: dict[str, set] = {}
+        for r in merge_rows:
+            mac = (r["mac"] or "").strip().lower()
+            if mac and identity_class(mac) != "unreadable_mac":
+                mac_addrs.setdefault(mac, set()).add(canon.get(r["ip"], r["ip"]))
 
         placeholders = ",".join("?" * len(sweep_ids))
         obs_params: list = list(sweep_ids)
@@ -1892,8 +1901,14 @@ def query_presence(ip: str = None, since: str = None,
             # absent, which, now that absence raises a finding, would have
             # been a false alarm manufactured by our own bookkeeping.
             wanted = {ip} | {raw for raw, root in canon.items() if root == ip}
-            ip_clause = " AND o.ip IN (" + ",".join("?" * len(wanted)) + ")"
+            wanted_macs = sorted(m for m, a in mac_addrs.items() if ip in a)
+            ip_clause = " AND (o.ip IN (" + ",".join("?" * len(wanted)) + ")"
             obs_params.extend(sorted(wanted))
+            if wanted_macs:
+                ip_clause += (" OR LOWER(o.mac) IN ("
+                              + ",".join("?" * len(wanted_macs)) + ")")
+                obs_params.extend(wanted_macs)
+            ip_clause += ")"
 
         observations = conn.execute(f"""
             SELECT o.sweep_id, o.ip, o.mac, o.via
@@ -1918,14 +1933,18 @@ def query_presence(ip: str = None, since: str = None,
         # An appearance answering counts for the device it is an appearance
         # OF. See the canon map above.
         raw  = o["ip"]
-        addr = canon.get(raw, raw)
-        if addr != raw:
-            rolled_up.setdefault(addr, set()).add(raw)
-        seen_at.setdefault(addr, set()).add(o["sweep_id"])
-        if o["mac"]:
-            macs.setdefault(addr, o["mac"])
-        via_counts.setdefault(addr, {})
-        via_counts[addr][o["via"]] = via_counts[addr].get(o["via"], 0) + 1
+        mac  = (o["mac"] or "").strip().lower()
+        addrs = {canon.get(raw, raw)} | mac_addrs.get(mac, set())
+        if ip:
+            addrs &= {ip}
+        for addr in addrs:
+            if addr != raw:
+                rolled_up.setdefault(addr, set()).add(raw)
+            seen_at.setdefault(addr, set()).add(o["sweep_id"])
+            if o["mac"]:
+                macs.setdefault(addr, o["mac"])
+            via_counts.setdefault(addr, {})
+            via_counts[addr][o["via"]] = via_counts[addr].get(o["via"], 0) + 1
 
     # An explicitly requested address that answered nothing still gets a row.
     # Returning an empty list for "is the printer there" reads as no data
@@ -2490,30 +2509,29 @@ def _canonical_id(conn, device_id: int, _depth: int = 0) -> int:
         current = row["merged_into"]
 
 
+# What the user told the tool about a device. A merge copies these to the
+# target when the target has none of its own.
+_MERGE_LABEL_FIELDS = ("known_as", "identified_by", "evidence", "identified_at")
+_MERGE_FILL_FIELDS = ("device_type", "notes", "expected_ports")
+# Declarations that MOVE to the target, so the device is vouched for once.
+_MERGE_MOVED_FLAGS = ("is_permanent", "expected_always_on")
+
+
 def merge_devices(source_ip: str, target_ip: str) -> dict:
     """
     The USER recording that two address rows are one physical device.
 
-    THERE IS NO TOOL THAT REACHES THIS, for the reason in the schema comment
-    and one that is worth restating: merging removes a row from the review
-    queue. A model that could merge could fold an unexplained device into the
-    printer's identity and it would stop being asked about. That is the
-    blinding attack carried out through filing rather than through
-    suppression, and it would leave the suppression counters untouched.
+    No tool reaches this: a model that could merge could fold an unexplained
+    device into a known one's identity and it would stop being asked about.
 
-    Nothing is deleted. The source row keeps its history and its own
-    observations; it gains a pointer saying which device it is an appearance
-    of. unmerge_device puts it back.
+    Nothing is deleted. The source keeps its history and points at the
+    canonical row. The user's facts follow the device: a label, type, notes
+    or expected ports the target lacks are copied, and permanent and always
+    on MOVE to the target. What moved is stored in merge_carried, so
+    unmerge_device can put it back.
 
-    Refusals, each for a specific reason:
-
-    * A row cannot merge into itself, directly or after resolution.
-    * A row that is marked permanent cannot be merged away. Saying "this
-      device I vouched for is actually an appearance of that other one"
-      should require un-vouching first, deliberately, rather than happening
-      as a side effect of tidying.
-    * The target is resolved to its own root first, so chains cannot form and
-      every merged row points straight at a canonical row.
+    Refused: a row into itself, a cycle, and moving permanence onto a target
+    that cannot hold it (randomized or unreadable MAC, or retired).
     """
     _validate_entity("ip", source_ip)
     _validate_entity("ip", target_ip)
@@ -2524,8 +2542,8 @@ def merge_devices(source_ip: str, target_ip: str) -> dict:
     with _get_conn() as conn:
         rows = {
             r["ip"]: r for r in conn.execute(
-                "SELECT id, ip, known_as, is_permanent, merged_into "
-                "FROM known_devices WHERE ip IN (?, ?)", (source_ip, target_ip)
+                "SELECT * FROM known_devices WHERE ip IN (?, ?)",
+                (source_ip, target_ip)
             ).fetchall()
         }
 
@@ -2534,20 +2552,8 @@ def merge_devices(source_ip: str, target_ip: str) -> dict:
                 return {"success": False,
                         "error": f"{addr} is not in known_devices."}
 
-        source, target = rows[source_ip], rows[target_ip]
-
-        if source["is_permanent"]:
-            return {
-                "success": False,
-                "error": (
-                    f"{source_ip} is marked as a permanently present device. "
-                    f"Merging it away would remove a device you vouched for. "
-                    f"Clear its permanence first if that is really what you "
-                    f"mean."
-                ),
-            }
-
-        target_root = _canonical_id(conn, target["id"])
+        source = rows[source_ip]
+        target_root = _canonical_id(conn, rows[target_ip]["id"])
         if target_root == source["id"]:
             return {
                 "success": False,
@@ -2556,32 +2562,85 @@ def merge_devices(source_ip: str, target_ip: str) -> dict:
                     f"merge would make a cycle."
                 ),
             }
+        root = conn.execute("SELECT * FROM known_devices WHERE id = ?",
+                            (target_root,)).fetchone()
 
-        # Rows already pointing at the source come along, so merging B into C
-        # after A was merged into B leaves A pointing at C rather than at a
-        # row that is itself an appearance.
+        moving = [f for f in _MERGE_MOVED_FLAGS if source[f]]
+        if moving and root["retired_at"]:
+            return {"success": False,
+                    "error": (f"{root['ip']} is retired, so it cannot take "
+                              f"over the permanent flag from {source_ip}. "
+                              f"Bring it back first.")}
+        if moving and not root["is_permanent"] and \
+                identity_class(root["mac"]) != "stable_host":
+            return {"success": False,
+                    "error": (f"{source_ip} is marked permanent, and "
+                              f"{root['ip']} has no stable hardware address "
+                              f"to carry that. Merge the other way round, or "
+                              f"clear the flag first.")}
+
+        # Field: [value before, value after] on the target.
+        target_set: dict = {}
+        if not (root["known_as"] or "").strip() and (source["known_as"] or "").strip():
+            for f in _MERGE_LABEL_FIELDS:
+                target_set[f] = [root[f], source[f]]
+        for f in _MERGE_FILL_FIELDS:
+            if root[f] in (None, "") and source[f] not in (None, ""):
+                target_set[f] = [root[f], source[f]]
+        for f in moving:
+            if not root[f]:
+                target_set[f] = [root[f], 1]
+        if "is_permanent" in target_set:
+            target_set["permanence_set_by"] = [root["permanence_set_by"], "user"]
+            if not root["enrollment_fingerprint"] and source["enrollment_fingerprint"]:
+                target_set["enrollment_fingerprint"] = [
+                    None, source["enrollment_fingerprint"]]
+                target_set["enrollment_fingerprint_at"] = [
+                    root["enrollment_fingerprint_at"],
+                    source["enrollment_fingerprint_at"]]
+
+        if target_set:
+            assign = ", ".join(f"{f} = ?" for f in target_set)
+            conn.execute(f"UPDATE known_devices SET {assign} WHERE id = ?",
+                         (*[v[1] for v in target_set.values()], target_root))
+            if "is_permanent" in target_set:
+                conn.execute("UPDATE known_devices SET permanence_set_at = "
+                             "CURRENT_TIMESTAMP WHERE id = ?", (target_root,))
+
+        carried = {"target_id": target_root,
+                   "source": {f: source[f] for f in moving},
+                   "target": target_set}
+
+        # Rows already pointing at the source come along, so no chain forms.
         moved = conn.execute(
             "UPDATE known_devices SET merged_into = ? WHERE merged_into = ?",
             (target_root, source["id"])
         ).rowcount or 0
 
-        conn.execute("""
+        clear = "".join(f", {f} = 0" for f in moving)
+        conn.execute(f"""
             UPDATE known_devices
                SET merged_into = ?, merged_at = CURRENT_TIMESTAMP,
-                   merged_by = 'user'
+                   merged_by = 'user', merge_carried = ?{clear}
              WHERE id = ?
-        """, (target_root, source["id"]))
+        """, (target_root, json.dumps(carried), source["id"]))
 
         canonical = conn.execute(
             "SELECT ip, known_as FROM known_devices WHERE id = ?", (target_root,)
         ).fetchone()
 
+    _journal("devices_merged", "known_devices", source_ip,
+             {"into": canonical["ip"], "moved": moving,
+              "copied": sorted(target_set)})
     return {
         "success": True,
         "merged": source_ip,
         "into": canonical["ip"],
         "canonical_known_as": canonical["known_as"],
         "also_repointed": moved,
+        "moved_flags": moving,
+        "copied_to_target": sorted(f for f in target_set
+                                   if f not in _MERGE_MOVED_FLAGS),
     }
 
 
@@ -2589,16 +2648,16 @@ def unmerge_device(ip: str) -> dict:
     """
     Undo one merge. A merge is a claim, and claims get revised.
 
-    Only the row named is detached. Anything that was repointed onto the
-    canonical row during the original merge stays there, because those were
-    separate claims about separate rows and undoing one should not silently
-    undo the others.
+    Only the row named is detached. Flags that moved go back to it, and the
+    target loses what this merge gave it, unless the user has changed that
+    field since. Rows repointed onto the canonical row stay there.
     """
     _validate_entity("ip", ip)
 
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT id, merged_into FROM known_devices WHERE ip = ?", (ip,)
+            "SELECT id, merged_into, merge_carried FROM known_devices "
+            "WHERE ip = ?", (ip,)
         ).fetchone()
         if not row:
             return {"success": False, "error": f"{ip} is not in known_devices."}
@@ -2606,13 +2665,110 @@ def unmerge_device(ip: str) -> dict:
             return {"success": False,
                     "error": f"{ip} is not merged into anything."}
 
-        conn.execute("""
-            UPDATE known_devices
-               SET merged_into = NULL, merged_at = NULL, merged_by = NULL
-             WHERE id = ?
-        """, (row["id"],))
+        try:
+            carried = json.loads(row["merge_carried"] or "{}")
+        except (ValueError, TypeError):
+            carried = {}
 
-    return {"success": True, "unmerged": ip}
+        target_id = carried.get("target_id")
+        target_set = carried.get("target") or {}
+        if target_id and target_set:
+            current = conn.execute("SELECT * FROM known_devices WHERE id = ?",
+                                   (target_id,)).fetchone()
+            undo = {f: v[0] for f, v in target_set.items()
+                    if current is not None and f in current.keys()
+                    and current[f] == v[1]}
+            if "known_as" not in undo:
+                for f in _MERGE_LABEL_FIELDS[1:]:
+                    undo.pop(f, None)
+            if "is_permanent" not in undo:
+                for f in ("permanence_set_by", "enrollment_fingerprint",
+                          "enrollment_fingerprint_at"):
+                    undo.pop(f, None)
+            if undo:
+                assign = ", ".join(f"{f} = ?" for f in undo)
+                conn.execute(f"UPDATE known_devices SET {assign} WHERE id = ?",
+                             (*undo.values(), target_id))
+
+        back = {f: v for f, v in (carried.get("source") or {}).items()
+                if f in _MERGE_MOVED_FLAGS}
+        restored = sorted(back)
+        assign = "".join(f", {f} = ?" for f in back)
+        conn.execute(f"""
+            UPDATE known_devices
+               SET merged_into = NULL, merged_at = NULL, merged_by = NULL,
+                   merge_carried = NULL{assign}
+             WHERE id = ?
+        """, (*back.values(), row["id"]))
+
+    _journal("devices_merged", "known_devices", ip,
+             {"undone": True, "restored": restored})
+    return {"success": True, "unmerged": ip, "restored_flags": restored}
+
+
+def same_mac_groups() -> dict:
+    """
+    Address rows that share a hardware address and are not merged yet.
+
+    After a router change every device takes an address in the new range and
+    gets a new row, while the old row keeps the user's labels and flags. Same
+    MAC is the evidence they are one device. The newest row is suggested as
+    the one to keep, since that is the address the device has now.
+    Suggestions only: merging stays the user's act.
+    """
+    with _get_readonly_conn() as conn:
+        rows = _rows_to_dicts(conn.execute(
+            "SELECT id, ip, mac, known_as, is_permanent, expected_always_on, "
+            "       last_seen, retired_at "
+            "FROM known_devices WHERE merged_into IS NULL "
+            "  AND mac IS NOT NULL AND TRIM(mac) != '' "
+            "ORDER BY last_seen DESC, id DESC"
+        ).fetchall())
+
+    by_mac: dict = {}
+    for r in rows:
+        mac = r["mac"].strip().lower()
+        if identity_class(mac) == "unreadable_mac":
+            continue
+        by_mac.setdefault(mac, []).append(r)
+
+    groups = []
+    for mac, members in by_mac.items():
+        if len(members) < 2:
+            continue
+        keep = next((m for m in members if not m["retired_at"]), members[0])
+        groups.append({
+            "mac": mac,
+            "keep": keep,
+            "merge": [m for m in members if m["id"] != keep["id"]],
+        })
+    groups.sort(key=lambda g: g["keep"]["ip"])
+    return {"groups": groups,
+            "rows_to_merge": sum(len(g["merge"]) for g in groups)}
+
+
+def merge_same_mac(macs: list = None) -> dict:
+    """
+    Merge every same-MAC group from same_mac_groups, or only the MACs given.
+
+    One merge_devices call per row, so each carries its flags exactly as a
+    single merge would, and one refusal does not stop the rest.
+    """
+    wanted = ({m.strip().lower() for m in macs}
+              if macs is not None else None)
+    results = []
+    for g in same_mac_groups()["groups"]:
+        if wanted is not None and g["mac"] not in wanted:
+            continue
+        for m in g["merge"]:
+            r = merge_devices(m["ip"], g["keep"]["ip"])
+            results.append({"source_ip": m["ip"], "target_ip": g["keep"]["ip"],
+                            "success": r.get("success", False),
+                            "moved_flags": r.get("moved_flags", []),
+                            "error": r.get("error")})
+    return {"merged": sum(1 for r in results if r["success"]),
+            "refused": sum(1 for r in results if not r["success"]),
+            "results": results}
 
 
 def device_appearances(canonical_ip: str = None) -> dict:
@@ -2764,7 +2920,8 @@ def permanent_devices() -> list[dict]:
     with _get_readonly_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM known_devices "
-            "WHERE is_permanent = 1 AND retired_at IS NULL ORDER BY ip"
+            "WHERE is_permanent = 1 AND retired_at IS NULL "
+            "  AND merged_into IS NULL ORDER BY ip"
         ).fetchall()
     return _with_identity_class(_rows_to_dicts(rows))
 
@@ -2786,7 +2943,8 @@ def always_on_devices() -> list[dict]:
     with _get_readonly_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM known_devices "
-            "WHERE expected_always_on = 1 AND retired_at IS NULL ORDER BY ip"
+            "WHERE expected_always_on = 1 AND retired_at IS NULL "
+            "  AND merged_into IS NULL ORDER BY ip"
         ).fetchall()
     return _with_identity_class(_rows_to_dicts(rows))
 
@@ -2882,7 +3040,8 @@ def query_device_drift(ip: str = None) -> dict:
     with _get_readonly_conn() as conn:
         sql = ("SELECT ip, mac, vendor, hostname, known_as, is_permanent, "
                "       enrollment_fingerprint, enrollment_fingerprint_at "
-               "FROM known_devices WHERE is_permanent = 1")
+               "FROM known_devices WHERE is_permanent = 1 "
+               "  AND merged_into IS NULL")
         params: list = []
         if ip:
             sql += " AND ip = ?"
@@ -3225,6 +3384,7 @@ def enrollment_state() -> dict:
         if d.get("identity_class") == "stable_host"
         and d["ip"] not in permanent_ips
         and not d.get("retired_at")
+        and not d.get("merged_into")
     ]
 
     return {

@@ -779,6 +779,8 @@ CREATE TABLE IF NOT EXISTS known_devices (
     merged_into     INTEGER REFERENCES known_devices(id),
     merged_at       TIMESTAMP,
     merged_by       TEXT,        -- 'user'. Nothing else is ever written.
+    -- What the merge moved to the target (JSON), so unmerge can give it back.
+    merge_carried   TEXT,
 
     -- RETIREMENT (schema v15)
     --

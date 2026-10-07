@@ -1951,8 +1951,22 @@
         That is blinding done by filing, and it is why there is no tool for
         this at any privilege level.
         <br><br>
-        Merge into the address you think of as the real device. It is
-        reversible, and unmerging puts the row straight back in the queue.
+        Merge into the address you think of as the real device. Its name,
+        type and the permanent and always on flags move with it, so it is
+        listed once. It is reversible: unmerging gives the old row its flags
+        back and puts it straight back in the queue.
+      </div>
+      <div id="same-mac-box" style="display:none;margin-bottom:12px;">
+        <div style="font-size:12px;margin-bottom:6px;">
+          <b>Same device, new address.</b> These rows share a hardware address,
+          which is what happens after a router change. The newest address is
+          kept, the older rows are merged into it.
+          <button class="btn primary" onclick="mergeSameMac(null, this)" style="margin-left:8px;">Merge all</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>MAC</th><th>Keep</th><th>Merge into it</th><th></th></tr></thead>
+          <tbody id="same-mac-tbody"></tbody>
+        </table>
       </div>
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
         <input id="merge-source" class="input" placeholder="duplicate address" style="width:170px;">
@@ -3684,7 +3698,8 @@ async function loadDashboard() {
     document.getElementById('stat-events').textContent =
       statTile(s.modules && s.modules.event_monitor, 'events_this_run',
                e.length >= 1);
-    document.getElementById('stat-devices').textContent  = d.length || 0;
+    document.getElementById('stat-devices').textContent  =
+      (Array.isArray(d) ? d.filter(x => !x.merged_into).length : 0);
 
     const badge = document.getElementById('alert-badge');
     if (f.length > 0) {
@@ -4360,10 +4375,20 @@ async function loadDevices() {
     const showRetired = _showRetired();
     document.getElementById('devices-show-retired').checked = showRetired;
 
-    const retiredN = all.filter(d => d.retired_at).length;
-    const rows = showRetired ? all : all.filter(d => !d.retired_at);
+    // A merged row is an old address of another device: listed once, under
+    // the device, as "also seen as".
+    const ipById = {};
+    all.forEach(d => { ipById[d.id] = d.ip; });
+    const alsoSeen = {};
+    all.filter(d => d.merged_into).forEach(d => {
+      const root = ipById[d.merged_into];
+      if (root) (alsoSeen[root] = alsoSeen[root] || []).push(d.ip);
+    });
+    const current = all.filter(d => !d.merged_into);
+    const retiredN = current.filter(d => d.retired_at).length;
+    const rows = showRetired ? current : current.filter(d => !d.retired_at);
 
-    const byClass = cls => all.filter(d => !d.retired_at && d.identity_class === cls).length;
+    const byClass = cls => current.filter(d => !d.retired_at && d.identity_class === cls).length;
     const parts = [`${byClass('stable_host')} stable MAC (on the Inventory tab)`,
                    `${byClass('transient_client')} randomized MAC`,
                    `${byClass('no_hardware_address')} no MAC`];
@@ -4415,7 +4440,8 @@ async function loadDevices() {
 
       return `
       <tr class="${flashCls.trim()}"${named ? '' : ' style="opacity:0.72"'}>
-        <td>${esc(d.ip||'')}${newTag}</td>
+        <td>${esc(d.ip||'')}${newTag}${(alsoSeen[d.ip] || []).length
+          ? `<div style="font-size:10px;color:var(--text-dim)" title="Older addresses merged into this device">also seen as ${alsoSeen[d.ip].map(esc).join(', ')}</div>` : ''}</td>
         <td><input class="input device-label" data-ip="${esc(d.ip||'')}"
                    value="${label}" placeholder="name this device"
                    style="width:150px;font-size:11px;padding:3px 6px;"></td>
@@ -4952,6 +4978,52 @@ async function loadAppearances() {
   }
 }
 
+// Same MAC, different rows: the router-change case. Suggestions only, the
+// user presses the button.
+async function loadSameMac() {
+  const box = document.getElementById('same-mac-box');
+  const tbody = document.getElementById('same-mac-tbody');
+  if (!box) return;
+  try {
+    const d = await fetch('/api/devices/same-mac', { headers: authHeaders() })
+                    .then(r => r.json());
+    const groups = d.groups || [];
+    box.style.display = groups.length ? '' : 'none';
+    const flags = r => [r.is_permanent ? 'permanent' : '',
+                        r.expected_always_on ? 'always on' : '']
+                       .filter(Boolean).join(', ');
+    const row = r => `<code>${esc(r.ip)}</code> ${esc(r.known_as || '')}`
+      + (flags(r) ? ` <span class="k-green">${esc(flags(r))}</span>` : '');
+    tbody.innerHTML = groups.map(g => `
+      <tr>
+        <td><code>${esc(g.mac)}</code></td>
+        <td>${row(g.keep)}</td>
+        <td>${g.merge.map(row).join('<br>')}</td>
+        <td><button class="btn" onclick="mergeSameMac(['${escJs(g.mac)}'], this)">Merge</button></td>
+      </tr>`).join('');
+  } catch (e) {
+    box.style.display = 'none';
+  }
+}
+
+async function mergeSameMac(macs, btn) {
+  const st = document.getElementById('merge-status');
+  if (btn) btn.textContent = '...';
+  try {
+    const d = await fetch('/api/devices/merge-same-mac', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify(macs ? { macs } : {})
+    }).then(r => r.json());
+    const refused = (d.results || []).filter(r => !r.success)
+      .map(r => `${r.source_ip}: ${r.error || 'refused'}`);
+    st.textContent = `${d.merged || 0} merged`
+      + (refused.length ? `, ${refused.length} refused (${refused.join('; ')})` : '.');
+  } catch (e) {
+    st.textContent = 'Could not merge: ' + e;
+  }
+  loadInventory();
+}
+
 async function mergeDevices() {
   const st  = document.getElementById('merge-status');
   const src = document.getElementById('merge-source').value.trim();
@@ -4965,16 +5037,17 @@ async function mergeDevices() {
       body: JSON.stringify({ source_ip: src, target_ip: dst })
     }).then(r => r.json());
 
-    // The server refuses a merge into itself, an unknown row, a cycle, and a
-    // device marked permanent, and each refusal carries its reason. Show that
-    // rather than a generic failure, because the reason is the useful part.
-    st.textContent = d.success ? `${src} is now filed under ${dst}.`
-                               : (d.error || 'Refused.');
+    // Each refusal carries its reason; show it, the reason is the useful part.
+    const moved = (d.moved_flags || []).map(f =>
+      f === 'is_permanent' ? 'permanent' : 'always on');
+    st.textContent = d.success
+      ? `${src} is now filed under ${d.into || dst}.`
+        + (moved.length ? ` Moved: ${moved.join(', ')}.` : '')
+      : (d.error || 'Refused.');
     if (d.success) {
       document.getElementById('merge-source').value = '';
       document.getElementById('merge-target').value = '';
-      loadAppearances();
-      loadEnrollment();
+      loadInventory();
     }
   } catch (e) { st.textContent = 'Could not merge: ' + e; }
 }
@@ -4989,9 +5062,9 @@ async function unmergeDevice(ip, btn) {
     }).then(r => r.json());
     st.textContent = d.success
       ? `${ip} is its own device again, and back in the review queue.`
+        + ((d.restored_flags || []).length ? ' Its flags are back on it.' : '')
       : (d.error || 'Refused.');
-    loadAppearances();
-    loadEnrollment();
+    loadInventory();
   } catch (e) {
     st.textContent = 'Could not unmerge: ' + e;
     btn.textContent = 'Unmerge';
@@ -5000,7 +5073,7 @@ async function unmergeDevice(ip, btn) {
 
 async function loadInventory() {
   await Promise.all([loadEnrollment(), loadPermanent(), loadProbeStatus(),
-                     loadAppearances()]);
+                     loadAppearances(), loadSameMac()]);
 }
 
 async function loadEnrollment() {
@@ -5211,7 +5284,9 @@ async function loadPermanent() {
         <td style="font-size:11px">${onCell}</td>
         <td style="font-family:var(--mono)">${p.of_sweeps ? `${p.present_in}/${p.of_sweeps}` : '-'}</td>
         <td style="font-family:var(--mono)" class="${streak ? 'k-red' : ''}">${streak}</td>
-        <td style="font-family:var(--mono);font-size:11px">${esc(p.last_present_at || '')}</td>
+        <td style="font-family:var(--mono);font-size:11px">${esc(p.last_present_at || '')}${
+          (p.answered_by_appearances || []).length
+            ? `<br><span style="color:var(--text-dim)">as ${p.answered_by_appearances.map(esc).join(', ')}</span>` : ''}</td>
         <td>${driftCell}</td>
         <td><button class="btn" onclick="setPermanent('${escJs(d.ip)}', false)"
                     title="Stop expecting this device. Its record and fingerprint are kept.">Stand down</button></td>

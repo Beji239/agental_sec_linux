@@ -136,7 +136,9 @@ logger = logging.getLogger(__name__)
 # v57, 2026-10-01: lan_traffic_minute and lan_flow, what the live LAN monitor
 # keeps from the router: per-device totals each minute, and one row per
 # finished connection. Payloads are never stored.
-SCHEMA_VERSION = 58
+# v58: autorun_baseline. v59, 2026-10-06: known_devices.merge_carried, what a
+# merge moved to the target, so unmerge can give it back.
+SCHEMA_VERSION = 59
 
 
 # HELPERS
@@ -4122,6 +4124,14 @@ def _migrate_autorun_baseline(conn) -> int:
     return added
 
 
+def _migrate_merge_carried(conn) -> int:
+    """v59: known_devices.merge_carried, the flags and labels a merge moved."""
+    if "merge_carried" in _columns(conn, "known_devices"):
+        return 0
+    conn.execute("ALTER TABLE known_devices ADD COLUMN merge_carried TEXT")
+    return 1
+
+
 def run_migrations(db_path: Path = None) -> dict:
     """
     Apply all pending migrations. Idempotent, safe on every boot.
@@ -4228,6 +4238,7 @@ def run_migrations(db_path: Path = None) -> dict:
         quic_dns_added         = _migrate_quic_and_dns_answers(conn)
         lan_traffic_added      = _migrate_lan_traffic(conn)
         autorun_baseline_added = _migrate_autorun_baseline(conn)
+        merge_carried_added    = _migrate_merge_carried(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4241,6 +4252,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "background_change_added": background_change_added,
             "quic_dns_added":      quic_dns_added,
             "autorun_baseline_added": autorun_baseline_added,
+            "merge_carried_added": merge_carried_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,

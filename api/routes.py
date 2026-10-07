@@ -1470,6 +1470,29 @@ def register_routes(app):
         logger.info(f"User unmerged {ip}")
         return jsonify(result)
 
+    @app.route("/api/devices/same-mac")
+    @require_api_key
+    def same_mac_route():
+        """Rows sharing a MAC and not merged yet, as after a router change."""
+        return jsonify(me.same_mac_groups())
+
+    @app.route("/api/devices/merge-same-mac", methods=["POST"])
+    @require_api_key
+    def merge_same_mac_route():
+        """
+        The user merging every same-MAC group in one step, or the MACs given.
+        User only, like a single merge, and not a tool.
+        """
+        data = request.get_json(silent=True) or {}
+        macs = data.get("macs")
+        if macs is not None and not isinstance(macs, list):
+            return jsonify({"error": "macs must be a list"}), 400
+        result = me.merge_same_mac(
+            macs=[str(m) for m in macs] if macs is not None else None)
+        logger.info(f"User merged same-MAC rows: {result['merged']} merged, "
+                    f"{result['refused']} refused")
+        return jsonify(result)
+
     @app.route("/api/devices/appearances")
     @require_api_key
     def device_appearances_route():

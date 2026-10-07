@@ -219,11 +219,12 @@ check("into itself", me.merge_devices("198.51.100.70","198.51.100.70")["success"
 check("unknown source", me.merge_devices("198.51.100.98","198.51.100.70")["success"], False)
 check("cycle", me.merge_devices("198.51.100.70","198.51.100.71")["success"], False)
 
-# A vouched-for device must be un-vouched before it can be merged away.
+# A vouched-for device can merge only where the flag can go: the target here
+# has a randomized MAC, so moving permanence onto it is refused.
 me.save_known_device(ip="198.51.100.80", mac="dc:a6:32:aa:bb:cc")
 me.set_device_permanence("198.51.100.80", True)
 r = me.merge_devices("198.51.100.80", "198.51.100.70")
-check("permanent device refused", r["success"], False)
+check("permanence onto a randomized address refused", r["success"], False)
 me.set_device_permanence("198.51.100.80", False)
 check("and allowed once un-vouched",
       me.merge_devices("198.51.100.80","198.51.100.70")["success"], True)
