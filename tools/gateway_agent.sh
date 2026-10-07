@@ -15,7 +15,7 @@
 #   log        logread, journalctl, or a syslog file
 #   dnslog     dnsmasq query lines in that log (log-queries must be on)
 #   appblock   nft, and dnsmasq built with nftset or logging its answers
-#   message    nft with nat, and uhttpd for the page
+#   message    nft, nat from nft or else iptables, and uhttpd for the page
 #
 # Verbs:
 #   probe, version
@@ -38,7 +38,7 @@ umask 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/sbin:/usr/local/bin
 export PATH LC_ALL=C
 
-VERSION=8
+VERSION=9
 NFT_TABLE=agentalsec_gw
 IPT_CHAIN=AGENTALSEC_GW
 PF_TABLE=agentalsec_block
@@ -56,6 +56,9 @@ PORTAL_WWW=$STATE_DIR/portal
 MSG_DIR=$STATE_DIR/messages
 REPLY_DIR=$STATE_DIR/replies
 PORTAL_IP_FILE=$STATE_DIR/portal_ip
+# Where nft has no nat, nft sets this mark and iptables redirects on it.
+NAT_MARK=0x10000000
+IPT_MSG_CHAIN=AGENTALSEC_MSG
 MAX_MSG_BYTES=600
 MAX_REPLIES=200
 LEASE_FILES="/tmp/dhcp.leases /var/lib/misc/dnsmasq.leases /var/lib/dnsmasq/dnsmasq.leases /var/db/dnsmasq.leases /var/lib/kea/kea-leases4.csv /var/db/kea/kea-leases4.csv"
@@ -400,7 +403,8 @@ do_counters() {
         nft add rule inet $NFT_TABLE devcount ip daddr "$a" counter 2>/dev/null
     done
     # The page could not start at boot before the address was up.
-    [ -n "$(msg_targets)" ] && [ -z "$(portal_pids)" ] && portal_restore
+    # A firewall restart drops the iptables half of mark mode.
+    [ -n "$(msg_targets)" ] && { [ -z "$(portal_pids)" ] || ! portal_redirect_ok; } && portal_restore
     ok counters; echo "restored=$restored"; echo "mac_rules=$(mac_rules_ok && echo yes || echo no)"; echo "--"
     nft list chain inet $NFT_TABLE devcount 2>/dev/null | awk '
         $1=="ip" && ($2=="saddr" || $2=="daddr") {
@@ -811,6 +815,52 @@ PAGE_EOF
     chmod 755 "$PORTAL_WWW/cgi-bin/msg.new" && mv "$PORTAL_WWW/cgi-bin/msg.new" "$PORTAL_WWW/cgi-bin/msg"
 }
 
+# Can the kernel take an nft nat chain? Checked with nft -c, nothing is made.
+nft_nat_ok() {
+    printf 'table inet agentalsec_natcheck {\n    chain c { type nat hook prerouting priority -101; }\n}\n' \
+        | nft_load_check
+}
+nft_load_check() {
+    f=$(mktemp /tmp/agentalsec-nft.XXXXXX) || return 1
+    cat > "$f"
+    nft -c -f "$f" >/dev/null 2>&1; rc=$?
+    rm -f "$f"
+    return $rc
+}
+ipt_nat_ok() { have iptables && iptables -t nat -S PREROUTING >/dev/null 2>&1; }
+
+# nft: the portal chain redirects itself. mark: it marks, iptables redirects.
+# Older OpenWrt (fw3) ships nft without its nat module.
+portal_mode() {
+    c=$(nft list chain inet $NFT_TABLE portal 2>/dev/null) || { echo none; return; }
+    case $c in *"type nat"*) echo nft ;; *) echo mark ;; esac
+}
+
+portal_action() {
+    if [ "$(portal_mode)" = nft ]; then echo "dnat ip to $1:$PORTAL_PORT"
+    else echo "meta mark set meta mark or $NAT_MARK"; fi
+}
+
+# The iptables half of mark mode, rebuilt whole so an old address is not kept.
+ipt_redirect() {
+    a=$1
+    iptables -t nat -N $IPT_MSG_CHAIN 2>/dev/null
+    iptables -t nat -F $IPT_MSG_CHAIN 2>/dev/null
+    err=$(iptables -t nat -A $IPT_MSG_CHAIN -p tcp --dport 80 -m mark --mark $NAT_MARK/$NAT_MARK \
+            -j DNAT --to-destination "$a:$PORTAL_PORT" 2>&1) \
+        || { PORTAL_ERR="iptables refused the message redirect: $(nft_err "$err")"; return 1; }
+    iptables -t nat -C PREROUTING -j $IPT_MSG_CHAIN 2>/dev/null \
+        || err=$(iptables -t nat -I PREROUTING 1 -j $IPT_MSG_CHAIN 2>&1) \
+        || { PORTAL_ERR="iptables refused the message redirect: $(nft_err "$err")"; return 1; }
+}
+
+# False when mark mode has lost its iptables half, as a firewall restart does.
+portal_redirect_ok() {
+    [ "$(portal_mode)" = mark ] || return 0
+    iptables -t nat -C PREROUTING -j $IPT_MSG_CHAIN 2>/dev/null \
+        && iptables -t nat -S $IPT_MSG_CHAIN 2>/dev/null | grep -q -- "--to-destination $(portal_ip):$PORTAL_PORT"
+}
+
 # Sets PORTAL_ERR and returns 1 when the redirect could not be put in place.
 portal_nft() {
     a=$1
@@ -819,13 +869,28 @@ table inet $NFT_TABLE {
     set msgmac { type ether_addr; }
     set msgdone { type ether_addr; }
     set portalip { type ipv4_addr; }
-    chain portal { type nat hook prerouting priority -101; policy accept; }
 }
 EOF
 ) || { PORTAL_ERR="nft refused the message redirect: $(nft_err "$err")"; return 1; }
+    if [ "$(portal_mode)" = none ]; then
+        if nft_nat_ok; then
+            err=$(printf 'table inet %s {\n    chain portal { type nat hook prerouting priority -101; policy accept; }\n}\n' \
+                $NFT_TABLE | nft_load) \
+                || { PORTAL_ERR="nft refused the message redirect: $(nft_err "$err")"; return 1; }
+        elif ipt_nat_ok; then
+            # Before nat (-100), so iptables sees the mark.
+            err=$(printf 'table inet %s {\n    chain portal { type filter hook prerouting priority -150; policy accept; }\n}\n' \
+                $NFT_TABLE | nft_load) \
+                || { PORTAL_ERR="nft refused the message redirect: $(nft_err "$err")"; return 1; }
+        else
+            PORTAL_ERR="this router's nft has no nat support and iptables nat is not there either"
+            return 1
+        fi
+    fi
+    if [ "$(portal_mode)" = mark ]; then ipt_redirect "$a" || return 1; fi
     nft add element inet $NFT_TABLE portalip "{ $a }" 2>/dev/null
     if ! nft list chain inet $NFT_TABLE portal 2>/dev/null | grep -q 'comment "msg"'; then
-        err=$(nft add rule inet $NFT_TABLE portal ether saddr @msgmac meta nfproto ipv4 tcp dport 80 dnat ip to "$a:$PORTAL_PORT" comment '"msg"' 2>&1) \
+        err=$(nft add rule inet $NFT_TABLE portal ether saddr @msgmac meta nfproto ipv4 tcp dport 80 $(portal_action "$a") comment '"msg"' 2>&1) \
             || { PORTAL_ERR="nft refused the message redirect: $(nft_err "$err")"; return 1; }
     fi
     # A device blocked by hardware address may still reach the page.
@@ -839,7 +904,7 @@ portal_all_rule() {
     a=$1; dev=$(portal_iface "$a")
     nft -a list chain inet $NFT_TABLE portal 2>/dev/null | grep -q 'comment "msgall"' && return 0
     [ -n "$dev" ] || { PORTAL_ERR="no interface holds $a"; return 1; }
-    err=$(nft add rule inet $NFT_TABLE portal iifname "$dev" ether saddr != @msgdone meta nfproto ipv4 ip daddr != @portalip tcp dport 80 dnat ip to "$a:$PORTAL_PORT" comment '"msgall"' 2>&1) \
+    err=$(nft add rule inet $NFT_TABLE portal iifname "$dev" ether saddr != @msgdone meta nfproto ipv4 ip daddr != @portalip tcp dport 80 $(portal_action "$a") comment '"msgall"' 2>&1) \
         || { PORTAL_ERR="nft refused the redirect for every device: $(nft_err "$err")"; return 1; }
 }
 
@@ -1007,7 +1072,14 @@ do_probe() {
     echo "apps=$APPS"
     echo "caller=$CALLER"
     echo "portal_tools=$(portal_tools)"
-    [ "$fw" = nft ] && uhttpd_ok && { echo "cap=message"; echo "portal_port=$PORTAL_PORT"; }
+    if [ "$fw" = nft ] && uhttpd_ok; then
+        r=$(portal_mode)
+        [ "$r" = none ] && { if nft_nat_ok; then r=nft; elif ipt_nat_ok; then r=mark; fi; }
+        if [ "$r" != none ]; then
+            echo "cap=message"; echo "portal_port=$PORTAL_PORT"
+            [ "$r" = nft ] && echo "message_redirect=nft" || echo "message_redirect=iptables"
+        fi
+    fi
 }
 
 case "$VERB" in

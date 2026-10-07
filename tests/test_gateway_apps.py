@@ -90,7 +90,9 @@ MAC = "aa:bb:cc:00:00:01"
 print("\n[probe, with a dnsmasq that fills nft sets]")
 g = agent("nftset", True)
 p = g.probe()
-check("agent version", p["agent_version"], "8")
+import re as _re
+check("agent version", p["agent_version"],
+      _re.search(r"^VERSION=(\d+)", (ROOT / "tools" / "gateway_agent.sh").read_text(), _re.M).group(1))
 check("appblock offered", "appblock" in p["capabilities"], True)
 check("mode", p["appblock"], "nftset")
 check("the apps it knows", "whatsapp" in p["apps"] and "telegram" in p["apps"], True)
