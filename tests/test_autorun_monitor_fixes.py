@@ -303,6 +303,17 @@ _f = am.change_findings({"added": [{**_second["s:new"]}], "removed": [],
                          "changed": []})
 check("a change becomes a finding the adapter can file",
       (_f[0]["type"], _f[0]["severity"]), ("autorun_entry_added", "medium"))
+# Enabling a unit changes its fingerprint but not its command.
+_same = {"kind": "systemd_service", "name": "demo.service", "path": "/x",
+         "detail": "/usr/bin/demo -d", "was": "/usr/bin/demo -d"}
+_f = am.change_findings({"added": [], "removed": [], "changed": [_same]})
+check_true("a same-command change says the boot setting changed",
+           "whether it starts at boot" in _f[0]["description"]
+           and "(was:" not in _f[0]["description"])
+_f = am.change_findings({"added": [], "removed": [], "changed": [
+    {**_same, "was": "/usr/bin/demo -x"}]})
+check_true("a real command change still shows the old command",
+           "(was: /usr/bin/demo -x)" in _f[0]["description"])
 check_true("memory_engine still has no save_baseline (the old call site)",
            not hasattr(me, "save_baseline"))
 _locked.chmod(0o600)

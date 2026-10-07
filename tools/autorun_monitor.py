@@ -1319,15 +1319,22 @@ def change_findings(changes: dict) -> list[dict]:
                             ("removed", "disappeared", "low")):
         for e in changes.get(kind) or []:
             what = e.get("detail") or e.get("path") or e.get("name")
+            head = (f"{e['kind'].replace('_', ' ')} {e.get('name')} {verb} "
+                    f"since the last reading")
+            if kind == "changed" and e.get("was") and e.get("was") == e.get("detail"):
+                # Same command, so the boot setting or what starts it changed.
+                desc = (f"{head}: the command is the same ({what}), so what "
+                        f"changed is whether it starts at boot or what starts "
+                        f"it. Enabling or disabling a service does this.")
+            else:
+                desc = (f"{head}: {what}"
+                        + (f" (was: {e['was']})" if kind == "changed" and e.get("was")
+                           else "") + ".")
             out.append({
                 "type": f"autorun_entry_{kind}",
                 "name": e.get("name"), "path": e.get("path"),
                 "command": e.get("detail"), "severity": sev,
-                "description": (
-                    f"{e['kind'].replace('_', ' ')} {e.get('name')} {verb} "
-                    f"since the last reading: {what}"
-                    + (f" (was: {e['was']})" if kind == "changed" and e.get("was")
-                       else "") + "."),
+                "description": desc,
             })
     return out
 

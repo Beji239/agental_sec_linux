@@ -827,7 +827,7 @@
   .btn-dismiss {
     background: transparent;
     border: 1px solid var(--border);
-    color: var(--text-dim);
+    color: var(--text);
     border-radius: 3px;
     padding: 2px 8px;
     font-size: 10px;
@@ -3867,9 +3867,10 @@ async function loadFindings() {
         </div>
         <div class="finding-time">${fmtTime(f.found_at)}</div>
         ${f.detection_id ? `<button class="btn-dismiss"
-                title="Stop ${esc(f.detection_id)} alerts about ${esc(f.entity_value)} only. Other rules about it keep reporting. Undo on the Detections tab."
-                onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">silence</button>` : ''}
+                title="Mute rule ${esc(f.detection_id)} for ${esc(f.entity_value)} only, with a reason you write. Other rules about it keep reporting. Unmute it on the Detections tab."
+                onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">mute</button>` : ''}
         <button class="btn-dismiss"
+                title="Hide the alerts about ${esc(f.entity_value)}. The same rule will not raise it about this again; other rules still can. Bring it back with Show dismissed."
                 data-type="${esc(f.entity_type)}" data-value="${esc(f.entity_value)}"
                 onclick="dismissFinding('${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">dismiss</button>
       </div>`).join('');
@@ -3879,9 +3880,9 @@ async function loadFindings() {
 // Silence one rule for one thing, from the alert itself. The reason is asked
 // for because the route requires one, and the alerts it covers close with it.
 async function silenceFinding(did, type, value, btn) {
-  const reason = prompt('Why should ' + did + ' stop reporting about '
-    + value + '?\n\nOther rules about it keep reporting. Undo it on the '
-    + 'Detections tab with "let it speak".');
+  const reason = prompt('Mute rule ' + did + ' for ' + value + '. Why? '
+    + 'A short note for later.\n\nOther rules about it keep reporting. '
+    + 'Unmute it on the Detections tab.');
   if (reason === null || !reason.trim()) return false;
   const label = btn ? btn.textContent : '';
   if (btn) btn.textContent = '...';
@@ -3896,13 +3897,13 @@ async function silenceFinding(did, type, value, btn) {
     if (!r.ok || body.error) {
       if (btn) { btn.textContent = 'failed';
                  btn.title = body.error || ('The app answered ' + r.status
-                             + ' and nothing was silenced.'); }
+                             + ' and nothing was muted.'); }
       return false;
     }
     loadFindings();
     return true;
   } catch (e) {
-    if (btn) { btn.textContent = label || 'silence';
+    if (btn) { btn.textContent = label || 'mute';
                btn.title = 'The request never reached the app.'; }
     return false;
   }
