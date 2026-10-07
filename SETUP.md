@@ -171,6 +171,8 @@ versus router, is [docs/ROUTER.md](docs/ROUTER.md).
 ```
 
 Add the `gateway` block the script prints to `config.json`.
+Run the same command again after updating AgentalSec, to put the new agent
+on the router.
 
 Pi-hole or AdGuard Home: enable `dns_monitor` in `config.json`.
 

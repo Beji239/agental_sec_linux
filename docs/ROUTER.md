@@ -56,6 +56,9 @@ only what was reported:
 - **appblock**, block an app for one device: nft plus dnsmasq built with
   nftset support, or a fallback that follows the query log
 - **persist**, blocks that survive a router reboot (with nft)
+- **message**, show a message on one device or every device, with an OK
+  button and a reply box: nft, uhttpd for the page, and nat from nft or,
+  where nft has none (older OpenWrt), from iptables
 
 Sinkholes last until the router reboots.
 
@@ -93,6 +96,19 @@ it, or remove it again, with:
 ./scripts/install_gateway_agent.sh --verify ROUTER_ADDRESS
 ./scripts/install_gateway_agent.sh --remove ROUTER_ADDRESS
 ```
+
+### Updating the agent
+
+The agent on the router does not update itself, because AgentalSec's key can
+only run it. After you update AgentalSec, install the new agent the same way:
+
+```bash
+./scripts/install_gateway_agent.sh --enroll ROUTER_ADDRESS
+```
+
+It replaces the agent, keeps the key, and ends with the router's report,
+which shows the agent version and what it can now do. The app needs no
+restart for this.
 
 ### What it adds
 
