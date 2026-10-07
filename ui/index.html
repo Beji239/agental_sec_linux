@@ -2262,39 +2262,65 @@
        worse than none, because somebody would believe it. -->
   <div class="page" id="page-detections">
     <div class="card">
-      <div class="card-title">What this tool can catch</div>
-      <div class="finding-desc">
-        Every rule that can raise a finding, with the id it will always carry.
-        A quiet alert list has three different causes and they mean opposite
-        things: nothing happened, no rule here would have caught it, or a rule
-        is silenced. This page is where you tell them apart.
+      <div class="card-title">Detection rules</div>
+      <div class="det-guide">
+        <p>This is the list of everything the app knows how to spot. <b>Each row
+        is a rule, not an alert.</b> When what a rule watches for happens, the
+        rule raises an alert on the Alerts tab and its <b>Times fired</b> count
+        goes up.</p>
+        <p><b>How to read a row.</b> Start with <b>What it watches for</b>, which
+        says in plain words what would set the rule off. <b>Severity</b> is how
+        serious its alerts can be. <b>Times fired</b> is how many alerts it has
+        raised, with the ones you have not dealt with yet in brackets.
+        <b>Muted</b> says whether you have switched the rule off.</p>
+        <p><b>When the Alerts tab is quiet</b>, it means one of three things:
+        nothing happened, no rule here covers it, or the rule that covers it is
+        muted. This page is how you tell which.</p>
+        <p><b>Mute</b> stops one rule raising alerts, for one address or for
+        every address. Use it for a rule that keeps firing about something you
+        know is fine. Nothing is deleted and <b>Unmute</b> brings it back. The
+        AI analyst reads this list too, can see what you muted, and cannot mute
+        anything itself.</p>
+        <p>Rows marked <b>Record</b> are not things the app saw. They are a
+        trail of things the app did, such as blocking a device, and they cannot
+        be muted.</p>
       </div>
       <div class="stat-grid" id="detection-tiles" style="margin-top:12px;"></div>
-      <div id="detection-unstamped" class="finding-desc" style="margin-top:10px;"></div>
+      <div id="detection-unstamped" class="det-note" style="margin-top:10px;"></div>
       <div class="row" style="margin-top:14px;gap:10px;align-items:center;">
-        <select class="input" id="detection-filter" style="width:200px;" onchange="renderDetections()">
-          <option value="detection">Detections</option>
-          <option value="action_record">What this app did</option>
-          <option value="suppressed">Silenced right now</option>
-          <option value="retired">Retired numbers</option>
+        <select class="input" id="detection-filter" style="width:220px;" onchange="renderDetections()">
+          <option value="detection">Rules that watch for things</option>
+          <option value="action_record">Records of what the app did</option>
+          <option value="suppressed">Muted right now</option>
+          <option value="retired">Retired rules</option>
           <option value="">Everything</option>
         </select>
-        <span class="finding-desc" style="font-size:11px;">
-          An id is never reused, so a retired number still explains old rows.
+        <span class="det-note">
+          A rule name is never reused, so a retired rule still explains old alerts.
         </span>
       </div>
     </div>
     <div class="card" style="margin-top:0;">
-      <div class="card-title">The register</div>
-      <table class="data-table">
+      <div class="card-title">The rules</div>
+      <div class="det-note" style="margin-bottom:10px;">
+        The letters in a rule name say which part of the app raises it:
+        <b>PKT</b> network traffic, <b>LAN</b> devices on your network,
+        <b>DNS</b> name lookups, <b>FED</b> public threat lists,
+        <b>LNX</b> this Linux machine, <b>AUD</b> the Linux audit log,
+        <b>AV</b> virus scanner, <b>NET</b> and <b>PRB</b> device checks,
+        <b>RTR</b> the router, <b>PRC</b> running programs,
+        <b>REM</b> records of what the app did. Hover a column heading for
+        what it means.
+      </div>
+      <table class="data-table det-table">
         <thead><tr>
-          <th style="width:90px;">ID</th>
-          <th style="width:70px;">Rev</th>
-          <th>What fires it</th>
-          <th style="width:120px;">Sensor</th>
-          <th style="width:110px;">Severity</th>
-          <th style="width:90px;">Fired</th>
-          <th style="width:230px;">Silenced</th>
+          <th style="width:90px;" title="The rule's permanent name. It never changes, so old alerts always point at the right rule.">Rule</th>
+          <th style="width:70px;" title="Goes up when the rule's logic changes, for example a new threshold. Each alert remembers which version raised it. Safe to ignore day to day.">Version</th>
+          <th title="In plain words, what sets this rule off. Open Technical detail for the exact condition.">What it watches for</th>
+          <th style="width:130px;" title="The part of the app that runs this rule.">Watched by</th>
+          <th style="width:110px;" title="How serious this rule's alerts can be, worst first.">Severity</th>
+          <th style="width:100px;" title="How many alerts this rule has raised. The number in brackets is still open on the Alerts tab.">Times fired</th>
+          <th style="width:230px;" title="Whether you switched this rule off. Muted rules raise no alerts for the address shown, or for every address.">Muted</th>
         </tr></thead>
         <tbody id="detection-rows"></tbody>
       </table>
@@ -7108,29 +7134,24 @@ function renderDetections() {
   const silent = d.detections.filter(r => (r.suppressions || []).length);
   const fired  = live.filter(r => r.findings_total > 0);
 
-  // "Never fired" counts only rules that CAN be attributed. If there are
-  // unstamped rows, some of those rules have fired and cannot be credited
-  // for it, and the tile would be wrong without the note below saying so.
   tiles.innerHTML =
     '<div class="stat"><div class="stat-val">' + live.length + '</div>'
-      + '<div class="stat-lbl">Rules that can fire</div></div>'
+      + '<div class="stat-lbl">Rules watching</div></div>'
     + '<div class="stat"><div class="stat-val">' + fired.length + '</div>'
-      + '<div class="stat-lbl">Have fired</div></div>'
+      + '<div class="stat-lbl">Have fired at least once</div></div>'
     + '<div class="stat"><div class="stat-val" style="color:var(--amber)">'
-      + silent.length + '</div><div class="stat-lbl">Silenced</div></div>';
+      + silent.length + '</div><div class="stat-lbl">Muted</div></div>';
 
+  // Alerts from before rule names existed cannot be credited to a rule,
+  // so a 0 may still have fired earlier.
   if (!d.counted) {
-    note.innerHTML = '<b>The findings table could not be read.</b> Every count '
-      + 'on this page is "I could not look", not zero.';
+    note.innerHTML = '<b>The alert history could not be read.</b> Every count '
+      + 'on this page means "could not look", not zero.';
   } else if (d.unstamped_findings) {
-    // Kept as ONE literal on purpose. The same check in test_ui_wiring went
-    // red for months because the sentence it looked for was split across two
-    // string pieces, so the file never actually contained it. A phrase a test
-    // asserts on does not get wrapped.
     note.textContent = d.unstamped_findings
-      + ' findings were raised before rules had ids. '
-      + d.unstamped_note
-      + ' So a rule reading 0 here may still have fired before today.';
+      + ' older alerts were raised before rules had names, so they are not '
+      + 'counted against any rule. A rule showing 0 may still have fired '
+      + 'before then.';
   } else {
     note.textContent = '';
   }
@@ -7149,38 +7170,40 @@ function renderDetections() {
     const sup = (r.suppressions || []);
     const supCell = sup.length
       ? sup.map(x =>
-          '<div class="finding-desc" style="font-size:11px;">'
-          + esc(x.entity_value === '*' ? 'everywhere' : x.entity_value)
-          + ': ' + esc(x.reason)
-          + ' <a href="#" onclick="unsuppressDetection('
+          '<div class="det-muted">Muted for '
+          + esc(x.entity_value === '*' ? 'every address' : x.entity_value)
+          + (x.reason ? ', because: ' + esc(x.reason) : '')
+          + '<br><button class="btn-unmute" onclick="unsuppressDetection('
           + "'" + esc(r.detection_id) + "','" + esc(x.entity_type) + "','"
-          + esc(x.entity_value) + "'" + '); return false;">let it speak</a></div>'
+          + esc(x.entity_value) + "'" + ')">Unmute</button></div>'
         ).join('')
-      // Action records are not offered the button. Silencing one would mean
-      // the app quietly stops recording that it killed things, which is a
-      // different and worse idea than muting a noisy sensor.
+      // Records are never muted: the app must not quietly stop logging what it did.
       : (r.kind === 'action_record' || r.retired
-          ? '<span class="finding-desc" style="font-size:11px;">not silenceable</span>'
-          : '<a href="#" onclick="suppressDetection('
-            + "'" + esc(r.detection_id) + "'" + '); return false;">silence</a>');
+          ? '<span class="det-off">Cannot be muted</span>'
+          : '<span class="det-off">Not muted</span> '
+            + '<button class="btn-mute" onclick="suppressDetection('
+            + "'" + esc(r.detection_id) + "'" + ')">Mute</button>');
 
-    // A count of 0 on a page that admits it could not count reads as "-",
-    // because a zero here would be a claim the page cannot support.
+    // A page that could not count shows "-" rather than a zero it cannot back.
     const fires = !d.counted ? '-'
                 : (r.findings_total + (r.findings_open ? ' (' + r.findings_open + ' open)' : ''));
 
-    const what = esc(r.summary)
-      + (r.retired ? '<div class="finding-desc" style="font-size:11px;">RETIRED. '
-                     + esc(r.retired_reason || '') + '</div>' : '')
-      + (r.kind === 'action_record'
-          ? '<div class="finding-desc" style="font-size:11px;">A record of what '
-            + 'this app did, not something it observed.</div>' : '');
+    const tag = r.retired ? '<span class="det-tag retired">Retired</span>'
+              : (r.kind === 'action_record' ? '<span class="det-tag">Record</span>' : '');
+
+    const what = '<div class="det-plain">' + esc(r.plain || r.summary) + tag + '</div>'
+      + (r.retired && r.retired_reason
+          ? '<div class="det-note" style="font-size:11px;">No longer used: '
+            + esc(r.retired_reason) + '</div>' : '')
+      + (r.plain
+          ? '<details class="det-tech"><summary>Technical detail</summary><div>'
+            + esc(r.summary) + '</div></details>' : '');
 
     return '<tr>'
       + '<td><code>' + esc(r.detection_id) + '</code></td>'
-      + '<td>' + r.rev + '</td>'
+      + '<td>v' + r.rev + '</td>'
       + '<td>' + what + '</td>'
-      + '<td>' + esc(r.source) + '</td>'
+      + '<td>' + esc(SOURCE_NAMES[r.source] || r.source) + '</td>'
       + '<td>' + esc((r.severities || []).join(', ')) + '</td>'
       + '<td>' + fires + '</td>'
       + '<td>' + supCell + '</td>'
@@ -7188,14 +7211,27 @@ function renderDetections() {
   }).join('');
 }
 
+// Readable names for the part of the app that runs each rule.
+const SOURCE_NAMES = {
+  packet_sniffer: 'Network traffic', dns_inspector: 'DNS lookups',
+  feed_matcher: 'Threat lists', lan_live: 'Router, live',
+  router_monitor: 'Router', network_scanner: 'Device scan', probe: 'Device check',
+  linux_monitor: 'Remote server', event_monitor: 'Logins and logs',
+  process_monitor: 'Running programs', local_integrity: 'File checks',
+  registry_monitor: 'Startup items', ebpf_events: 'Kernel watch',
+  port_owner: 'Open sockets', auditd: 'Audit log', av_scanner: 'Virus scan',
+  remediation: 'This app', port_scanner: 'Port scan',
+};
+
 async function suppressDetection(did) {
   // A reason is required by the route as well. Asking here too means the
   // person writes it while they still remember why, rather than meeting a
   // 400 and typing whatever gets past it.
-  const reason = prompt('Why should ' + did + ' stop being reported?\n\n'
-    + 'Leave the address blank to silence it everywhere.');
+  const reason = prompt('Mute ' + did + '. Why? A short note for later, '
+    + 'for example: my backup server, this is normal.');
   if (reason === null || !reason.trim()) return;
-  const ev = prompt('Only for one address? Leave blank for every address.') || '*';
+  const ev = prompt('Mute it for one address only? Type the address, '
+    + 'or leave blank to mute it for every address.') || '*';
   try {
     const r = await fetch('/api/detections/suppress', {
       method: 'POST',
@@ -7207,7 +7243,7 @@ async function suppressDetection(did) {
     }).then(x => x.json());
     if (r.error) { alert(r.error); return; }
   } catch (e) {
-    alert('The suppression did not reach the app, so nothing was silenced.');
+    alert('The mute did not reach the app, so nothing was muted.');
     return;
   }
   loadDetections();

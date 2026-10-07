@@ -466,6 +466,21 @@ text = (ROOT / "core" / "detections.py").read_text(encoding="utf-8")
 check("no em dashes in the register", "—" in text, False)
 check("no pipe characters in the register text",
       any("|" in (d.summary or "") for d in det._REGISTER), False)
+# Every rule has a plain-English line for the page, in the owner's style.
+from core.detection_plain import PLAIN
+check("every entry has a plain line",
+      [d.did for d in det._REGISTER if not PLAIN.get(d.did, "").strip()], [])
+check("no plain line for a rule that does not exist",
+      sorted(set(PLAIN) - set(ids)), [])
+check("no dashes or pipes in the plain lines",
+      [k for k, v in PLAIN.items()
+       if any(x in v for x in (" - ", " -- ", "\u2014", "\u2013", "|"))], [])
+check_true("the page data carries the plain line",
+           det.get("PKT-1002").as_dict()["plain"] == PLAIN["PKT-1002"])
+REGISTRY = (ROOT / "core" / "tool_registry.py").read_text(encoding="utf-8")
+check_true("the agent tool leaves the plain line out",
+           'if k != "plain"' in REGISTRY)
+
 
 
 print("\n[15] Silencing something reaches the journal")
@@ -550,7 +565,7 @@ check_true("so does lifting one",
 check_true("the page refuses to print a zero it could not count",
            "could not look" in UI)
 check_true("the page explains the rows with no id",
-           "before rules had ids" in UI)
+           "before rules had names" in UI)
 # created_by is not taken from the body. A route that accepts who it was is a
 # route that can be told.
 check("the suppress route does not read created_by from the request",

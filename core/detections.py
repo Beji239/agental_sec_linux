@@ -99,6 +99,8 @@
 
 import logging
 
+from core.detection_plain import PLAIN
+
 logger = logging.getLogger(__name__)
 
 
@@ -203,6 +205,8 @@ class Detection:
                           key=lambda x: _AXIS_ORDER.index(x)
                           if x in _AXIS_ORDER else len(_AXIS_ORDER)),
             "summary": self.summary,
+            # Plain-English line for the Detections page.
+            "plain": PLAIN.get(self.did, ""),
             "retired": self.retired,
             "retired_reason": self.retired_reason,
             "kind": self.kind,
