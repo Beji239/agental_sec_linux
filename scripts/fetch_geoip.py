@@ -3,6 +3,7 @@
 Download the free IP-to-City geolocation database for the threat map.
 
     python scripts/fetch_geoip.py
+    python scripts/fetch_geoip.py --asn    the network owner database too
 
 No account, no API key, no pricing page. This pulls DB-IP's IP-to-City Lite
 data as republished by the ip-location-db project, which mirrors it to the
@@ -112,7 +113,47 @@ def _via_npm_tarball(out: Path) -> bool:
         return False
 
 
+ASN_DEST = PROJECT_ROOT / "geoip" / "dbip-asn-lite.mmdb"
+ASN_URLS = [
+    "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-asn-mmdb/dbip-asn-ipv4.mmdb",
+    "https://unpkg.com/@ip-location-db/dbip-asn-mmdb/dbip-asn-ipv4.mmdb",
+]
+ASN_MIN_BYTES = 1_000_000
+
+
+def fetch_asn() -> int:
+    """The network owner (ASN) database, used by the map and place baselines."""
+    global MIN_BYTES
+    ASN_DEST.parent.mkdir(parents=True, exist_ok=True)
+    MIN_BYTES, saved = ASN_MIN_BYTES, MIN_BYTES
+    try:
+        for url in ASN_URLS:
+            print(f"Trying {url.split('/')[2]} ...")
+            if _download(url, ASN_DEST):
+                break
+        else:
+            print("Could not download the network owner database.")
+            print("Manual route: https://db-ip.com/db/download/ip-to-asn-lite")
+            print(f"Save the MMDB as: {ASN_DEST}")
+            return 1
+    finally:
+        MIN_BYTES = saved
+    try:
+        import maxminddb
+        with maxminddb.open_database(str(ASN_DEST)) as reader:
+            rec = reader.get("8.8.8.8") or {}
+        print(f"Verified: 8.8.8.8 -> AS{rec.get('autonomous_system_number')} "
+              f"{rec.get('autonomous_system_organization') or ''}")
+        print("Restart AgentalSec to use it.")
+    except Exception as e:
+        print(f"Downloaded but could not be opened: {e}")
+        return 1
+    return 0
+
+
 def main() -> int:
+    if "--asn" in sys.argv[1:]:
+        return fetch_asn()
     DEST.parent.mkdir(parents=True, exist_ok=True)
 
     if DEST.exists():

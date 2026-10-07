@@ -907,6 +907,11 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
         logger.info(f"Live LAN monitor: {lan_live.start(config, session_id)}")
     except Exception as e:
         logger.error(f"Live LAN monitor did not start: {e}")
+    try:
+        from tools import place_watch
+        logger.info(f"Place learning: {place_watch.start(config, session_id)}")
+    except Exception as e:
+        logger.error(f"Place learning did not start: {e}")
 
     modules["runbook"] = try_load("runbook", lambda: (
         _cls("tools.runbook").Runbook(session_id)
@@ -2322,6 +2327,12 @@ def main(argv=None):
                 lan_live.get().stop()
         except Exception as e:
             logger.warning(f"Live LAN monitor did not stop cleanly: {e}")
+        try:
+            from tools import place_watch
+            if place_watch.get() is not None:
+                place_watch.get().stop()
+        except Exception as e:
+            logger.warning(f"Place learning did not stop cleanly: {e}")
         threads = []
         for name in _WRITER_MODULES:
             mod = modules.get(name)

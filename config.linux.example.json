@@ -43,10 +43,13 @@
       "Threat map. Needs maxminddb (pip install -r requirements.txt) and the",
       "database itself. Without either, the geoip sensor is SKIPPED at boot",
       "with the reason in the log, and the map says why it is empty.",
-      "Run scripts/fetch_geoip.py to download the database (CC-BY 4.0)."
+      "Run scripts/fetch_geoip.py to download the database (CC-BY 4.0).",
+      "asn_db_path is optional: network owner names on the map and network",
+      "baselines. Download it with scripts/fetch_geoip.py --asn."
     ],
     "enabled": true,
     "db_path": "geoip/dbip-city-lite.mmdb",
+    "asn_db_path": "geoip/dbip-asn-lite.mmdb",
     "home_lat": null,
     "home_lon": null,
     "home_label": null,
@@ -487,6 +490,19 @@
     "path": "",
     "interval_minutes": 15,
     "label": null
+  },
+
+  "place_watch": {
+    "_comment": [
+      "Learns which countries and networks each program and device normally",
+      "reaches, and raises GEO-1001 or GEO-1002 when one reaches somewhere new",
+      "after learn_hours of learning. Devices need the OpenWrt router agent;",
+      "without it only this machine's programs are learned."
+    ],
+    "enabled": true,
+    "interval_seconds": 300,
+    "learn_hours": 72,
+    "max_alerts_per_pass": 20
   },
 
   "router_monitor": {

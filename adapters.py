@@ -6559,6 +6559,29 @@ class LinuxGateway(_BaseAdapter):
                              f"app, so nothing was lifted."}
         return out
 
+    def block_address(self, ip: str, reason: str, session_id: str = None):
+        """Block a remote address for the whole home, both directions."""
+        try:
+            ip = _validated_ip(ip)
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
+        return self._act("block", ip, reason, session_id, "REM-1009",
+                         f"Address blocked at the router for every device: "
+                         f"{ip}", ip)
+
+    def unblock_address(self, ip: str, reason: str, session_id: str = None):
+        try:
+            ip = _validated_ip(ip)
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
+        out = self._act("unblock", ip, reason, session_id, "REM-1010",
+                        f"Address unblocked at the router: {ip}", ip)
+        if out.get("was_blocked") == "no":
+            return {"success": False, "refused": True, "ip": ip,
+                    "error": f"The router held no block on {ip} from this "
+                             f"app, so nothing was lifted."}
+        return out
+
     def block_mac(self, mac: str, reason: str, session_id: str = None,
                   ip: str = None):
         """Cut a device off by hardware address. ip, when known, is what the

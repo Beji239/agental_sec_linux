@@ -218,12 +218,15 @@ reg = (ROOT / "core" / "tool_registry.py").read_text(encoding="utf-8")
 tm = strip_comments(_fn_body(reg, "def _query_threat_map"))
 check("the window really holds the whole function",
       "attribution" in tm, True)
-check("the model's map uses the aggregate",
-      'worst_finding_by_entity' in tm and 'worst_finding_by_entity_with_rule' in tm,
-      True)
+# Both maps read through core/place_map.gather, which holds the aggregate.
+pm = strip_comments((ROOT / "core" / "place_map.py").read_text(encoding="utf-8"))
+check("the model's map reads the shared picture", "place_map.gather(" in tm, True)
+check("the shared picture uses the aggregate",
+      'worst_finding_by_entity_with_rule' in pm, True)
 check("and no longer reads a capped finding list",
-      'entity_type="ip", limit=500' in tm, False)
-check("it catches a failed read", "severity_error = str(e)" in tm, True)
+      'entity_type="ip", limit=500' in tm + pm, False)
+check("it catches a failed read", "severity_error = str(e)" in pm
+      and 'g["severity_error"]' in tm, True)
 check("it reports which it got", '"severity_read": severity_error is None' in tm, True)
 check("and says in words that nothing was checked",
       "NOTHING HERE" in tm and "WAS CHECKED" in tm, True)
@@ -231,7 +234,7 @@ check("and says in words that nothing was checked",
 routes = strip_comments(
     (ROOT / "api" / "routes.py").read_text(encoding="utf-8"))
 check("the dashboard map uses the same aggregate",
-      "worst_finding_by_entity" in routes, True)
+      "place_map.gather(" in routes and 'g["severity_error"]' in routes, True)
 check("and it has stopped reading a capped list too",
       'entity_type="ip", limit=500' in routes, False)
 check("and the route reports whether the severities were read",

@@ -253,5 +253,12 @@ PLAIN = {
     "LNX-4006": "Something set to start automatically was removed. Usually "
                 "an uninstall.",
 
+    # Place learning
+    "GEO-1001": "A program or device reached a country it does not normally "
+                "talk to. Medium when nothing in your home has talked to that "
+                "country before.",
+    "GEO-1002": "A program or device reached a network company it does not "
+                "normally talk to.",
+
     "PRT-1001": "Retired. A scan found an open port.",
 }

@@ -1037,6 +1037,53 @@
      the shape's own fill and stroke, set in JS where the layer is built. */
   #threat-map .leaflet-container { background: #0a0e14; }
 
+  /* Map side panel and the movable chat window */
+  #map-wrap { position: relative; }
+  #map-panel { position: absolute; top: 8px; right: 8px; bottom: 8px; width: 360px;
+               max-width: calc(100% - 16px); overflow-y: auto; z-index: 900;
+               background: var(--bg2); border: 1px solid var(--border);
+               border-radius: var(--radius); padding: 14px; font-size: 12px;
+               color: var(--text); line-height: 1.5; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  #map-panel h3 { font-size: 14px; color: var(--text-hi); font-family: var(--mono); margin-bottom: 2px; }
+  #map-panel h4 { font-size: 11px; color: var(--text-hi); text-transform: uppercase;
+                  letter-spacing: .5px; margin: 14px 0 6px; }
+  #map-panel .mp-row { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  #map-panel .mp-sub { font-size: 11px; color: var(--text); opacity: .85; }
+  #map-panel .mp-new { color: var(--amber); }
+  #map-panel .mp-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .map-x { position: absolute; top: 6px; right: 8px; background: none; border: none;
+           color: var(--text); font-size: 18px; cursor: pointer; }
+  .mp-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text-hi);
+            border-radius: var(--radius); padding: 4px 10px; font-size: 11px; cursor: pointer; }
+  .mp-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .mp-btn.chat { border-color: var(--blue); color: var(--blue); }
+  .mp-btn:disabled { opacity: .45; cursor: not-allowed; border-color: var(--border); color: var(--text); }
+  #map-chat { position: fixed; z-index: 2000; width: 380px; height: 460px; min-width: 280px;
+              min-height: 260px; max-width: 95vw; max-height: 90vh; resize: both; overflow: hidden;
+              display: flex; flex-direction: column; background: var(--bg2);
+              border: 1px solid var(--blue); border-radius: var(--radius);
+              box-shadow: 0 10px 32px rgba(0,0,0,.6); }
+  #map-chat[hidden] { display: none; }
+  #map-chat.min { height: auto !important; min-height: 0; resize: none; }
+  #map-chat.min #map-chat-log, #map-chat.min #map-chat-form { display: none; }
+  #map-chat-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+                   background: var(--bg3); cursor: move; user-select: none; touch-action: none;
+                   font-size: 12px; color: var(--text-hi); }
+  #map-chat-head span { flex: 1; font-family: var(--mono); overflow: hidden;
+                        text-overflow: ellipsis; white-space: nowrap; }
+  #map-chat-head button { background: none; border: none; color: var(--text); cursor: pointer; font-size: 15px; }
+  #map-chat-log { flex: 1; overflow-y: auto; padding: 10px; font-size: 12px; line-height: 1.5; }
+  #map-chat-log .mc-msg { margin-bottom: 10px; white-space: pre-wrap; word-wrap: break-word; }
+  #map-chat-log .mc-user { color: var(--text-hi); border-left: 2px solid var(--blue); padding-left: 8px; }
+  #map-chat-log .mc-agent { color: var(--text); }
+  #map-chat-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+  #map-chat-input { flex: 1; resize: none; height: 38px; background: var(--bg); color: var(--text-hi);
+                    border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px;
+                    font-family: var(--sans); font-size: 12px; }
+  @media (max-width: 700px) {
+    #map-panel { position: static; width: auto; max-width: none; margin-top: 10px; }
+  }
+
   .leaflet-popup-content-wrapper, .leaflet-popup-tip {
     background: var(--panel, #121821);
     color: var(--text, #d6e1f0);
@@ -2025,7 +2072,23 @@
   <div class="page" id="page-map">
     <div class="card">
       <div class="card-title">Threat Map</div>
-      <div id="threat-map"></div>
+      <div class="row" style="gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <select class="input" id="map-source" style="width:230px;" onchange="loadThreatMap()">
+          <option value="">Whole home</option>
+          <option value="this_machine">This machine only</option>
+          <option value="router">Other devices (from the router)</option>
+          <option value="flagged">Only places with an alert</option>
+        </select>
+        <span class="det-note" id="map-router-note"></span>
+      </div>
+      <div id="map-wrap">
+        <div id="threat-map"></div>
+        <div id="map-panel" hidden>
+          <button class="map-x" onclick="closeMapPanel()" title="Close">&times;</button>
+          <div id="map-panel-body"></div>
+        </div>
+      </div>
+      <div class="det-note" style="margin-top:6px;">Click a point to see who reached it, its alerts, actions, and a chat about it.</div>
       <div id="map-legend"></div>
       <div id="map-stats" style="display:flex;gap:20px;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--text-dim);"></div>
       <!-- THE CAVEATS, ON THE CARD RATHER THAN IN A TOOLTIP. Written by
@@ -2288,7 +2351,7 @@
       <div class="stat-grid" id="detection-tiles" style="margin-top:12px;"></div>
       <div id="detection-unstamped" class="det-note" style="margin-top:10px;"></div>
       <div class="row" style="margin-top:14px;gap:10px;align-items:center;">
-        <select class="input" id="detection-filter" style="width:220px;" onchange="renderDetections()">
+        <select class="input" id="detection-filter" style="width:260px;" onchange="renderDetections()">
           <option value="detection">Rules that watch for things</option>
           <option value="action_record">Records of what the app did</option>
           <option value="suppressed">Muted right now</option>
@@ -2306,6 +2369,7 @@
         The letters in a rule name say which part of the app raises it:
         <b>PKT</b> network traffic, <b>LAN</b> devices on your network,
         <b>DNS</b> name lookups, <b>FED</b> public threat lists,
+        <b>GEO</b> new countries and networks,
         <b>LNX</b> this Linux machine, <b>AUD</b> the Linux audit log,
         <b>AV</b> virus scanner, <b>NET</b> and <b>PRB</b> device checks,
         <b>RTR</b> the router, <b>PRC</b> running programs,
@@ -4298,6 +4362,8 @@ async function showDetection(did) {
 // Leaflet popups are per-marker, so this moves the viewport to the marker and
 // opens only that popup, which is what "take me to where this is" means.
 async function showMapEndpoint(ip) {
+  const srcSel = document.getElementById('map-source');
+  if (srcSel) srcSel.value = '';
   showPage('map');
   try {
     await loadThreatMap();
@@ -4338,6 +4404,7 @@ async function showMapEndpoint(ip) {
   const ll = found.getLatLng();
   map.setView(ll, Math.max(map.getZoom(), 4));
   found.openPopup();
+  if (typeof openMapPanel === 'function') openMapPanel(wanted);
 }
 
 function getTimeFilterISO(f) {
@@ -4879,6 +4946,9 @@ const SEV_COLOR = {
 const SEV_RANK = { none: 0, unknown: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
 let mapLayer = null;
+let mapCanvas = null;
+const MAP_ARC_LIMIT = 300;
+const MAP_ARCS_PER_COUNTRY = 3;
 let baseMapDrawn = false;
 
 // THE BASE MAP
@@ -4944,8 +5014,14 @@ async function drawBaseMap(m) {
       })),
     });
 
+    // Its own bottom layer, so land never covers the points and arcs.
+    if (!m.getPane('basemap')) {
+      m.createPane('basemap');
+      m.getPane('basemap').style.zIndex = 250;
+      m.getPane('basemap').style.pointerEvents = 'none';
+    }
     for (const dx of [-360, 0, 360]) {
-      L.geoJSON(dx === 0 ? world : shifted(dx), style).addTo(m);
+      L.geoJSON(dx === 0 ? world : shifted(dx), { ...style, pane: 'basemap' }).addTo(m);
     }
   } catch (e) {
     baseMapDrawn = false;         // let a later visit try again
@@ -5389,8 +5465,23 @@ async function loadThreatMap() {
 
   if (mapLayer) mapLayer.remove();
   mapLayer = L.layerGroup().addTo(map);
+  if (!mapCanvas) mapCanvas = L.canvas({ padding: 0.5 });
 
-  const eps  = d.endpoints || [];
+  // Which part of the home to show. A point reached from both counts for both.
+  const srcSel = (document.getElementById('map-source') || {}).value || '';
+  const eps = (d.endpoints || []).filter(e =>
+    !srcSel ? true
+    : srcSel === 'flagged' ? SEV_RANK[e.severity] >= 1
+    : (e.sources || []).includes(srcSel));
+  // Arcs for the biggest destinations, the biggest few in every country, and
+  // every alert; every point gets a dot.
+  const bySize = eps.slice().sort((a, b) => b.bytes - a.bytes);
+  const arcSet = new Set(bySize.slice(0, MAP_ARC_LIMIT).map(e => e.ip));
+  const perCountry = {};
+  bySize.forEach(e => {
+    const n = perCountry[e.cc] = (perCountry[e.cc] || 0) + 1;
+    if (n <= MAP_ARCS_PER_COUNTRY) arcSet.add(e.ip);
+  });
   const home = d.home;
   const maxPk = Math.max(1, ...eps.map(e => e.packets));
   const bounds = [];
@@ -5407,12 +5498,13 @@ async function loadThreatMap() {
     const lon = home ? shortLon(home.lon, e.lon) : e.lon;
     bounds.push([e.lat, lon]);
 
-    if (home) {
+    if (home && (hot || arcSet.has(e.ip))) {
       L.polyline(arcPoints(home.lat, home.lon, e.lat, lon), {
         color,
         weight:    hot ? 2.4 : 1.3,
         opacity:   hot ? 0.95 : 0.5,
         className: 'arc' + (hot ? ' arc-flow' : ''),
+        ...(hot ? {} : { renderer: mapCanvas }),
       }).addTo(mapLayer);
     }
 
@@ -5427,11 +5519,16 @@ async function loadThreatMap() {
       }).addTo(mapLayer);
     }
 
+    const whoBits = (e.processes || []).map(p => p.name)
+      .concat((e.devices || []).map(x => x.name || x.ip));
     L.circleMarker([e.lat, lon], {
-      radius: r, color, weight: 1.5, fillColor: color, fillOpacity: 0.75
-    }).bindPopup(`
+      radius: r, color, weight: 1.5, fillColor: color, fillOpacity: 0.75,
+      ...(hot ? {} : { renderer: mapCanvas }),
+    }).on('click', () => openMapPanel(e.ip)).bindPopup(`
       <b>${esc(e.ip)}</b><br>
       ${esc(e.place)}<br>
+      ${(e.names || []).length ? esc(e.names.slice(0, 2).join(', ')) + '<br>' : ''}
+      ${whoBits.length ? 'reached by ' + esc(whoBits.slice(0, 3).join(', ')) + '<br>' : ''}
       ${e.packets.toLocaleString()} packets &middot; ${fmtBytes(e.bytes)}<br>
       ${e.ports.length ? 'ports ' + esc(e.ports.join(', ')) + '<br>' : ''}
       ${e.peers.length ? 'from ' + esc(e.peers.join(', ')) + '<br>' : ''}
@@ -5541,6 +5638,17 @@ async function loadThreatMap() {
            .join(' · ')
       + `. Where those addresses geolocate is not a fact about anything that talked to this machine.`);
   }
+  const rn = document.getElementById('map-router-note');
+  if (rn) {
+    const r = d.router || {};
+    rn.textContent = (r.available
+        ? 'Includes the other devices in your home, from the router, last '
+          + r.hours + ' hours.'
+        : (r.reason || 'Only this machine is covered.'))
+      + (d.network_db && !d.network_db.ready
+          ? ' Network owner names need the free ASN database: '
+            + 'python scripts/fetch_geoip.py --asn' : '');
+  }
   const box = document.getElementById('map-caveats');
   if (box) box.innerHTML = extra.length
     ? extra.map(t => `<div style="margin-top:6px">${t}</div>`).join('')
@@ -5550,9 +5658,10 @@ async function loadThreatMap() {
     `${eps.length} external endpoint(s)`
     + (cap && cap.blind
         ? ` · capture is blind, so this is NOT this session`
-        : ` · ${d.pairs_read} conversations this session`)
+        : ` · this machine: ${d.pairs_read} conversations, ${d.this_machine_covers || 'this session'}`)
     + (d.without_geo ? ` · ${d.without_geo} not in geo database` : '')
     + (nh.length ? ` · ${nh.length} not a host, listed below` : '')
+    + (d.computed_at ? ` · updated ${fmtTime(d.computed_at)}` : '')
     + (home ? ` · centre: ${home.label}`
             : ' · this machine could not be placed (no public address and no timezone place), so no arcs');
 }
@@ -5599,6 +5708,330 @@ function fmtBytes(n) {
   const u = ['B','KB','MB','GB'];
   const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
   return (n / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+
+// THREAT MAP SIDE PANEL. One address: who reached it, its alerts, actions.
+
+let mapPanelIp = null;
+
+function closeMapPanel() {
+  const panel = document.getElementById('map-panel');
+  if (panel) panel.hidden = true;
+  mapPanelIp = null;
+}
+
+async function openMapPanel(ip) {
+  const panel = document.getElementById('map-panel');
+  const body  = document.getElementById('map-panel-body');
+  if (!panel || !body) return;
+  mapPanelIp = ip;
+  panel.hidden = false;
+  body.innerHTML = '<div class="mp-sub">Loading ' + esc(ip) + '...</div>';
+  let p;
+  try {
+    const r = await fetch('/api/map/point?ip=' + encodeURIComponent(ip),
+                          { headers: authHeaders() });
+    p = await r.json();
+    if (!r.ok) throw new Error(p.error || ('status ' + r.status));
+  } catch (e) {
+    if (mapPanelIp === ip)
+      body.innerHTML = '<div class="mp-sub">Could not load this point: '
+                     + esc(e.message) + '</div>';
+    return;
+  }
+  if (mapPanelIp === ip) body.innerHTML = renderMapPanel(p);
+}
+
+// Is this destination's country usual for one program or device?
+function _usualNote(p, key) {
+  const rows = (p.usual_places || {})[key] || [];
+  if (!rows.length) return '<span class="mp-sub">Still learning where it usually goes.</span>';
+  const hit = rows.find(r => r.place_type === 'country' && r.place === p.country_code);
+  if (!hit) return '<span class="mp-new">Not a country it usually reaches.</span>';
+  return '<span class="mp-sub">Usually reaches this country, first seen '
+       + esc(String(hit.first_seen || '').slice(0, 10)) + '.</span>';
+}
+
+function renderMapPanel(p) {
+  const a = p.actions || {};
+  const ip = p.ip;
+  const routerOff = esc(a.router_note || 'Needs the OpenWrt router agent.');
+  let h = '<h3>' + esc(ip) + '</h3>'
+        + '<div class="mp-sub">' + esc(p.place) + '</div>'
+        + (p.network ? '<div class="mp-sub">Network: ' + esc(p.network.asn + ' '
+                       + (p.network.org || '')) + '</div>'
+                     : '<div class="mp-sub">Network owner unknown'
+                       + (p.network_status && !p.network_status.ready
+                          ? ' (no ASN database installed)' : '') + '.</div>');
+
+  h += '<div class="mp-btns">'
+     + '<button class="mp-btn chat" onclick="openMapChat(\'' + escJs(ip) + '\')">Chat about this</button>'
+     + '<button class="mp-btn" onclick="mapBlock(\'' + escJs(ip) + '\', true)" title="'
+     + (a.block_address === 'router'
+         ? 'Blocks this address at the router, for every device in the home.'
+         : 'Blocks this address on this machine only. ' + routerOff) + '">'
+     + (a.block_address === 'router' ? 'Block for the whole home' : 'Block on this machine')
+     + '</button>'
+     + '<button class="mp-btn" onclick="mapBlock(\'' + escJs(ip) + '\', false)">Unblock</button>'
+     + '</div>';
+
+  const names = p.names || [];
+  h += '<h4>Names seen for it</h4>';
+  h += names.length ? names.map(n =>
+      '<div class="mp-row">' + esc(n)
+      + '<div class="mp-btns"><button class="mp-btn" '
+      + (a.block_domain ? '' : 'disabled title="' + routerOff + '" ')
+      + 'onclick="mapSinkhole(\'' + escJs(n) + '\', true)">Block this domain</button>'
+      + '<button class="mp-btn" '
+      + (a.block_domain ? '' : 'disabled title="' + routerOff + '" ')
+      + 'onclick="mapSinkhole(\'' + escJs(n) + '\', false)">Unblock</button></div></div>'
+    ).join('')
+    : '<div class="mp-sub">No name was seen for this address.</div>';
+
+  h += '<h4>Who reached it</h4>';
+  const procs = p.processes || [], devs = p.devices || [];
+  procs.forEach(x => {
+    h += '<div class="mp-row"><b>' + esc(x.name) + '</b> on this machine<div class="mp-sub">'
+       + x.packets.toLocaleString() + ' packets, ' + fmtBytes(x.bytes) + '</div>'
+       + _usualNote(p, x.name) + '</div>';
+  });
+  devs.forEach(x => {
+    const key = x.mac || x.ip;
+    h += '<div class="mp-row"><b>' + esc(x.name || 'Unnamed device') + '</b> ' + esc(x.ip)
+       + '<div class="mp-sub">sent ' + fmtBytes(x.bytes_out) + ', received '
+       + fmtBytes(x.bytes_in) + (x.ports && x.ports.length ? ', ports ' + esc(x.ports.join(', ')) : '')
+       + '</div>' + _usualNote(p, key)
+       + '<div class="mp-btns"><button class="mp-btn" '
+       + (a.cut_device ? '' : 'disabled title="' + routerOff + '" ')
+       + 'onclick="mapCutDevice(\'' + escJs(x.mac || '') + '\', \'' + escJs(x.ip) + '\', \''
+       + escJs(x.name || x.ip) + '\')">Cut off this device</button></div></div>';
+  });
+  if (!procs.length && !devs.length) {
+    h += '<div class="mp-sub">No program or device could be named for it. '
+       + 'Programs are named only while their connection is open.</div>';
+  }
+  if (p.router && !p.router.available) {
+    h += '<div class="mp-sub" style="margin-top:6px;">Other devices: '
+       + esc(p.router.reason || 'no router data') + '</div>';
+  }
+
+  h += '<h4>Alerts about it</h4>';
+  const fs = p.findings || [];
+  if (!p.findings_read) {
+    h += '<div class="mp-new">Alerts could not be read, so none are shown. That is not the same as none.</div>';
+  } else if (!fs.length) {
+    h += '<div class="mp-sub">No alerts are recorded about it.</div>';
+  } else {
+    h += fs.map(f => '<div class="mp-row"><span class="sev-badge sev-' + esc(f.severity || 'info')
+         + '">' + esc(f.severity || 'info') + '</span> '
+         + (f.detection_id ? '<code>' + esc(f.detection_id) + '</code> ' : '')
+         + esc(f.title || '') + '<div class="mp-sub">' + esc(fmtTime(f.found_at)) + '</div></div>'
+       ).join('');
+  }
+  return h;
+}
+
+async function _mapPost(url, body) {
+  try {
+    const r = await fetch(url, { method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify(body) });
+    const out = await r.json().catch(() => ({}));
+    return { ok: r.ok && out.success !== false, out };
+  } catch (e) {
+    return { ok: false, out: { error: 'The request never reached the app.' } };
+  }
+}
+
+async function mapBlock(ip, block) {
+  const reason = prompt((block ? 'Block ' : 'Unblock ') + ip + '. Why? A short note for the record.');
+  if (reason === null || !reason.trim()) return;
+  const { ok, out } = await _mapPost(block ? '/api/map/block' : '/api/map/unblock',
+                                     { ip, reason: reason.trim() });
+  alert(ok ? ((block ? 'Blocked, ' : 'Unblocked, ') + (out.where || '') + '.'
+              + (out.note ? ' ' + out.note : ''))
+           : ('Nothing changed. ' + (out.error || '')));
+  if (ok) openMapPanel(ip);
+}
+
+async function mapSinkhole(domain, block) {
+  const reason = prompt((block ? 'Block the domain ' : 'Unblock the domain ') + domain
+    + ' for every device that uses the router for lookups. Why?');
+  if (reason === null || !reason.trim()) return;
+  const { ok, out } = await _mapPost(block ? '/api/map/sinkhole' : '/api/map/unsinkhole',
+                                     { domain, reason: reason.trim() });
+  alert(ok ? (domain + (block ? ' is blocked at the router.' : ' is unblocked.'))
+           : ('Nothing changed. ' + (out.error || '')));
+}
+
+async function mapCutDevice(mac, ip, name) {
+  const reason = prompt('Cut ' + name + ' (' + ip + ') off from the internet at the router. '
+    + 'Undo it on the Live LAN tab. Why?');
+  if (reason === null || !reason.trim()) return;
+  const { ok, out } = await _mapPost('/api/lan/block', { mac, ip, reason: reason.trim() });
+  alert(ok ? (name + ' is cut off. Undo it on the Live LAN tab.')
+           : ('Nothing changed. ' + (out.error || '')));
+}
+
+// MAP CHAT. A small window you can drag anywhere and resize. Each destination
+// has its own conversation, separate from the Chat tab.
+
+const mapChats = {};
+let mapChatIp = null;
+let mapChatBusy = false;
+
+function _mapChatPosSave() {
+  const w = document.getElementById('map-chat');
+  try {
+    localStorage.setItem('mapChatPos', JSON.stringify({
+      left: w.offsetLeft, top: w.offsetTop, width: w.offsetWidth, height: w.offsetHeight }));
+  } catch (e) { /* storage unavailable, the window still works */ }
+}
+
+function _mapChatClamp() {
+  const w = document.getElementById('map-chat');
+  const maxL = Math.max(0, window.innerWidth - w.offsetWidth);
+  const maxT = Math.max(0, window.innerHeight - 40);
+  w.style.left = Math.min(Math.max(0, w.offsetLeft), maxL) + 'px';
+  w.style.top  = Math.min(Math.max(0, w.offsetTop), maxT) + 'px';
+}
+
+function _mapChatPlace() {
+  const w = document.getElementById('map-chat');
+  let pos = null;
+  try { pos = JSON.parse(localStorage.getItem('mapChatPos') || 'null'); } catch (e) { pos = null; }
+  if (pos && pos.width) { w.style.width = pos.width + 'px'; w.style.height = pos.height + 'px'; }
+  w.style.left = (pos ? pos.left : window.innerWidth - w.offsetWidth - 24) + 'px';
+  w.style.top  = (pos ? pos.top  : window.innerHeight - w.offsetHeight - 24) + 'px';
+  _mapChatClamp();
+}
+
+function _mapChatDragSetup() {
+  const w = document.getElementById('map-chat');
+  const head = document.getElementById('map-chat-head');
+  if (!w || !head || head.dataset.ready) return;
+  head.dataset.ready = '1';
+  let dx = 0, dy = 0, dragging = false;
+  head.addEventListener('pointerdown', ev => {
+    if (ev.target.closest('button')) return;
+    ev.preventDefault();
+    dragging = true;
+    dx = ev.clientX - w.offsetLeft;
+    dy = ev.clientY - w.offsetTop;
+    head.setPointerCapture(ev.pointerId);
+  });
+  head.addEventListener('pointermove', ev => {
+    if (!dragging) return;
+    w.style.left = (ev.clientX - dx) + 'px';
+    w.style.top  = (ev.clientY - dy) + 'px';
+    _mapChatClamp();
+  });
+  head.addEventListener('pointerup', ev => {
+    if (!dragging) return;
+    dragging = false;
+    head.releasePointerCapture(ev.pointerId);
+    _mapChatPosSave();
+  });
+  if (window.ResizeObserver) {
+    let t = null;
+    new ResizeObserver(() => { clearTimeout(t); t = setTimeout(_mapChatPosSave, 300); }).observe(w);
+  }
+  window.addEventListener('resize', () => { if (!w.hidden) _mapChatClamp(); });
+}
+
+function openMapChat(ip) {
+  const w = document.getElementById('map-chat');
+  const log = document.getElementById('map-chat-log');
+  if (mapChatBusy && mapChatIp !== ip) {
+    alert('Wait for the answer about ' + mapChatIp + ' to finish first.');
+    return;
+  }
+  _mapChatDragSetup();
+  if (mapChatIp && mapChatIp !== ip) mapChats[mapChatIp] = log.innerHTML;
+  mapChatIp = ip;
+  document.getElementById('map-chat-title').textContent = 'Chat about ' + ip;
+  log.innerHTML = mapChats[ip] || ('<div class="mc-msg mc-agent">Ask anything about '
+    + esc(ip) + '. The analyst is given what this app recorded about it. This '
+    + 'conversation is separate from the Chat tab.</div>');
+  w.classList.remove('min');
+  if (w.hidden) { w.hidden = false; _mapChatPlace(); }
+  document.getElementById('map-chat-input').focus();
+}
+
+function mapChatClose() {
+  const log = document.getElementById('map-chat-log');
+  if (mapChatIp) mapChats[mapChatIp] = log.innerHTML;
+  document.getElementById('map-chat').hidden = true;
+}
+
+function mapChatMin() {
+  document.getElementById('map-chat').classList.toggle('min');
+}
+
+function _mapChatAppend(cls, text) {
+  const log = document.getElementById('map-chat-log');
+  const div = document.createElement('div');
+  div.className = 'mc-msg ' + cls;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+async function mapChatSend() {
+  const input = document.getElementById('map-chat-input');
+  const send  = document.getElementById('map-chat-send');
+  const msg = input.value.trim();
+  if (!msg || mapChatBusy || !mapChatIp) return;
+  const ip = mapChatIp;
+  input.value = '';
+  _mapChatAppend('mc-user', msg);
+  const body = _mapChatAppend('mc-agent', '...');
+  const log = document.getElementById('map-chat-log');
+  mapChatBusy = true;
+  send.disabled = true;
+  let text = '';
+  try {
+    const resp = await fetch('/api/chat', { method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ message: msg, map_ip: ip }) });
+    if (!resp.ok) {
+      let detail = '';
+      try { const err = await resp.json(); detail = [err.error, err.detail].filter(Boolean).join('. '); }
+      catch (e) { detail = ''; }
+      body.textContent = detail || ('The app refused that with status ' + resp.status + '.');
+    } else {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      body.textContent = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of decoder.decode(value).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') break;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.token && parsed.token.includes('__PERMISSION_REQUIRED__')) {
+              const raw = parsed.token.match(/__PERMISSION_REQUIRED__(.*?)__END_PERMISSION__/s);
+              if (raw) { renderPermissionCard(body, JSON.parse(raw[1])); continue; }
+            }
+            if (parsed.token && parsed.token.includes('__CARD_WAITING__')) continue;
+            if (parsed.token) {
+              text += parsed.token;
+              body.textContent = text;
+              log.scrollTop = log.scrollHeight;
+            }
+          } catch (e) { /* a partial line, the next read completes it */ }
+        }
+      }
+    }
+  } catch (e) {
+    body.textContent = 'Connection error.';
+  }
+  mapChatBusy = false;
+  send.disabled = false;
+  mapChats[ip] = log.innerHTML;
 }
 
 // PORTS
@@ -7221,7 +7654,7 @@ const SOURCE_NAMES = {
   process_monitor: 'Running programs', local_integrity: 'File checks',
   registry_monitor: 'Startup items', ebpf_events: 'Kernel watch',
   port_owner: 'Open sockets', auditd: 'Audit log', av_scanner: 'Virus scan',
-  remediation: 'This app', port_scanner: 'Port scan',
+  remediation: 'This app', port_scanner: 'Port scan', place_watch: 'Place learning',
 };
 
 async function suppressDetection(did) {
@@ -9540,5 +9973,18 @@ function fmtTime(ts) {
 
 init();
 </script>
+<div id="map-chat" hidden role="dialog" aria-label="Chat about a destination">
+  <div id="map-chat-head" title="Drag to move. Drag the bottom right corner to resize.">
+    <span id="map-chat-title">Chat</span>
+    <button onclick="mapChatMin()" title="Minimise">&minus;</button>
+    <button onclick="mapChatClose()" title="Close">&times;</button>
+  </div>
+  <div id="map-chat-log"></div>
+  <form id="map-chat-form" onsubmit="mapChatSend(); return false;">
+    <textarea id="map-chat-input" placeholder="Ask about this destination"
+      onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); mapChatSend(); }"></textarea>
+    <button class="mp-btn chat" id="map-chat-send" type="submit">Send</button>
+  </form>
+</div>
 </body>
 </html>

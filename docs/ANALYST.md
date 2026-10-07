@@ -132,6 +132,17 @@ exactly as in the chat. Every change still goes through you. Its reports,
 and every wake-up including the ones that found nothing to do, are on the
 Agents tab. Set `duty_loop.enabled` to `false` to turn it off.
 
+Every wake-up also carries a few lines about the Threat Map instead of the
+whole map: new countries and networks reached since the last wake-up, how many
+addresses could not be placed, the biggest destinations and who reached them,
+and every destination with an alert. The analyst can ask for the same summary
+with `query_map_summary`, and for the full map with `query_threat_map`.
+
+**Chat from the map.** On the Threat Map, Chat about this opens a small window
+for one address. The analyst starts with what the app recorded about that
+address, marked as data rather than instructions, and the conversation is kept
+apart from the Chat tab.
+
 ## How it keeps itself honest
 
 - **It says what it could not see.** Every answer names the sensors that were

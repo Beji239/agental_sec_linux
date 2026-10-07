@@ -693,19 +693,35 @@ def model_status() -> dict:
 _chat_lock = threading.Lock()
 
 
-async def run(user_message: str) -> AsyncGenerator[str, None]:
+# Side conversations, such as a chat opened from one Threat Map point. Each
+# keeps its own history; the main chat's history is swapped out for the turn,
+# which is safe because the chat lock allows one turn at a time.
+_threads: dict[str, list] = {}
+MAX_THREADS = 20
+
+
+def thread_exists(thread: str) -> bool:
+    return bool(_threads.get(thread))
+
+
+async def run(user_message: str, thread: str = None) -> AsyncGenerator[str, None]:
     """
     Main agent loop. Streams response tokens.
     Model can chain up to MAX_TOOL_ROUNDS tool calls before responding.
 
     This wrapper only holds the chat lock (LOOP-10), the turn itself is
-    _run_turn below.
+    _run_turn below. thread names a side conversation with its own history.
     """
+    global _history
     if not _chat_lock.acquire(blocking=False):
         yield ("[Another chat turn is already running, in this tab or another "
                "one. This message was not sent to the model. Send it again "
                "when that answer has finished.]")
         return
+    saved = None
+    if thread:
+        saved = _history
+        _history = _threads.pop(thread, [])
     inner = _run_turn(user_message)
     try:
         async for token in inner:
@@ -714,6 +730,11 @@ async def run(user_message: str) -> AsyncGenerator[str, None]:
         try:
             await inner.aclose()
         finally:
+            if thread:
+                _threads[thread] = _history
+                while len(_threads) > MAX_THREADS:
+                    _threads.pop(next(iter(_threads)))
+                _history = saved
             _chat_lock.release()
 
 

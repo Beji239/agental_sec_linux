@@ -111,11 +111,49 @@ block a destination for the whole network. Both ask for approval. See
   <img src="../assets/screenshots/threat_map.png" alt="Threat map" width="800">
 </p>
 
-Where this machine's connections go. Each circle is an external endpoint,
-and the legend says how many carry findings. The white pin is home, placed from
-your public address or, when that is off or contradicts your timezone, from
-the timezone. The map and its database are local, the page loads nothing from
-the internet. Locations are approximate, see the limitations in the README.
+*The map with the panel open for one address: where it is, the network that
+owns it, the names seen for it, the device that reached it and whether that
+country is usual for it, its alerts, and the actions. Sample data.*
+
+Where your home's connections go. Each circle is an external address, and
+its colour comes from the alerts recorded about it, never from the country.
+The white pin is home, placed from your public address or, when that is off
+or contradicts your timezone, from the timezone. The map and its database are
+local, the page loads nothing from the internet. Locations are approximate,
+see the limitations in the README.
+
+**Whole home or this machine.** The map covers the last 24 hours, and a
+restart does not empty it. This machine's own traffic is always on it, with
+the program behind each connection. With the router agent, the other devices
+in your home are added too, each line named by device. Without a router agent the map still shows every
+destination this machine reached, and says the rest of the home is not
+covered. The menu above the map shows the whole home, this machine only, the
+other devices only, or only the places with an alert.
+
+**Click a point** to open its panel: where it is, the network company that
+owns it (with the optional ASN database, `scripts/fetch_geoip.py --asn`), the
+names seen for it, which programs and devices reached it, whether that is a
+place each of them usually goes, and every alert about it. The panel offers:
+
+- **Block** the address: at the router for every device when the router
+  agent is there, otherwise on this machine only.
+- **Cut off** a device that reached it, at the router.
+- **Block a domain** seen for it, at the router's resolver.
+- **Chat about this**, which opens a small chat window you can drag anywhere
+  on the screen and resize from its corner. The analyst is given what the app
+  recorded about that address, and each address keeps its own conversation,
+  separate from the Chat tab. Approval cards work there as in the Chat tab.
+
+Router actions are greyed out without the router agent, and hovering says
+why. Every action asks for a reason and is recorded.
+
+<p align="center">
+  <img src="../assets/screenshots/threat_map_chat.png" alt="Threat map chat window beside the panel for one address" width="800">
+</p>
+
+*Chat about this, dragged next to the panel. The panel shows a GEO-1001
+alert: a program reached a country it does not usually reach. The analyst
+starts from what the app recorded about this address. Sample data.*
 
 ## Ports
 
@@ -180,11 +218,39 @@ most of the window. The hit rate counts only right and wrong.
   <img src="../assets/screenshots/detections.png" alt="Detections" width="800">
 </p>
 
-Every rule that can raise a finding, with its id, what fires it, the sensor
-that runs it, its severity, how often it has fired and a link to silence it.
-A quiet alert list has three possible causes: nothing happened, no rule here
-would have caught it, or a rule is silenced. This tab tells them apart. Ids are
-never reused, so an old finding always points at the rule that raised it.
+*The guide at the top, then each rule in plain words, with the exact
+condition opened under Technical detail on the first row and a Mute button
+on every rule. Sample data.*
+
+Everything the app knows how to spot. Each row is a rule, not an alert: when
+what the rule watches for happens, it raises an alert on the Alerts tab and its
+count here goes up.
+
+How to read a row:
+
+- **Rule** is its permanent name. The letters say which part of the app raises
+  it (PKT network traffic, LAN devices on your network, DNS name lookups, FED
+  public threat lists, GEO new countries and networks, LNX this machine, AUD
+  the audit log, AV the virus scanner, NET and PRB device checks, RTR the
+  router, PRC running programs, REM records of what the app did). Names are
+  never reused, so an old alert always points at the rule that raised it.
+- **Version** goes up when the rule's logic changes. Each alert remembers the
+  version that raised it.
+- **What it watches for** says it in plain words. **Technical detail** opens
+  the exact condition.
+- **Watched by**, **Severity** and **Times fired** say which part of the app
+  runs it, how serious its alerts can be, and how many it has raised (open
+  ones in brackets).
+- **Muted** says whether you switched it off. **Mute** stops one rule for one
+  address or for every address, with a reason you write; **Unmute** brings it
+  back. Nothing is deleted.
+
+When the Alerts tab is quiet, it means one of three things: nothing happened,
+no rule here covers it, or the rule that covers it is muted. This tab tells
+them apart. The analyst reads the same list and can see what you muted, but
+only you can mute. Rows marked Record are a trail of what the app did, such as
+blocking a device, and cannot be muted. Hover any column heading for its
+meaning.
 
 ## Questions
 

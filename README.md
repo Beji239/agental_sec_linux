@@ -109,12 +109,14 @@ addresses, domains, CVEs and file hashes in public sources.
 
 **What normal looks like.** Every address, process, port and user is watched
 across sessions, and behaviour far outside its own normal becomes a
-deviation.
+deviation. Each program and each device also learns the countries and
+networks it normally reaches, and after a three day learning period a first
+contact with a new one becomes an alert.
 
 Every sensor, in detail: [docs/SENSORS.md](docs/SENSORS.md).
 
 <p align="center">
-  <img src="assets/screenshots/threat_map.png" alt="The threat map, with this machine's outbound connections" width="800">
+  <img src="assets/screenshots/threat_map.png" alt="The threat map, with the panel for one address: who reached it, its alerts and actions" width="800">
 </p>
 
 ## The AI analyst
@@ -251,6 +253,11 @@ record. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 - Root or `CAP_NET_RAW` for packet capture, given by the privileged launcher.
 - For the analyst: an account with a model provider, or a local
   OpenAI-compatible server. Everything else runs without one.
+- Python packages from `requirements.txt` (maxminddb reads the map data).
+- Free data files, fetched once by the scripts below: DB-IP IP to City Lite
+  for the threat map, DB-IP IP to ASN Lite for network owner names and
+  network baselines (both CC BY 4.0, attribution shown on the map), and the
+  IEEE registry for hardware vendor names.
 
 ## Quick start
 
@@ -277,6 +284,7 @@ Then fetch the map and vendor data, and check the install:
 
 ```bash
 python3 scripts/fetch_geoip.py
+python3 scripts/fetch_geoip.py --asn
 python3 scripts/update_oui.py
 python3 main.py --check
 ```

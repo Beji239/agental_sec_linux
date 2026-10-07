@@ -1006,6 +1006,7 @@ DUTY_TOOL_ALLOWLIST = (
     "query_suppressed_baselines", "query_prediction_score", "query_predictions",
     # outside knowledge
     "lookup_ip", "query_enrichment", "geolocate_ip", "query_threat_map",
+    "query_map_summary",
     "query_runbook", "query_performance",
     # the two writes the loop is allowed, both of which only touch our records
     "file_action_request", "write_prediction",
@@ -1705,6 +1706,34 @@ def build_host_survey_block(session_id: str, modules: dict = None,
     return "\n".join(lines)
 
 
+def _last_wake() -> str | None:
+    """When the loop last called the model, as stored, or None."""
+    try:
+        with me._get_readonly_conn() as conn:
+            if not _table_ready(conn, "duty_run"):
+                return None
+            row = conn.execute("SELECT MAX(ran_at) FROM duty_run "
+                               "WHERE model_calls > 0").fetchone()
+        return row[0] if row else None
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+def build_map_block(session_id: str) -> str:
+    """The Threat Map in a few lines. NEVER RAISES."""
+    try:
+        from core import place_map
+        last = _last_wake()
+        since = None
+        if last:
+            dt = _parse_ts(last)
+            since = (dt.strftime("%Y-%m-%dT%H:%M:%S+00:00") if dt else None)
+        return place_map.digest(since=since, session_id=session_id)
+    except Exception as e:                                   # noqa: BLE001
+        return (f"THREAT MAP SUMMARY: could not be built ({type(e).__name__}: "
+                f"{e}). Say so rather than describing the traffic as quiet.")
+
+
 def _coverage_block(coverage: dict) -> str:
     note = (coverage or {}).get("note") or "unknown"
     if (coverage or {}).get("complete") is True:
@@ -2207,6 +2236,9 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
         _survey_subject = {r.get("entity_value") for r in rows}
     host_block = build_host_survey_block(session_id, modules,
                                          subject_values=_survey_subject)
+    # The map summary rides with the host survey, so every wake prompt has it.
+    map_block = build_map_block(session_id)
+    host_block = "\n\n".join(b for b in (host_block, map_block) if b)
 
     # 5. build the prompt and call the model.
     if kind == "emergency":

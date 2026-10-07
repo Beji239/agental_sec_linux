@@ -75,6 +75,7 @@ You can also set both later on the dashboard's Settings tab.
 
 ```bash
 python3 scripts/fetch_geoip.py     # threat map database
+python3 scripts/fetch_geoip.py --asn   # optional, network owner names on the map
 python3 scripts/update_oui.py      # device vendor names
 ```
 
@@ -216,6 +217,7 @@ python3 scripts/run_tests.py
 
 ```bash
 python3 scripts/fetch_geoip.py                                       # refresh map data
+python3 scripts/fetch_geoip.py --asn                                 # refresh network owners
 python3 scripts/update_oui.py                                        # refresh vendor names
 python3 scripts/prune_db.py --status                                 # database size
 pip install --user --break-system-packages --upgrade -r requirements.txt

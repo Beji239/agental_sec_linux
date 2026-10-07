@@ -2950,9 +2950,36 @@ TOOL_MANIFEST = [
     },
 
     {
+        "name": "query_map_summary",
+        "description": (
+            "A short summary of the Threat Map, a few lines instead of the "
+            "full endpoint list: new countries and networks reached by any "
+            "program or device since a time, how many endpoints could not be "
+            "placed, the biggest endpoints by data and who reached them, and "
+            "every endpoint with an alert. Use it first; call "
+            "query_threat_map when you need the full list. Also returns the "
+            "place baselines (what each program and device normally reaches) "
+            "when a subject is given."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "since": {"type": "string",
+                          "description": "ISO time; new places since then. "
+                                         "Default the last 24 hours."},
+                "subject": {"type": "string",
+                            "description": "A program name or a device IP "
+                                           "or hardware address, to list the "
+                                           "places it normally reaches."},
+            }
+        }
+    },
+
+    {
         "name": "query_threat_map",
         "description": (
-            "Every external endpoint this session's traffic reached, geolocated, with "
+            "Every external endpoint the home's traffic reached over the last day "
+            "(this_machine_covers says the period), geolocated, with "
             "the packets, ports, protocols and any finding attached to each. This is "
             "the data behind the dashboard's Threat Map tab, so 'check the threat map' "
             "means calling this.\n\n"
@@ -2979,6 +3006,12 @@ TOOL_MANIFEST = [
             "address is not a machine anywhere and its geolocation is meaningless. "
             "Those are returned under 'not_a_host', separately from 'endpoints', with "
             "the rule id and the reason. Never give a country for one of them."
+            "\n\nWHO REACHED IT. Each endpoint carries 'who': the programs on this "
+            "machine and the devices on the network that reached it, and 'via' "
+            "says which source saw it (this_machine, router). Devices come from "
+            "the router agent's connection log; 'router.available' false means "
+            "only this machine is covered, so say so before describing the "
+            "whole home. For a short overview, query_map_summary is cheaper."
             "\n\ncomplete, endpoints_complete and unlocated_complete say whether the two lists are whole. returned against total_located is the endpoint side. The COUNTS are exact even when the lists beside them are cut."
         ),
         "input_schema": {
@@ -5229,6 +5262,20 @@ def _geolocate_ip(params: dict) -> dict:
     }
 
 
+def _compact_who(e: dict) -> dict:
+    """Programs and devices behind an endpoint, names only, to stay small."""
+    from core import place_map
+    w = place_map.who(e, limit=3)
+    out = {"via": w["sources"]}
+    if w["processes"]:
+        out["programs"] = [p["name"] for p in w["processes"]]
+    if w["devices"]:
+        out["devices"] = [d["name"] or d["ip"] for d in w["devices"]]
+    if w["names"]:
+        out["names"] = w["names"][:3]
+    return out
+
+
 def _query_threat_map(params: dict) -> dict:
     """
     The same view the dashboard's Threat Map draws: every external endpoint
@@ -5249,73 +5296,12 @@ def _query_threat_map(params: dict) -> dict:
 
     country_filter = (params.get("country_code") or "").strip().upper() or None
 
-    pairs = me.query_endpoint_pairs(session_id=_session_id)
+    from core import place_map
+    g = place_map.gather(session_id=_session_id)
+    flagged, severity_error = g["flagged"], g["severity_error"]
+    endpoints, not_hosts = g["endpoints"], g["not_hosts"]
 
     RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-
-    # WORST SEVERITY PER ADDRESS, FROM AN AGGREGATE. TODO 98, 2026-09-14.
-    #
-    # This was query_findings(entity_type="ip", limit=500) with the dictionary
-    # built here. A capped read feeding a colour, and past the cap the colour
-    # was "ordinary traffic". See memory_engine.worst_finding_by_entity.
-    #
-    # A failed read is NOT an empty one. Empty says nothing is flagged, which
-    # is a claim, and this could not look.
-    #
-    # 2026-09-23: the aggregate that also carries the RAISING RULE, so this
-    # side can tell an address that is a host from one a rule says is not.
-    # See the not_hosts block below.
-    severity_error = None
-    try:
-        flagged = me.worst_finding_by_entity_with_rule("ip", session_id=_session_id)
-    except Exception as e:
-        flagged = {}
-        severity_error = str(e)
-
-    def _split(v):
-        return {x for x in (v or "").split(",") if x}
-
-    endpoints = {}
-    local_peers = set()
-    not_hosts = {}
-
-    for p in pairs:
-        src, dst = p.get("src_ip"), p.get("dst_ip")
-        for near, far in ((src, dst), (dst, src)):
-            if not far or not geoip.is_routable(far):
-                continue
-            hit = flagged.get(far)
-            if hit and hit.get("entity_is_not_a_host"):
-                n = not_hosts.setdefault(far, {
-                    "ip": far, "packets": 0, "bytes": 0,
-                    "reason": hit.get("title") or "",
-                    "detection_id": hit.get("detection_id"),
-                    "severity": hit.get("severity"),
-                    "note": (
-                        "The address in this finding is the sender's own "
-                        "malformed header, not a host. It is not plotted and "
-                        "not placeable: where it geolocates is not a fact "
-                        "about anything that talked to this machine."
-                    ),
-                })
-                n["packets"] += p.get("packets") or 0
-                n["bytes"]   += p.get("bytes") or 0
-                break
-            if near and not geoip.is_routable(near) \
-                    and geoip.is_host_address(near):
-                local_peers.add(near)
-            e = endpoints.setdefault(far, {
-                "packets": 0, "bytes": 0, "ports": set(),
-                "protocols": set(), "threat_labels": set(), "peers": set(),
-            })
-            e["packets"] += p.get("packets") or 0
-            e["bytes"]   += p.get("bytes") or 0
-            e["ports"]         |= _split(p.get("ports"))
-            e["protocols"]     |= _split(p.get("protocols"))
-            e["threat_labels"] |= _split(p.get("threat_labels"))
-            if near:
-                e["peers"].add(near)
-            break
 
     st = geoip.status()
     out, no_geo = [], []
@@ -5331,6 +5317,7 @@ def _query_threat_map(params: dict) -> dict:
             "protocols":     sorted(e["protocols"]),
             "threat_labels": sorted(e["threat_labels"]),
             "local_peers":   sorted(e["peers"]),
+            "who":           _compact_who(e),
             # "none" AND NOT null, 2026-09-23. The tool's own description
             # defines the two states for the model in words -- "an endpoint with
             # severity null has nothing recorded against it and is ordinary
@@ -5392,6 +5379,8 @@ def _query_threat_map(params: dict) -> dict:
         # read can fail on its own. When it does, every row's severity is
         # "unknown" -- deliberately not the "none" that means nothing is
         # recorded -- so the map says which it was.
+        "router": g["router"],
+        "this_machine_covers": g.get("this_machine_covers"),
         "severity_read": severity_error is None,
         **({"severity_read_error": severity_error} if severity_error else {}),
         # Reported, never dropped. An endpoint the database cannot place is
@@ -7284,6 +7273,15 @@ def _dispatch(name: str, params: dict):
 
     if name == "geolocate_ip":
         return _geolocate_ip(params)
+
+    if name == "query_map_summary":
+        from core import place_map
+        out = {"summary": place_map.digest(since=params.get("since"),
+                                           session_id=_session_id)}
+        if params.get("subject"):
+            from tools import place_watch
+            out["places"] = place_watch.places_for(params["subject"])
+        return out
 
     if name == "query_threat_map":
         return _query_threat_map(params)

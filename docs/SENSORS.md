@@ -117,6 +117,21 @@ use none are outside what it checks.
 
 - Config: `vpn.interface_patterns` for tunnel names it does not know.
 
+### Place learning
+
+Learns which countries and networks each program on this machine and each
+device on the network normally reaches. After a learning period, a first
+contact with a new country raises GEO-1001 (medium when nothing in the home
+had reached that country before) and a new network raises GEO-1002. A new
+place is a prompt to look, not a verdict: cloud and CDN addresses move.
+
+- Needs: the geolocation database. Networks also need the optional ASN
+  database (`scripts/fetch_geoip.py --asn`); without it only countries are
+  learned. Devices need the router agent; without it only this machine's
+  programs are learned.
+- Config: `place_watch` (`learn_hours`, by default 72, `interval_seconds`,
+  `max_alerts_per_pass`).
+
 ## Host sensors
 
 ### Process monitor

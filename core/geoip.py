@@ -14,6 +14,7 @@
 # Everything here degrades to None when the database is absent. The map is
 # a nice-to-have; nothing in the detection path may depend on it.
 
+import functools
 import ipaddress
 import logging
 import os
@@ -80,7 +81,62 @@ def init_geoip(config: dict, project_root: Path) -> dict:
         _status = f"could not open database: {e}"
         logger.warning(f"GeoIP: {_status}")
 
+    _init_asn(cfg, project_root)
     return status()
+
+
+# Optional network owner database (ASN). Without it the map and the place
+# baselines work on countries only and say so.
+_asn_reader = None
+_asn_status = "not configured"
+_asn_cache: dict = {}
+ASN_DEFAULT_PATH = "geoip/dbip-asn-lite.mmdb"
+
+
+def _init_asn(cfg: dict, project_root: Path) -> None:
+    global _asn_reader, _asn_status
+    raw = (cfg.get("asn_db_path") or ASN_DEFAULT_PATH).strip()
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path(project_root) / path
+    if not path.exists():
+        _asn_status = ("no network owner database, run: python "
+                       "scripts/fetch_geoip.py --asn")
+        return
+    try:
+        import maxminddb
+        _asn_reader = maxminddb.open_database(str(path))
+        _asn_status = "ready"
+        logger.info(f"GeoIP network owners ready: {path.name}")
+    except Exception as e:
+        _asn_reader = None
+        _asn_status = f"could not open the network owner database: {e}"
+        logger.warning(f"GeoIP: {_asn_status}")
+
+
+def asn_status() -> dict:
+    return {"ready": _asn_reader is not None, "status": _asn_status}
+
+
+def asn_lookup(ip: str) -> dict | None:
+    """{"asn": "AS15169", "org": "Google LLC"}, or None when unknown."""
+    if not _asn_reader or not is_routable(ip):
+        return None
+    if ip in _asn_cache:
+        return _asn_cache[ip]
+    try:
+        rec = _asn_reader.get(ip)
+    except Exception:
+        rec = None
+    out = None
+    if rec:
+        num = rec.get("autonomous_system_number")
+        if num:
+            out = {"asn": f"AS{num}",
+                   "org": rec.get("autonomous_system_organization") or ""}
+    if len(_asn_cache) < MAX_CACHE:
+        _asn_cache[ip] = out
+    return out
 
 
 # A database older than this is reported stale; DB-IP publishes monthly.
@@ -119,6 +175,7 @@ def status() -> dict:
     return out
 
 
+@functools.lru_cache(maxsize=65536)
 def is_routable(ip: str) -> bool:
     """
     Can this address plausibly appear on the public internet?
@@ -146,6 +203,7 @@ def is_routable(ip: str) -> bool:
                 or addr.is_multicast or addr.is_reserved or addr.is_unspecified)
 
 
+@functools.lru_cache(maxsize=65536)
 def is_host_address(ip: str) -> bool:
     """
     Could a HOST have this address, as opposed to a group or a placeholder?

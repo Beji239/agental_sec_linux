@@ -138,7 +138,11 @@ logger = logging.getLogger(__name__)
 # finished connection. Payloads are never stored.
 # v58: autorun_baseline. v59, 2026-10-06: known_devices.merge_carried, what a
 # merge moved to the target, so unmerge can give it back.
-SCHEMA_VERSION = 59
+# v60, 2026-10-07: place_baseline and place_cursor, the countries and networks
+# each program and device normally reaches (Threat Map place learning).
+# v61: place_traffic, an hourly tally of where this machine's traffic went, so
+# the Threat Map covers the last day without scanning the packets table.
+SCHEMA_VERSION = 61
 
 
 # HELPERS
@@ -4124,6 +4128,61 @@ def _migrate_autorun_baseline(conn) -> int:
     return added
 
 
+PLACE_DDL = (
+    """CREATE TABLE IF NOT EXISTS place_baseline (
+    subject_type  TEXT NOT NULL,
+    subject       TEXT NOT NULL,
+    place_type    TEXT NOT NULL,
+    place         TEXT NOT NULL,
+    place_label   TEXT,
+    example_ip    TEXT,
+    hits          INTEGER NOT NULL DEFAULT 1,
+    first_seen    TEXT NOT NULL,
+    last_seen     TEXT NOT NULL,
+    PRIMARY KEY (subject_type, subject, place_type, place)
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_place_first ON place_baseline(first_seen)",
+    "CREATE INDEX IF NOT EXISTS idx_place_where ON place_baseline(place_type, place)",
+    """CREATE TABLE IF NOT EXISTS place_cursor (
+    source   TEXT PRIMARY KEY,
+    last_id  INTEGER NOT NULL DEFAULT 0
+)""",
+)
+
+
+def _migrate_place_baseline(conn) -> int:
+    """v60: place learning for the Threat Map. Idempotent."""
+    added = 0 if _table_exists(conn, "place_baseline") else 1
+    for ddl in PLACE_DDL:
+        conn.execute(ddl)
+    return added
+
+
+PLACE_TRAFFIC_DDL = (
+    """CREATE TABLE IF NOT EXISTS place_traffic (
+    hour           TEXT NOT NULL,
+    remote_ip      TEXT NOT NULL,
+    local_ip       TEXT NOT NULL DEFAULT '',
+    process        TEXT NOT NULL DEFAULT '',
+    packets        INTEGER NOT NULL DEFAULT 0,
+    bytes          INTEGER NOT NULL DEFAULT 0,
+    ports          TEXT,
+    protocols      TEXT,
+    threat_labels  TEXT,
+    PRIMARY KEY (hour, remote_ip, local_ip, process)
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_place_traffic_ip ON place_traffic(remote_ip, hour)",
+)
+
+
+def _migrate_place_traffic(conn) -> int:
+    """v61: the hourly destination tally behind the Threat Map. Idempotent."""
+    added = 0 if _table_exists(conn, "place_traffic") else 1
+    for ddl in PLACE_TRAFFIC_DDL:
+        conn.execute(ddl)
+    return added
+
+
 def _migrate_merge_carried(conn) -> int:
     """v59: known_devices.merge_carried, the flags and labels a merge moved."""
     if "merge_carried" in _columns(conn, "known_devices"):
@@ -4239,6 +4298,8 @@ def run_migrations(db_path: Path = None) -> dict:
         lan_traffic_added      = _migrate_lan_traffic(conn)
         autorun_baseline_added = _migrate_autorun_baseline(conn)
         merge_carried_added    = _migrate_merge_carried(conn)
+        place_baseline_added   = _migrate_place_baseline(conn)
+        place_traffic_added    = _migrate_place_traffic(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4253,6 +4314,8 @@ def run_migrations(db_path: Path = None) -> dict:
             "quic_dns_added":      quic_dns_added,
             "autorun_baseline_added": autorun_baseline_added,
             "merge_carried_added": merge_carried_added,
+            "place_baseline_added": place_baseline_added,
+            "place_traffic_added": place_traffic_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,

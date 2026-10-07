@@ -328,6 +328,8 @@ DEPENDS: dict[str, tuple] = {
     # weeks. detection_overview reports that count separately and says so in
     # words, because "0" and "0 that I can attribute" are different sentences.
     "query_detections":           (),
+    # The map summary reads stored traffic; its blindness is in the text.
+    "query_map_summary":          (),
 
     # the case memory, v43.
     #
