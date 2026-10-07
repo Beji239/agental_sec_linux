@@ -625,7 +625,14 @@ def _kill_pinned(proc, pid, fd, send, ident, force, include_children) -> dict:
         except psutil.Error:
             pass
 
-    out = _kill_parent(proc, pid, fd, send, ident, force)
+    # A parent that only waited on its children exits by itself once they are
+    # gone; that is the tree ended, not a failure to signal it.
+    parent_gone, _ = _confirm_gone(proc, 0.5)
+    if parent_gone:
+        out = {"success": True, "pid": pid, "status": "gone",
+               "note": "the parent exited on its own once its children ended"}
+    else:
+        out = _kill_parent(proc, pid, fd, send, ident, force)
     out["children"] = tree
     if tree["survived"] or tree["refused"]:
         out["children_note"] = (
