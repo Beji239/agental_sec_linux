@@ -227,6 +227,11 @@ check("it counts what happened instead of counting rows",
       "let ok = 0, failed = 0;" in dismiss_all, True)
 check("and it says so when nothing was dismissed",
       "Nothing was dismissed" in dismiss_all, True)
+# The mute button sits first in a row with a rule id and has no entity.
+check("dismissAll picks the dismiss button, not the mute button",
+      ".btn-dismiss[data-type]" in dismiss_all, True)
+check("and only reads rows from the Active Findings list",
+      "'#findings-list .finding-row'" in dismiss_all, True)
 
 find_fn = UI.split("async function dismissFinding(")[1].split(
     "\n// ")[0] if "async function dismissFinding(" in UI else ""

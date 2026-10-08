@@ -4081,10 +4081,12 @@ async function dismissFinding(type, value, btn) {
 // the whole page, and the count is more useful shown in place than in an
 // alert box that says nothing about what happens next.
 let dismissAllArmed = false;
+let dismissAllTimer = null;
 
 async function dismissAll() {
   const btn  = document.querySelector('button[onclick="dismissAll()"]');
-  const rows = document.querySelectorAll('.finding-row');
+  // Only the Active Findings list; other cards and tabs use .finding-row too.
+  const rows = document.querySelectorAll('#findings-list .finding-row');
 
   if (!rows.length) {
     if (btn) btn.textContent = 'Nothing to dismiss';
@@ -4097,13 +4099,15 @@ async function dismissAll() {
     if (btn) btn.textContent = `Silence ${rows.length} permanently. Click again`;
     // Disarm on its own, so an armed button never sits waiting for a stray
     // click minutes later.
-    setTimeout(() => {
+    dismissAllTimer = setTimeout(() => {
       dismissAllArmed = false;
       if (btn) btn.textContent = 'Dismiss All';
     }, 5000);
     return;
   }
 
+  // The disarm timer would otherwise reset the label in the middle of the run.
+  clearTimeout(dismissAllTimer);
   dismissAllArmed = false;
   if (btn) btn.textContent = 'Dismissing...';
 
@@ -4123,7 +4127,8 @@ async function dismissAll() {
   const targets = [];
   const seen = new Set();
   rows.forEach(function (row) {
-    const b = row.querySelector('.btn-dismiss');
+    // The mute button comes first in a row with a rule id and carries no entity.
+    const b = row.querySelector('.btn-dismiss[data-type]');
     if (!b) return;
     const t = b.getAttribute('data-type') || '';
     const v = b.getAttribute('data-value') || '';
