@@ -1069,7 +1069,7 @@ def register_routes(app):
             "not_hosts":      not_host_list,
             "not_hosts_count": len(not_host_list),
             "geoip":          geoip.status(),
-            "pairs_read":     len(pairs),
+            "pairs_read":     g["pairs_read"],
             "without_geo":    skipped_no_geo,
             # False means every dot on this map is uncoloured because the
             # severities could not be read, not because nothing is flagged.
