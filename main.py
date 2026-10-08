@@ -2005,6 +2005,14 @@ def main(argv=None):
     except Exception as e:
         logger.error(f"Could not read retention state at boot: {e}")
 
+    # Agent reports older than a week are deleted at boot, so a stopped app
+    # does not keep them past the window.
+    try:
+        from core import duty as _duty_reports
+        _duty_reports.expire_old_reports()
+    except Exception as e:
+        logger.error(f"Could not expire old agent reports at boot: {e}")
+
     # TODO 113.6, PORTED 2026-09-21. PAYLOAD RETENTION AT BOOT, and the reason
     # it is here as well as at shutdown is that a crash or a kill leaves no
     # shutdown at all, so old payload would sit there until the next clean

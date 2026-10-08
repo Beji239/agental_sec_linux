@@ -231,6 +231,9 @@ JOURNALLED = {
     # shortened it, which is the blinding shape this file exists to make
     # visible.
     "report_dismissed",
+    # The weekly delete of old agent reports, one entry per report, so the
+    # sealed-row check can tell it from somebody else's delete.
+    "agent_report_expired",
 }
 
 
@@ -922,6 +925,19 @@ def _trim_consistent(conn, table: str, row_ref) -> bool:
         return False
 
 
+def _expiry_journalled(conn, table: str, row_ref) -> bool:
+    """Did the app record deleting this row as an expiry (weekly report delete)?"""
+    if table != "duty_report":
+        return False
+    try:
+        return conn.execute(
+            "SELECT 1 FROM integrity_journal WHERE operation = "
+            "'agent_report_expired' AND table_name = ? AND row_ref = ? LIMIT 1",
+            (table, str(row_ref))).fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
 def verify_sealed_rows(db_path=None, max_entries: int = 10000) -> dict:
     """
     Re-derive every row witness and report what does not match.
@@ -974,9 +990,10 @@ def verify_sealed_rows(db_path=None, max_entries: int = 10000) -> dict:
                     f"SELECT * FROM {table} WHERE {spec['key']} = ?",
                     (e["row_ref"],)).fetchone()
                 if row is None:
-                    explained = (table == "session_log"
-                                 and _trim_consistent(conn, table,
-                                                      e["row_ref"]))
+                    expired = _expiry_journalled(conn, table, e["row_ref"])
+                    explained = expired or (
+                        table == "session_log"
+                        and _trim_consistent(conn, table, e["row_ref"]))
                     if explained:
                         # THE APP DID THIS. The 500-per-session trigger
                         # deleted the row, which is housekeeping and not
@@ -996,8 +1013,12 @@ def verify_sealed_rows(db_path=None, max_entries: int = 10000) -> dict:
                             "journal_id": e["id"], "sealed_at": e["recorded_at"],
                             "detail": (f"{table} row {e['row_ref']} was sealed "
                                        f"at {e['recorded_at']} and is gone. "
-                                       f"Its absence is consistent with this "
-                                       f"app's own 500-per-session trim."),
+                                       + ("The app deleted it after the "
+                                          "one-week keep window, and the "
+                                          "journal records that."
+                                          if expired else
+                                          "Its absence is consistent with this "
+                                          "app's own 500-per-session trim.")),
                         })
                         continue
                     by_table[table]["deleted"] += 1
@@ -1017,7 +1038,8 @@ def verify_sealed_rows(db_path=None, max_entries: int = 10000) -> dict:
                             f"{table} row {e['row_ref']} was sealed at "
                             f"{e['recorded_at']} and is NOT in the table. "
                             f"Nothing in this app deletes a row from "
-                            f"{table}, so this is somebody else's delete."),
+                            f"{table} without journalling it, so this is "
+                            f"somebody else's delete."),
                     })
                     continue
 

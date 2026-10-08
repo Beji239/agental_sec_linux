@@ -1318,7 +1318,52 @@ def write_report(session_id: str, kind: str, trigger: str, body: str, *,
 
     logger.info("Duty report #%s (%s): %s", report_id, kind,
                 (verdict or body[:60]))
+    try:
+        expire_old_reports()
+    except Exception as e:                          # noqa: BLE001
+        logger.warning(f"Could not expire old duty reports: {e}")
     return {"report_id": report_id, "kind": kind, "verdict": verdict}
+
+
+# Reports are kept for one week and then deleted. The owner's rule: anything
+# longer is too much for a home network.
+REPORT_KEEP_DAYS = 7
+
+
+def _report_cutoff(days: int = REPORT_KEEP_DAYS) -> str:
+    return _sql_ts(_now() - timedelta(days=days))
+
+
+def expire_old_reports(days: int = REPORT_KEEP_DAYS) -> int:
+    """
+    Delete reports older than the keep window and return how many went.
+
+    Each delete is journalled as agent_report_expired in the same transaction,
+    so the integrity check reads the missing row as housekeeping, not tampering.
+    """
+    from core import integrity
+
+    cutoff = _report_cutoff(days)
+    with me._get_conn() as conn:
+        if not _table_ready(conn, "duty_report"):
+            return 0
+        ids = [r[0] for r in conn.execute(
+            "SELECT id FROM duty_report WHERE created_at < ? ORDER BY id",
+            (cutoff,)).fetchall()]
+        for rid in ids:
+            if integrity.record(
+                    "agent_report_expired", table_name="duty_report",
+                    row_ref=rid, payload={"cutoff": cutoff, "keep_days": days},
+                    conn=conn) is None:
+                # No journal entry means the delete would read as tampering.
+                raise RuntimeError(f"could not journal the expiry of report "
+                                   f"#{rid}, nothing was deleted")
+            conn.execute("DELETE FROM duty_report WHERE id = ?", (rid,))
+    if ids:
+        logger.info("Deleted %d duty report(s) older than %d days.",
+                    len(ids), days)
+    return len(ids)
+
 
 
 # THE PROMPTS
@@ -2638,7 +2683,8 @@ def status() -> dict:
 
 def query_reports(kind: str = None, limit: int = 50,
                   report_id: int = None, include_dismissed: bool = False,
-                  only_dismissed: bool = False) -> list:
+                  only_dismissed: bool = False,
+                  session_id: str = None) -> list:
     """
     The reports, newest first, for the Agents page and for the model.
 
@@ -2659,19 +2705,23 @@ def query_reports(kind: str = None, limit: int = 50,
 
     The rows carry dismissed_at/dismissed_by/dismissal_note either way, so the
     page can render the fact without a second query.
+
+    `session_id` limits a list to one run. A list never shows a report past
+    the one-week keep window, even before expire_old_reports has run.
     """
     where, params = [], []
     if report_id is not None:
         where.append("id = ?")
         params.append(int(report_id))
-    elif kind:
-        where.append("kind = ?")
-        params.append(kind)
-        if only_dismissed:
-            where.append("dismissed_at IS NOT NULL")
-        elif not include_dismissed:
-            where.append("dismissed_at IS NULL")
     else:
+        if kind:
+            where.append("kind = ?")
+            params.append(kind)
+        if session_id:
+            where.append("session_id = ?")
+            params.append(session_id)
+        where.append("created_at >= ?")
+        params.append(_report_cutoff())
         if only_dismissed:
             where.append("dismissed_at IS NOT NULL")
         elif not include_dismissed:

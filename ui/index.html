@@ -2761,15 +2761,20 @@
         <span class="card-title" style="margin:0;">Reports</span>
         <div class="row" style="gap:8px;flex-wrap:wrap;">
           <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
-                 title="Dismissed reports are hidden from this list and are NOT deleted. Their verdict, evidence and coverage stay in the database and in the tamper journal, and Show dismissed brings them back.">
+                 title="Dismissed reports are hidden from this list and are NOT deleted by the dismissal. Their verdict, evidence and coverage stay in the database until the report is a week old, and Show dismissed brings them back.">
             <input type="checkbox" id="agent-show-dismissed" onchange="loadAgents()">
             Show dismissed
+          </label>
+          <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
+                 title="The list shows this run's reports. Tick to add the earlier runs of the past week; reports older than a week are deleted.">
+            <input type="checkbox" id="agent-show-earlier" onchange="loadAgents()">
+            Show earlier runs
           </label>
           <button class="btn" id="agent-dismiss-selected" onclick="dismissSelectedReports()"
                   disabled
                   title="Hide the ticked reports from this list. Nothing is deleted: the reports stay in the database with their verdicts and evidence, and the dismissal is recorded.">dismiss ticked</button>
           <button class="btn danger" onclick="dismissAllReports()"
-                  title="Hide every report that is not already dismissed. Nothing is deleted and nothing is silenced about the machine: this only stops this list showing them, and Show dismissed brings them all back.">dismiss all</button>
+                  title="Hide every report on this list. Nothing is deleted and nothing is silenced about the machine: this only stops this list showing them, and Show dismissed brings them all back.">dismiss all</button>
         </div>
       </div>
       <div style="color:var(--text-dim);font-size:12px;margin:12px 0 12px;line-height:1.5;">
@@ -2777,7 +2782,10 @@
         <b>Dismissing hides a report from this list and DELETES NOTHING.</b>
         The row, its verdict, its evidence and the coverage note of what it
         could see at the time all stay in the database, and every dismissal is
-        written to the tamper journal with who did it and when. It is a filing
+        written to the tamper journal with who did it and when.
+        <b>Every report is deleted a week after it was written</b>, dismissed
+        or not, and the list shows this run only; tick Show earlier runs for
+        the rest of the week. It is a filing
         decision about this page, not a decision about the network: the agent
         will still investigate the same subject tomorrow if it comes back.
         <span id="agent-dismissed-count"></span>
@@ -7083,9 +7091,11 @@ async function loadAgents() {
   const filter  = document.getElementById('agent-filter').value;
   const showBox = document.getElementById('agent-show-dismissed');
   const show    = (showBox && showBox.checked) ? 'dismissed' : '';
+  const earlier = document.getElementById('agent-show-earlier');
   try {
     let q = filter ? ('?kind=' + encodeURIComponent(filter)) : '';
     if (show) q += (q ? '&' : '?') + 'show=' + show;
+    if (earlier && earlier.checked) q += (q ? '&' : '?') + 'runs=all';
     AGENT_DATA = await fetch('/api/agents' + q,
                              { headers: authHeaders() }).then(r => r.json());
   } catch (e) {
@@ -7131,13 +7141,19 @@ async function dismissSelectedReports() {
 
 async function dismissAllReports() {
   const el = document.getElementById('agent-read-status');
-  const open = (AGENT_DATA && AGENT_DATA.reports || []).length;
+  // The ids on screen, so the button hides exactly what is listed and not
+  // the earlier runs the list is not showing.
+  const ids = (AGENT_DATA && AGENT_DATA.reports || [])
+    .filter(r => !r.dismissed_at).map(r => Number(r.id));
+  const open = ids.length;
+  if (!open) { el.textContent = 'nothing to dismiss on this list.'; return; }
   // THE CONFIRMATION NAMES THE NUMBER AND THE SAFETY. A dismiss-all that turns
   // out to have hidden 300 rows should not feel like a surprise, and the only
   // moment anybody reads what a button does is right before they press it.
   const msg = 'Hide all ' + open + ' report(s) currently listed?\n\n'
     + 'NOTHING IS DELETED. Every report stays in the database with its '
-    + 'verdict, evidence and coverage note, the agent keeps investigating, '
+    + 'verdict, evidence and coverage note until it is a week old, the agent '
+    + 'keeps investigating, '
     + 'and no baseline is touched. The dismissals are recorded in the tamper '
     + 'journal with who did it and when, and "Show dismissed" brings them '
     + 'all back.';
@@ -7146,7 +7162,7 @@ async function dismissAllReports() {
   try {
     const d = await fetch('/api/agents/dismiss', {
       method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ all_open: true, note: 'dismiss all from the Reports card' })
+      body: JSON.stringify({ report_ids: ids, note: 'dismiss all from the Reports card' })
     }).then(r => r.json());
     el.textContent = AGENT_DISMISS_LINE(d);
   } catch (e) {
@@ -7323,7 +7339,9 @@ function renderAgents() {
       // this project's rules exist against. The count comes from the summary,
       // so the sentence can name it.
       const hidden = s.dismissed_reports || 0;
-      box.innerHTML = '<div class="empty-state">No report yet. '
+      box.innerHTML = '<div class="empty-state">No report yet'
+        + (d.scope === 'all' ? ' this week. ' : ' in this run. Tick Show '
+           + 'earlier runs for the rest of the week. ')
         + (st.running
            ? 'The loop is running, so this means it has not yet found anything '
              + 'worth writing about, check the wake-up list below for what it '
@@ -7347,7 +7365,7 @@ function renderAgents() {
     hiddenEl.innerHTML = hidden
       ? (' <b style="color:var(--amber);">' + hidden + ' report(s) are '
          + 'dismissed and hidden from this list.</b> Nothing was deleted: '
-         + 'they are still in the database and in the tamper journal.')
+         + 'they stay in the database until they are a week old.')
       : '';
   }
 

@@ -2401,20 +2401,31 @@ def register_routes(app):
         show = (request.args.get("show") or "").strip().lower()
         if show not in ("", "all", "dismissed"):
             return jsonify({"error": "show must be 'all' or 'dismissed'"}), 400
+        # This run only by default; `runs=all` adds the earlier runs of the
+        # past week, which is all the database keeps.
+        runs_arg = (request.args.get("runs") or "").strip().lower()
+        if runs_arg not in ("", "this", "all"):
+            return jsonify({"error": "runs must be 'this' or 'all'"}), 400
+        sid = (None if runs_arg == "all"
+               else current_app.config.get("AGENTAL_SESSION_ID"))
         if show == "all":
             reports = duty.query_reports(kind=kind, limit=limit,
-                                         include_dismissed=True)
+                                         include_dismissed=True,
+                                         session_id=sid)
         elif show == "dismissed":
             reports = duty.query_reports(kind=kind, limit=limit,
-                                         only_dismissed=True)
+                                         only_dismissed=True, session_id=sid)
         else:
-            reports = duty.query_reports(kind=kind, limit=limit)
+            reports = duty.query_reports(kind=kind, limit=limit,
+                                         session_id=sid)
         return jsonify({
             "summary": duty.summary(),
             "status":  duty.status(),
             "reports": reports,
             "runs":    duty.query_runs(limit=limit),
             "show":    show or "open",
+            "scope":   "all" if runs_arg == "all" else "this",
+            "keep_days": duty.REPORT_KEEP_DAYS,
         })
 
     @app.route("/api/agents/<int:report_id>")
