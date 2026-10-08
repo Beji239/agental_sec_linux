@@ -509,6 +509,15 @@ def register_routes(app):
         from core import sanitize
         module_status = sanitize.for_display(module_status)
 
+        # Where each tile's Settings entry is, and saves waiting for a restart.
+        try:
+            from core import settings as st
+            module_settings = st.module_settings(
+                current_app.config.get("AGENTAL_CONFIG") or {}, module_status)
+        except Exception as e:
+            logger.warning(f"module settings unavailable: {e}")
+            module_settings = {"modules": {}, "pending": []}
+
         return jsonify({
             "session_id":    get_session_id(),
             # Legacy key names, kept because the page still reads them as a
@@ -532,6 +541,7 @@ def register_routes(app):
             "api_style_label": agent_loop.provider_api.style_label(
                 agent_loop.api_style()),
             "modules":       module_status,
+            "module_settings": module_settings,
         })
 
     @app.route("/api/chat", methods=["POST"])
@@ -2659,10 +2669,12 @@ def register_routes(app):
         Read-only and reads nothing from the database, so it is safe to call
         on every dashboard refresh.
         """
-        from core import enrichment
+        from core import enrichment, contacts
+        cfg = current_app.config.get("AGENTAL_CONFIG") or {}
         return jsonify({
             "sources":    enrichment.source_catalog(),
             "never_sent": enrichment.NEVER_SENT,
+            "contacts":   contacts.catalog(cfg),
             "tier":       1,
         })
 

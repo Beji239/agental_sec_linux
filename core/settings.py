@@ -285,6 +285,28 @@ def key_catalog() -> list[dict]:
     except Exception as e:                       # pragma: no cover
         logger.warning(f"Could not read the search backend list: {e}")
 
+    # Threat feeds with their own key (OTX). The abuse.ch key is listed above.
+    try:
+        from tools import feed_matcher
+        listed = {e["env"] for e in entries}
+        for name, meta in feed_matcher.FEEDS.items():
+            env = meta.get("needs_key")
+            if not isinstance(env, str) or env in listed:
+                continue
+            listed.add(env)
+            entries.append({
+                "env":      env,
+                "label":    f"{name} threat feed key",
+                "group":    "feeds",
+                "required": False,
+                "effect":   "live",
+                "generate": False,
+                "unlocks":  meta.get("gives", ""),
+                "without":  f"the {name} threat list is not downloaded.",
+            })
+    except Exception as e:                       # pragma: no cover
+        logger.warning(f"Could not read the threat feed list: {e}")
+
     out = []
     for e in entries:
         raw = os.environ.get(e["env"], "").strip()
@@ -736,6 +758,50 @@ def config_fields(config: dict) -> list[dict]:
             row["choices"] = _choices_for(f["path"])
         out.append(row)
     return out
+
+
+# Dashboard module tile -> the Settings entries that control it. A config
+# path or a key name; the first one is where the tile's link opens.
+MODULE_SETTINGS = {
+    "network_scanner": ["presence_sweep.enabled", "presence_sweep.interval_minutes"],
+    "probe":           ["probe.enabled", "probe.interval_days"],
+    "linux_monitor":   ["linux_monitor.enabled"],
+    "enrichment":      ["AGENTAL_ABUSEIPDB_KEY", "AGENTAL_ABUSECH_KEY",
+                        "AGENTAL_GREYNOISE_KEY"],
+    "feed_matcher":    ["AGENTAL_ABUSECH_KEY", "AGENTAL_OTX_KEY"],
+    "web_search":      ["AGENTAL_TAVILY_KEY", "AGENTAL_SERPAPI_KEY",
+                        "AGENTAL_GOOGLE_CSE_KEY", "AGENTAL_GOOGLE_CSE_CX"],
+    "duty_loop":       ["provider.api_url", "provider.model", "AGENTAL_API_KEY"],
+}
+
+
+def settings_anchor(entry: str) -> str:
+    """The element id the Settings tab gives a config field or a key."""
+    if entry.startswith("AGENTAL_"):
+        return "key-" + entry
+    return "cfg-" + entry.replace(".", "-")
+
+
+def module_settings(config: dict, module_names) -> dict:
+    """
+    For the dashboard grid: per module, where its Settings entry is and which
+    saved values wait for a restart, plus every waiting field overall.
+    """
+    pending = {f["path"]: f["label"] for f in config_fields(config)
+               if "running_value" in f}
+    modules = {}
+    for name in module_names:
+        base = name.split(":", 1)[0]
+        entries = MODULE_SETTINGS.get(base)
+        if not entries:
+            continue
+        modules[name] = {
+            "anchor":  settings_anchor(entries[0]),
+            "pending": [pending[e] for e in entries if e in pending],
+        }
+    return {"modules": modules,
+            "pending": [{"label": label, "anchor": settings_anchor(path)}
+                        for path, label in pending.items()]}
 
 
 def persist_config_value(block: str, leaf: str, value) -> str | None:

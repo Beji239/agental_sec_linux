@@ -39,8 +39,16 @@ card appears in the conversation. Nothing happens until you press approve. See
   loaded, red is supposed to work and does not, with the reason underneath.
   In the picture the event monitor reads "blind, seeing nothing" because the
   journal was not readable, and it says so instead of showing zero events.
+  A tile with a setting links to its entry on the Settings tab, and says when
+  a value saved there waits for a restart.
 - **What the tool knows, and how it knows it.** The key to the three colours,
   and which public sources are switched on (blue boxes) or off (grey).
+- **Which hosts get contacted, and why each one.** Every address the app
+  talks to, grouped by purpose: lookups, the malware and vulnerability lists,
+  the model provider, web search, the threat map, your router and network,
+  and downloads you start yourself. Each row says what is sent, what comes
+  back and why. A row that needs a key links straight to its field in
+  Settings.
 
 ## Alerts
 

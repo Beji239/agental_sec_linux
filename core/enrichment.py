@@ -888,16 +888,16 @@ KEYED_SOURCES = {
         # went stale the day the keys were added, 2026-09-02, which is the
         # same prose-drifts-from-state defect SOURCE_CATALOG exists to stop.
         "note":  "free key from abuseipdb.com, about 1000 checks a day. "
-                 "Without it nothing here answers whether an address is known "
-                 "bad, which is the biggest gap in the keyless set.",
+                 "Without it nothing here can say whether an address has been "
+                 "reported for abuse, the biggest gap without keys.",
     },
     "abuse_ch": {
         "env":   "AGENTAL_ABUSECH_KEY",
         "kinds": ("hash", "domain", "ip"),
         "gives": "MalwareBazaar sample detail and URLhaus malware distribution URLs",
-        "note":  "abuse.ch requires an Auth-Key, free from auth.abuse.ch. "
-                 "Without it file hashes have no source at all, since "
-                 "MalwareBazaar is the only one.",
+        "note":  "abuse.ch needs a key, free from auth.abuse.ch. Without "
+                 "it no file is checked against known malware and no site "
+                 "is checked for spreading it.",
     },
     "greynoise": {
         "env":   "AGENTAL_GREYNOISE_KEY",
@@ -909,9 +909,9 @@ KEYED_SOURCES = {
         # half of a real problem: this tree had no src_greynoise_ip at all, so
         # the source was absent for a reason nobody had written down, and the
         # note gave a reason that was not it.
-        "note":  "key required. Quotas are per plan rather than per second, so "
-                 "a spent allowance shows up as a 429 and is reported as "
-                 "'rate limited', never as a quiet address.",
+        "note":  "needs a key from greynoise.io. When the plan's allowance "
+                 "is used up, lookups are reported as rate limited, never as "
+                 "a quiet address.",
     },
 }
 
@@ -1665,132 +1665,128 @@ ENRICHERS_BY_KIND.update({
 
 # THE CATALOGUE. WHICH HOSTS GET CONTACTED, AND WHY EACH ONE.
 #
-# WHY THIS EXISTS RATHER THAN A PARAGRAPH IN index.html. The dashboard already
-# listed source NAMES, in a hardcoded array, which answers "what did you ask"
-# and not "who did you talk to". Those are different questions and the second
-# one is the one an operator running a security tool on their own network is
-# entitled to ask: this module makes outbound requests on their behalf, and
-# the screen should name the hosts.
-#
-# It is derived here rather than written in the page because a list of sources
-# kept in the UI is a list that goes stale the first time somebody adds a
-# source and does not think about the dashboard. That is not hypothetical in
-# this file: the `note` strings in KEYED_SOURCES still said "Off" for two
-# sources that had keys, because the prose and the state were kept in
-# different places. Same defect, one layer up. The catalogue is keyed by the
-# same source ids the ladder and the enrichers use, and `source_catalog()`
-# reports a source that has no entry rather than skipping it, so adding a
-# source and forgetting to describe it shows up as UNDOCUMENTED on the screen
-# instead of as a silent omission.
-#
-# `host` is the hostname actually contacted, not the vendor's marketing name.
-# rdap.org is listed as what it is: a redirector that hands the query to
-# whichever RIR is authoritative, which means the query is seen by two parties
-# and the screen should say so.
+# Keyed by the same source ids the ladder and the enrichers use, so a source
+# added without an entry shows as UNDOCUMENTED on the dashboard. Written for
+# a non-expert reader: what is sent, what comes back, and why it is asked.
 SOURCE_CATALOG = {
     "rdap": {
+        "name":    "RDAP registry",
         "host":    "rdap.org",
-        "also":    "redirects to the authoritative registry: ARIN, RIPE, "
-                   "APNIC, LACNIC or AFRINIC, depending on who holds the block",
-        "answers": "who an address block or a domain is registered to",
-        "why":     "the registry is the primary record rather than somebody's "
-                   "copy of it, so it is the first rung of the ladder",
+        "also":    "passes the question on to whichever registry holds the "
+                   "address: ARIN, RIPE, APNIC, LACNIC or AFRINIC",
+        "sends":   "an outside internet address or domain name",
+        "answers": "who the address or domain is registered to",
+        "why":     "the official record of ownership, so it is asked first. "
+                   "The registry it passes the question to sees it too.",
         "keyed":   None,
     },
     "ip_api": {
+        "name":    "ip-api",
         "host":    "ip-api.com",
-        "answers": "ownership and geography again, plus whether the address is "
-                   "a proxy, a hosting provider or a mobile carrier",
-        "why":     "the ladder grades an answer `resolved` only when two "
-                   "independent sources agree, so a second opinion is the "
-                   "point of it, not a spare. The proxy and hosting flags are "
-                   "also the only place they come from.",
+        "sends":   "an outside internet address",
+        "answers": "who owns it, roughly where it is, and whether it is a VPN, "
+                   "a proxy, a hosting company or a mobile network",
+        "why":     "a second, independent opinion on ownership. An answer "
+                   "counts as confirmed only when two sources agree. Also "
+                   "used when the analyst looks up an address itself.",
         "keyed":   None,
     },
     "circl": {
+        "name":    "CIRCL vulnerability lookup",
         "host":    "vulnerability.circl.lu",
-        "answers": "CVE detail",
-        "why":     "keyless, fast, and does not rate-limit a home user off the "
-                   "service, which is why it is asked before NVD",
+        "sends":   "a vulnerability id, such as CVE-2024-3094",
+        "answers": "what the vulnerability is, what it affects and how serious "
+                   "it is",
+        "why":     "free, quick, and does not block home users, so it is "
+                   "asked before NVD.",
         "keyed":   None,
     },
     "nvd": {
+        "name":    "NVD, the US vulnerability database",
         "host":    "services.nvd.nist.gov",
-        "answers": "CVE detail",
-        "why":     "the authoritative record, and the corroboration for CIRCL. "
-                   "Second rung because it is slow without an API key.",
+        "sends":   "a vulnerability id, such as CVE-2024-3094",
+        "answers": "the official description and severity score",
+        "why":     "the official record, used to confirm what CIRCL said. "
+                   "Asked second because it is slow without a key.",
         "keyed":   None,
     },
     "oui": {
+        "name":    "IEEE vendor list",
         "host":    None,
-        "also":    "local file, data/oui.csv, from the IEEE registry",
-        "answers": "which vendor owns a MAC prefix",
-        "why":     "the one lookup that reaches no network at all. Asking a "
-                   "public service which vendor made a device on this LAN "
-                   "would leak the question for an answer already on disk.",
+        "also":    "a file on this computer, data/oui.csv",
+        "sends":   "nothing, the list is read from disk",
+        "answers": "which company made a device, from the first half of its "
+                   "hardware (MAC) address",
+        "why":     "the list is already on this computer, so no question "
+                   "about your devices leaves it.",
         "keyed":   None,
     },
     "lolbas": {
+        "name":    "LOLBAS project",
         "host":    "lolbas-project.github.io",
-        "answers": "whether a Windows binary has a documented abuse technique",
-        "why":     "process names had no structured source before this, so the "
-                   "model was left reasoning about them from the name alone. "
-                   "Fetched at most monthly and cached at data/lolbas.json, so "
-                   "the normal case contacts nothing.",
+        "sends":   "nothing about you: the whole list is downloaded, at most "
+                   "once a month, and kept in data/lolbas.json",
+        "answers": "whether a Windows program is known to be misused by "
+                   "attackers, and how",
+        "why":     "gives the analyst facts about a program name instead of a "
+                   "guess. Most checks read the saved copy and contact nothing.",
         "keyed":   None,
     },
     "malwarebazaar": {
+        "name":    "MalwareBazaar, by abuse.ch",
         "host":    "mb-api.abuse.ch",
-        "answers": ("whether a file hash matches a sample somebody has "
-                    "uploaded. Not a virus scan: a new or changed file never "
-                    "matches. ClamAV, when installed, scans the file itself"),
-        "why":     "the only hash source here. One source means a hit grades "
-                   "`single_source`, which is honest: a hash either matches an "
-                   "uploaded sample or it does not, and there is nothing to "
-                   "corroborate it against.",
+        "sends":   "the fingerprint (hash) of a program file, never the file",
+        "answers": "whether that exact file is a known malware sample, and "
+                   "its family name",
+        "why":     "the only place here that can name a file as known "
+                   "malware. It is not a virus scan: a new or changed file "
+                   "never matches. ClamAV, when installed, scans the files "
+                   "themselves.",
         "keyed":   "abuse_ch",
     },
     "abuseipdb": {
+        "name":    "AbuseIPDB",
         "host":    "api.abuseipdb.com",
-        "answers": "how many people have reported an address, and whether it "
-                   "is a known scanner",
-        "why":     "reputation is a different question from ownership, so it "
-                   "runs alongside the ladder rather than in it. In the ladder "
-                   "it would have been skipped exactly when the ownership "
-                   "lookup went well, which is most of the time.",
+        "sends":   "an outside internet address",
+        "answers": "how many people have reported it for abuse, and whether "
+                   "it is a known scanner",
+        "why":     "checks whether an address has a bad name, which ownership "
+                   "alone cannot tell you. Asked for every address, not only "
+                   "the unclear ones.",
         "keyed":   "abuseipdb",
     },
     "urlhaus": {
+        "name":    "URLhaus, by abuse.ch",
         "host":    "urlhaus-api.abuse.ch",
-        "answers": "whether a host or address is serving malware",
-        "why":     "same reasoning as AbuseIPDB, and a different question "
-                   "again: not who owns it and not who complained, but what it "
-                   "is currently handing out.",
+        "sends":   "an outside internet address or domain name",
+        "answers": "whether it is handing out malware right now",
+        "why":     "catches sites that spread malware, a different question "
+                   "from who owns them or who complained about them.",
         "keyed":   "abuse_ch",
     },
     "greynoise": {
+        "name":    "GreyNoise",
         "host":    "api.greynoise.io",
-        "answers": "whether an address is mass-scanning the internet rather "
-                   "than targeting this host specifically",
-        "why":     "would separate background noise from something aimed here, "
-                   "which nothing else in the set does.",
+        "sends":   "an outside internet address, or a vulnerability id",
+        "answers": "whether the address scans the whole internet, and how "
+                   "much a vulnerability is being attacked this week",
+        "why":     "tells background noise that hits everyone apart from "
+                   "something aimed at you.",
         "keyed":   "greynoise",
     },
 }
 
 
-# WHAT IS NEVER SENT. Stated on the screen because an operator cannot verify
-# it by watching, and the absence of a request is not something a dashboard
-# can show. Kept next to the catalogue so the two are read together.
+# What the lookup services above never receive. Shown on the dashboard
+# because the absence of a request is not something a screen can show.
 NEVER_SENT = [
-    "Addresses on this network. Private, loopback, link-local, multicast and "
-    "reserved addresses are refused before any request is built, because no "
-    "public registry knows anything about them and asking leaks the question "
-    "for nothing in return.",
-    "Packet contents. Only the indicator itself is sent: an address, a domain, "
-    "a CVE id, a MAC prefix, a hash or a program name.",
-    "Anything at all when the answer is already cached and still inside its "
-    "lifetime.",
+    "Addresses on your own network. Private, local and reserved addresses "
+    "are refused before any request is built: no public service knows "
+    "anything about them, and asking would only give the question away.",
+    "What your devices sent or received. Only the thing being checked goes "
+    "out: an address, a domain, a vulnerability id, a file fingerprint or a "
+    "program name.",
+    "Anything at all when the answer is already saved and still fresh.",
 ]
 
 
@@ -1875,8 +1871,10 @@ def source_catalog() -> list[dict]:
         enabled = bool(wired and has_key)
         out.append({
             **entry,
+            "name":       meta.get("name") or source_id,
             "host":       meta.get("host"),
             "also":       meta.get("also"),
+            "sends":      meta.get("sends"),
             "answers":    meta.get("answers"),
             "why":        meta.get("why"),
             "network":    bool(meta.get("host")),

@@ -401,6 +401,37 @@
     padding: 1px 4px;
   }
   .srctable .undoc { color: var(--amber); }
+  .srctable tr.grp td {
+    padding: 14px 0 4px 0;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--blue);
+    opacity: 1;
+  }
+  .srctable .when { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+  .srctable .state-on  { font-family: var(--mono); font-size: 10px; color: var(--green); }
+  .srctable .state-off { font-family: var(--mono); font-size: 10px; color: var(--amber); }
+  .srctable .state-manual { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .set-link {
+    color: var(--blue);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-size: 10.5px;
+    background: none;
+    border: 0;
+    padding: 0;
+    font-family: inherit;
+  }
+  .srctable tr.off td:last-child { opacity: 1; }
+  .settings-flash {
+    outline: 2px solid var(--blue);
+    outline-offset: 4px;
+    border-radius: var(--radius);
+    transition: outline-color 1.5s ease;
+  }
   .never-sent {
     margin-top: 10px;
     padding: 8px 10px;
@@ -1190,6 +1221,15 @@
   .module-tile .dot { flex-shrink: 0; }
   .module-name { font-family: var(--mono); font-size: 11px; color: var(--text); }
   .module-state { font-size: 10px; color: var(--text-dim); }
+  .module-tile .set-link { font-size: 10px; display: inline-block; margin-top: 2px; }
+  .module-pending { font-size: 10px; color: var(--amber); line-height: 1.4; margin-top: 2px; }
+  #module-pending {
+    font-size: 11px;
+    color: var(--amber);
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+  #module-pending:empty { display: none; }
 
   /*
      API KEY MODAL
@@ -1643,6 +1683,7 @@
     </div>
     <div class="card">
       <div class="card-title">Module Status</div>
+      <div id="module-pending"></div>
       <div id="module-grid"></div>
     </div>
     <div class="card">
@@ -3200,11 +3241,23 @@ function showPage(name) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelector(`[data-page="${name}"]`).classList.add('active');
-  loadPage(name);
+  return loadPage(name);
+}
+
+// Opens the Settings tab at one field (key-<ENV> or cfg-<path>) and marks it.
+async function openSettingsAt(id) {
+  try { await showPage('settings'); } catch (e) {}
+  const box = document.getElementById(id);
+  if (!box) return;
+  const row = box.closest('div[style*="border-bottom"]') || box;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.add('settings-flash');
+  setTimeout(() => row.classList.remove('settings-flash'), 2500);
+  try { box.focus({ preventScroll: true }); } catch (e) {}
 }
 
 function loadPage(name) {
-  if (name === 'dashboard')  loadDashboard();
+  if (name === 'dashboard')  { _srcCatalog = null; loadDashboard(); }
   if (name === 'alerts')     { loadFindings(); loadImportant(); }
   if (name === 'timeline')   loadTimeline();
   if (name === 'network')    { loadDevices(); refreshRouter(); loadTls(); }
@@ -3224,7 +3277,7 @@ function loadPage(name) {
                                loadReviewQueue(); loadIntegrity(); loadRetention();
                                loadExpectedPorts(); }
   if (name === 'runbook')  { searchRunbook(); refreshCvssStatus(false); }
-  if (name === 'settings')   loadSettings();
+  if (name === 'settings')   return loadSettings();
 }
 
 // POLLING
@@ -3332,7 +3385,7 @@ async function updateStatusPills() {
       setPill('pill-sniffer', 'warn', 'Sniffer: OFF');
     }
 
-    updateModuleGrid(d.modules || {});
+    updateModuleGrid(d.modules || {}, d.module_settings || {});
   } catch(e) {}
 }
 
@@ -3579,9 +3632,19 @@ function fmtAgo(sec) {
   return `${Math.round(sec / 3600)}h`;
 }
 
-function updateModuleGrid(modules) {
+function updateModuleGrid(modules, ms) {
   const grid = document.getElementById('module-grid');
   if (!grid) return;
+  const links = (ms && ms.modules) || {};
+  const waiting = (ms && ms.pending) || [];
+  const pend = document.getElementById('module-pending');
+  if (pend) {
+    pend.innerHTML = waiting.length
+      ? 'Saved in Settings, waiting for a restart: '
+        + waiting.map(p => `<button class="set-link" onclick="openSettingsAt('${escJs(p.anchor)}')">${esc(p.label)}</button>`).join(', ')
+        + '. Restart AgentalSec to use the new values.'
+      : '';
+  }
   grid.innerHTML = Object.entries(modules).map(([name, state]) => {
     // The dot was green for anything that was not literally the string
     // 'not_loaded' or 'error', so a blind sensor got a green dot next to a
@@ -3610,10 +3673,16 @@ function updateModuleGrid(modules) {
     const lbl = off ? 'off'
               : typeof state === 'object' ? (state.running ? 'running' : 'loaded')
               : (state || 'unknown');
+    const link = links[name];
+    const waits = (link && link.pending && link.pending.length)
+      ? `<div class="module-pending">changed in Settings, waits for a restart</div>` : '';
+    const setBtn = link
+      ? `<button class="set-link" onclick="openSettingsAt('${escJs(link.anchor)}')">${off ? 'turn on in Settings' : 'Settings'}</button>`
+      : '';
     return `<div class="module-tile">
       <span class="dot" style="background:${dot};animation:none;"></span>
       <div><div class="module-name">${name.replace(/_/g,' ')}</div>
-      <div class="module-state">${lbl}</div>${moduleExtra(name, state)}</div>
+      <div class="module-state">${lbl}</div>${moduleExtra(name, state)}${waits}${setBtn}</div>
     </div>`;
   }).join('');
 
@@ -3665,76 +3734,68 @@ async function renderKnownSources() {
       ? `${s.host || 'local file, no network'}, ${s.answers || ''}`
       : (s.why_off || `no key set (${s.env_var || 'key missing'})`);
     return `<span class="src ${cls}" title="${esc(String(tip))}">`
-         + `${esc(s.source)}${s.enabled ? '' : ' (off)'}</span>`;
+         + `${esc((s.name || s.source).split(',')[0])}${s.enabled ? '' : ' (off)'}</span>`;
   }).join('');
 
   if (!dtl) return;
 
-  const rows = sources.map(s => {
-    const hostCell = s.network
-      ? `<span class="host">${esc(s.host)}</span>`
-        + (s.also ? `<div class="why" style="white-space:normal">${esc(s.also)}</div>` : '')
-      : `<span class="host local">no network</span>`
-        + (s.also ? `<div class="why" style="white-space:normal">${esc(s.also)}</div>` : '');
-    const why = s.documented
-      ? esc(s.why || '')
-      : '<span class="undoc">UNDOCUMENTED. This source is wired up and has no '
-        + 'catalogue entry explaining it. Add one in core/enrichment.py.</span>';
-    // THREE STATES, NOT TWO. The same block the Windows page carries, ported
-    // 2026-09-21 with the `wired` split in core/enrichment.py. A source can be
-    // off because you have not given it a key, or off because nothing in the
-    // code calls it yet. Those need different sentences: one is fixed by
-    // pasting a key, the other is not fixed by anything the operator can do,
-    // and telling the owner to set a variable for the second one sends the owner to do
-    // something that will not help. Measured on this tree before the port:
-    // with AGENTAL_GREYNOISE_KEY set and no function behind the source, this
-    // branch would have printed "OFF ... Set AGENTAL_GREYNOISE_KEY in .env"
-    // under a row that was already off WITH the key set.
-    const offNote = s.enabled ? ''
-      : (s.wired === false
-        ? `<div class="why" style="margin-top:4px">NOT WIRED. This source is `
-          + `described here but no code calls it, so nothing is sent to it `
-          + `and a key would not change that.</div>`
-        : `<div class="why" style="margin-top:4px">OFF. ${esc(s.why_off || '')} `
-          + `Set <code>${esc(s.env_var || '')}</code> in .env.</div>`);
-    return `<tr class="${s.enabled ? '' : 'off'}">
-      <td><b>${esc(s.source)}</b><div><span class="role">${esc(s.role)}</span></div></td>
-      <td>${hostCell}</td>
-      <td class="kinds">${(s.kinds || []).map(esc).join('<br>')}</td>
-      <td>${esc(s.answers || '')}${offNote}</td>
-      <td class="why">${why}</td>
-    </tr>`;
+  // One plain sentence per column: what is sent, what comes back and why,
+  // with a link to the Settings field for any row that takes a key.
+  const groups = (_srcCatalog.contacts && _srcCatalog.contacts.groups) || [];
+  const setLink = (r, text) => r.settings
+    ? `<button class="set-link" onclick="openSettingsAt('${escJs(r.settings.id)}')">${esc(text)}</button>`
+    : '';
+  const rows = groups.map(g => {
+    const head = `<tr class="grp"><td colspan="5">${esc(g.title)}</td></tr>`;
+    return head + g.rows.map(r => {
+      const hosts = r.hosts.length
+        ? r.hosts.map(h => `<span class="host">${esc(h)}</span>`).join('<br>')
+        : `<span class="host local">no network</span>`;
+      const also = r.also ? `<div class="why" style="white-space:normal">${esc(r.also)}</div>` : '';
+      const manual = r.group === 'manual';
+      let state;
+      if (manual) {
+        state = `<div class="state-manual">ON REQUEST</div>`;
+      } else if (r.enabled) {
+        const isKey = r.settings && r.settings.id.startsWith('key-');
+        state = `<div class="state-on">ON</div>`
+          + (r.settings ? `<div>${setLink(r, isKey ? 'key in Settings' : 'change in Settings')}</div>` : '');
+      } else {
+        const isKey = r.settings && r.settings.id.startsWith('key-');
+        const fix = setLink(r, isKey ? 'Add the key in Settings' : 'Turn on in Settings');
+        state = `<div class="state-off">OFF</div>`
+          + `<div class="why" style="margin-top:2px">${esc(r.off_reason || '')}</div>`
+          + (fix ? `<div>${fix}</div>` : '');
+      }
+      const why = r.documented === false
+        ? `<span class="undoc">${esc(r.why)}</span>` : esc(r.why || '');
+      return `<tr class="${r.enabled || manual ? '' : 'off'}">
+        <td><b>${esc(r.service)}</b><div class="when">${esc(r.when || '')}</div></td>
+        <td>${hosts}${also}</td>
+        <td>${esc(r.sends || '')}</td>
+        <td><div>${esc(r.returns || '')}</div><div class="why" style="margin-top:3px">Why: ${why}</div></td>
+        <td>${state}</td>
+      </tr>`;
+    }).join('');
   }).join('');
 
   const never = ((_srcCatalog && _srcCatalog.never_sent) || [])
     .map(n => `<li>${esc(n)}</li>`).join('');
 
-  // THIS PANEL USED TO SHUT ITSELF WHILE THE OWNER WAS READING IT, in the Windows
-  // tree, and this side carried the same fault. The dashboard poll calls this
-  // function every eight seconds and this line replaced the whole <details>
-  // element, which throws away the `open` state with it. Nothing was closing
-  // the panel; the panel was being rebuilt underneath the reader. Same fault
-  // as any refresh timer that owns a piece of the page a person is
-  // interacting with.
-  //
-  // Two fixes, and the first one is the real one. The catalogue is fetched
-  // ONCE per session and cannot change while the app runs, so re-rendering it
-  // at all was pointless: if the markup is identical, leave the DOM alone.
-  // The second is the belt: if it ever does change, carry the open state
-  // across the replacement so a reader is not interrupted by an update they
-  // did not ask for.
+  // Rebuilt only when the markup changed, and the open state is carried
+  // across, so the dashboard poll never closes the panel under the reader.
   const markup = `
     <details class="src-detail">
       <summary>Which hosts get contacted, and why each one</summary>
       <table class="srctable">
         <thead><tr>
-          <th>Source</th><th>Host contacted</th><th>Asked about</th>
-          <th>What it answers</th><th>Why it is in the set</th>
+          <th>Service and when</th><th>Address contacted</th><th>What is sent</th>
+          <th>What comes back, and why</th><th>State</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <div class="never-sent">
-        <div class="know-h">Never sent anywhere</div>
+        <div class="know-h">Never sent to the lookup services</div>
         <ul style="margin:0;padding:0;list-style:disc;">${never}</ul>
       </div>
     </details>`;
