@@ -2321,6 +2321,24 @@
         <tbody id="ports-tbody"></tbody>
       </table>
     </div>
+    <div class="card">
+      <div class="card-title">What Is Listening On This Computer</div>
+      <div class="card-note">
+        Every open port on this computer and the program holding it, read from
+        the system's own socket list every few minutes. This is the same list
+        the agent reads. A port open on <b>all interfaces</b> can be reached
+        from the network; one on 127.0.0.1 or ::1 only from this computer.
+      </div>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn" onclick="loadListeners(true)">Check now</button>
+        <span id="listeners-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Port</th><th>Protocol</th><th>Reachable from</th><th>Program</th><th>PID</th><th>Open since</th></tr></thead>
+        <tbody id="listeners-tbody"></tbody>
+      </table>
+      <div id="listeners-changes" style="font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--text-dim);margin-top:10px;"></div>
+    </div>
   </div>
 
   <!-- PCAP -->
@@ -3291,7 +3309,7 @@ function loadPage(name) {
   if (name === 'inventory')  loadInventory();
   if (name === 'map')        loadThreatMap();
   if (name === 'lan')        startLanLive(); else stopLanLive();
-  if (name === 'ports')      { loadPorts(); loadPortSets(); }
+  if (name === 'ports')      { loadPorts(); loadPortSets(); loadListeners(); }
   if (name === 'processes')  loadProcesses();
   if (name === 'behavioral') { loadBaselines(); loadDeviations(); }
   if (name === 'predictions') { loadPredictionScore(); loadPredictions(); }
@@ -6279,6 +6297,56 @@ function _collapsePorts(rows) {
   const rank = { critical: 0, high: 1, medium: 2, low: 3 };
   return out.sort((a, b) =>
     (rank[a.risk_level] ?? 9) - (rank[b.risk_level] ?? 9) || a.port - b.port);
+}
+
+// What is listening here and which program holds it, from the port owner
+// sweep. The coverage sentence and a stale sweep are always shown.
+async function loadListeners(sweep) {
+  const body = document.getElementById('listeners-tbody');
+  const stat = document.getElementById('listeners-status');
+  const chg  = document.getElementById('listeners-changes');
+  if (!body) return;
+  if (sweep && stat) stat.textContent = 'checking...';
+  let d;
+  try {
+    d = await fetch('/api/ports/owners' + (sweep ? '?sweep=true' : ''),
+                    { headers: authHeaders() }).then(r => r.json());
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="6">Could not reach AgentalSec. That is the page failing to load, not an empty list.</td></tr>';
+    if (stat) stat.textContent = '';
+    return;
+  }
+  const mod = d.module || {};
+  const parts = [];
+  if (d.last_sweep && d.last_sweep.taken_at) parts.push('last checked ' + fmtTime(d.last_sweep.taken_at));
+  if (d.coverage) parts.push(String(d.coverage));
+  let line = esc(parts.join('. '));
+  if (mod.blind) line = `<span class="k-red">${esc(mod.blind_reason || 'the sweep cannot see')}</span> ` + line;
+  else if (mod.unowned) line = `<span class="k-amber">no listener could be matched to a program; run privileged to see them</span> ` + line;
+  if (stat) stat.innerHTML = line;
+  if (!d.available) {
+    body.innerHTML = `<tr><td colspan="6">${esc(d.note || 'Nothing has been checked yet.')}</td></tr>`;
+    if (chg) chg.innerHTML = '';
+    return;
+  }
+  const rows = d.listeners || [];
+  const wide = a => a === '0.0.0.0' || a === '::' || a === '*' || a === '';
+  const local = a => a.startsWith('127.') || a === '::1';
+  body.innerHTML = rows.length ? rows.map(r => {
+    const addr = String(r.local_address || '');
+    const reach = wide(addr) ? '<span class="k-amber">all interfaces</span>'
+      : local(addr) ? 'this computer only' : esc(addr);
+    const prog = r.comm
+      ? `<span title="${esc(r.exe || '')}">${esc(r.comm)}</span>`
+      : `<span style="color:var(--text-dim)" title="${esc(r.owner_status || '')}">not readable</span>`;
+    return `<tr><td>${esc(String(r.local_port))}</td><td>${esc(r.proto || '')}</td>`
+      + `<td>${reach}</td><td>${prog}</td><td>${r.pid ? esc(String(r.pid)) : 'unknown'}</td>`
+      + `<td>${esc(fmtTime(r.first_seen_at))}</td></tr>`;
+  }).join('') : '<tr><td colspan="6">Nothing is listening, as of the last check.</td></tr>';
+  const changes = (d.changes || []).slice(0, 8);
+  if (chg) chg.innerHTML = changes.length
+    ? '<b>Recent changes</b><br>' + changes.map(c => `${esc(fmtTime(c.detected_at))}: ${esc(c.note || c.kind)}`).join('<br>')
+    : 'No listener has appeared or gone since the record began.';
 }
 
 async function loadPorts() {

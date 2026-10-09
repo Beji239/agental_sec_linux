@@ -1046,6 +1046,9 @@ def _start_presence_sweeper(config: dict, network_scanner, session_id: str) -> N
                 f"({interval_key}).")
 
 
+_port_owner_tracker = None
+
+
 def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
     """
     Correlate listening ports with the processes that own them, on a tick.
@@ -1095,6 +1098,11 @@ def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
         return
 
     interval, interval_key = port_owner.sweep_interval_seconds(config)
+    port_owner.mark_running(interval)
+
+    from core.sensor_watch import LoopTracker
+    global _port_owner_tracker
+    _port_owner_tracker = live = LoopTracker(interval)
 
     def loop():
         first = True
@@ -1103,11 +1111,15 @@ def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
                 result = port_owner.sweep_now(
                     session_id,
                     reason="startup seed" if first else "interval")
-                if not result.get("ran"):
+                if result.get("ran"):
+                    live.ok()
+                else:
+                    live.failed(result.get("reason"))
                     logger.warning(
                         f"Port ownership sweep did not run: "
                         f"{result.get('reason')}")
             except Exception as e:                           # noqa: BLE001
+                live.failed(e)
                 logger.error(f"Port ownership sweep error: {e}")
             # Raw and packet sockets listen with no port; a staged holder
             # raises LNX-5001.
@@ -1119,8 +1131,9 @@ def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
             first = False
             time.sleep(interval)
 
-    threading.Thread(target=loop, name="port-owner-sweeper",
-                     daemon=True).start()
+    t = threading.Thread(target=loop, name="port-owner-sweeper", daemon=True)
+    t.start()
+    live.begin(t)
     logger.info(f"Port ownership sweeper started, every {interval} second(s) "
                 f"({interval_key}). First pass runs now and seeds the record "
                 f"without reporting arrivals.")
@@ -2367,7 +2380,9 @@ def main(argv=None):
             return {"lan_live": lan,
                     "place_watch": place_watch.get(),
                     "dns_monitor": dns,
-                    "router_monitor": router_monitor.tracker(config)}
+                    "router_monitor": router_monitor.tracker(config),
+                    "port_owner": _port_owner_tracker or LoopTracker(
+                        60, idle=lambda: "switched off in config.json")}
 
         sensor_watch.start(modules, session_id, extras=_extra_sensors)
     except Exception as e:

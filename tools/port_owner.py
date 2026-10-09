@@ -173,6 +173,9 @@ CHANGE_BIND = "bind_changed"
 # most this file will let an operator ask for.
 MIN_SWEEP_SECONDS = 30
 DEFAULT_SWEEP_SECONDS = 300
+# A running sweeper with no sweep for three intervals (15 minutes at least)
+# is stale: the list of what is listening is out of date.
+STALE_FLOOR_SECONDS = 900
 
 
 # READING THE KERNEL'S OWN TABLES
@@ -1210,6 +1213,17 @@ def status() -> dict:
     if _state["last_error"]:
         out["blind"] = False
         out["reachable"] = False
+    age = _age_seconds(last.get("taken_at"))
+    out["last_sweep_age_seconds"] = age
+    limit = max(3 * int(_state["interval"] or DEFAULT_SWEEP_SECONDS),
+                STALE_FLOOR_SECONDS)
+    if _state["running"] and age is not None and age > limit:
+        out["stale"] = True
+        out["blind"] = True
+        out["blind_reason"] = (
+            f"no sweep for {age // 60} minutes, expected every "
+            f"{max(1, int(_state['interval']) // 60)} minute(s), so the list "
+            f"of what is listening is out of date.")
     if last.get("listeners_with_owner") == 0 and (last.get("listeners") or 0):
         # Every listener unowned is either a privilege wall or a broken walk.
         # It is reported as its own state rather than as blind, because the
@@ -1222,6 +1236,26 @@ def status() -> dict:
 
 _state = {"running": False, "interval": DEFAULT_SWEEP_SECONDS,
           "last_at": None, "last_error": None, "sweeps": 0}
+
+
+def mark_running(interval: int) -> None:
+    """Called when the sweeper thread starts, so status() can tell a missed
+    sweep from a normal wait."""
+    _state["running"] = True
+    _state["interval"] = int(interval)
+
+
+def _age_seconds(stamp) -> int | None:
+    """Seconds since a stored UTC timestamp, or None if it cannot be read."""
+    if not stamp:
+        return None
+    try:
+        text = str(stamp).replace("T", " ").replace("Z", "")[:19]
+        then = datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(
+            tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    return max(0, int((datetime.now(timezone.utc) - then).total_seconds()))
 
 
 def sweep_interval_seconds(config: dict) -> tuple:
