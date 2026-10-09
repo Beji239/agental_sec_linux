@@ -83,11 +83,16 @@ AgentalSec its own SSH key. That key's line in the router's
 nothing else: no shell, no port forwarding. Each enrolled computer gets its
 own line, so enrolling one never removes another.
 
-Add the block the script prints to `config.json`:
+On OpenWrt it also turns on dnsmasq's query log (`log-queries`), which the
+DNS reader needs, and raises the router's log size if it is small. Then it
+switches the `gateway` block on in `config.json` for you:
 
 ```json
-"gateway": {"enabled": true, "host": "ROUTER_ADDRESS"}
+"gateway": {"enabled": true, "host": "ROUTER_ADDRESS", "port": 22, "user": "root"}
 ```
+
+Restart AgentalSec to start reading the router. DNS reading is on by default
+with source `auto`, so the router's lookups arrive with no further setup.
 
 Use `--user` and `--port` if your router's SSH is not root on port 22. Check
 it, or remove it again, with:
@@ -96,6 +101,9 @@ it, or remove it again, with:
 ./scripts/install_gateway_agent.sh --verify ROUTER_ADDRESS
 ./scripts/install_gateway_agent.sh --remove ROUTER_ADDRESS
 ```
+
+`--remove` takes the agent off the router, puts the query log setting back if
+enrolling turned it on, and switches the `gateway` block off again.
 
 ### Updating the agent
 
@@ -147,10 +155,13 @@ blocked. It reads Pi-hole's `pihole-FTL.db` or AdGuard Home's
 machine.
 
 ```json
-"dns_monitor": {"enabled": true, "source": "pihole", "path": "/path/to/pihole-FTL.db", "interval_minutes": 15}
+"dns_monitor": {"enabled": true, "source": "auto", "path": "/path/to/pihole-FTL.db", "interval_minutes": 15}
 ```
 
-Use `"source": "adguard"` and the path of `querylog.json` for AdGuard Home.
+With source `auto`, a `.json` file is read as AdGuard Home's `querylog.json`
+and anything else as Pi-hole's database. `"source": "pihole"` or
+`"adguard"` names it outright. With no path and no router agent, DNS reading
+waits and says so on the Settings tab.
 
 ## Other Linux machines over SSH
 

@@ -1547,6 +1547,19 @@ _REGISTER: list[Detection] = [
        "without it this rule never fires and the map says why.",
        ("confidentiality",)),
 
+    # The sensor watchdog, core/sensor_watch. The entity is "sensor:<name>".
+    _d("SYS-1001", 1, "sensor_went_quiet", "sensor_watch", "process",
+       {"high"},
+       "A sensor that was collecting stopped: it is blind, stopped, its "
+       "polls keep failing, or it has had no good poll for three of its "
+       "intervals (five minutes at least). Until it comes back nothing it "
+       "watches is recorded.",
+       ("availability",)),
+    _d("SYS-1002", 1, "sensor_recovered", "sensor_watch", "process",
+       {"info"},
+       "A sensor that went quiet is collecting again.",
+       ("availability",)),
+
     # retired, kept so the numbers cannot be reused
     _d("PRT-1001", 1, "port_listening", "port_scanner", "port",
        {"low", "medium", "high", "critical"},

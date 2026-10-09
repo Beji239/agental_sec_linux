@@ -171,11 +171,14 @@ versus router, is [docs/ROUTER.md](docs/ROUTER.md).
 ./scripts/install_gateway_agent.sh --enroll ROUTER_ADDRESS
 ```
 
-Add the `gateway` block the script prints to `config.json`.
+The script switches the `gateway` block on in `config.json` itself, and on
+OpenWrt it turns on the router's DNS query log. DNS reading is on by default
+with source `auto`, so the router's lookups are read from the next start.
 Run the same command again after updating AgentalSec, to put the new agent
 on the router.
 
-Pi-hole or AdGuard Home: enable `dns_monitor` in `config.json`.
+Pi-hole or AdGuard Home instead of a router: set `dns_monitor.path` in
+`config.json` to its query log.
 
 Restart the app after any `config.json` change.
 

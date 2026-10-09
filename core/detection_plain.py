@@ -260,5 +260,9 @@ PLAIN = {
     "GEO-1002": "A program or device reached a network company it does not "
                 "normally talk to.",
 
+    "SYS-1001": "One of AgentalSec's own sensors stopped collecting, so "
+                "nothing it watches is being recorded until it comes back.",
+    "SYS-1002": "A sensor that had stopped is collecting again.",
+
     "PRT-1001": "Retired. A scan found an open port.",
 }

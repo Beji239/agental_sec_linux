@@ -541,7 +541,7 @@ print("\n  the ids are not reused and nothing was retired to make room:")
 # 111, LAN-1008 to LAN-1011 (live LAN alerts) 115, AV-1001 (ClamAV) 116,
 # GEO-1001 and GEO-1002 (Threat Map place learning) 118.
 check("the register grew by exactly four",
-      len(det.summary(include_retired=True)), 118)
+      len(det.summary(include_retired=True)), 120)
 check("and the retired set is unchanged",
       sorted(r["detection_id"] for r in det.summary(include_retired=True)
              if r["retired"]), ["EVT-1001", "PRC-1002", "PRT-1001"])

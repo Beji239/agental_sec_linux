@@ -2438,6 +2438,14 @@ def untrusted_sources_this_turn() -> list[str]:
 
 UNATTENDED_MAX_ROUNDS = 12     # lower than chat's 25: cost, and no one waiting
 
+# Sent before the last call, so a long investigation ends in a report written
+# from what was read, instead of nothing.
+UNATTENDED_FINAL_NOTE = (
+    "You have used all {rounds} rounds of lookups. Do not call any more "
+    "tools; none will run. Answer now, in exactly the shape the instruction "
+    "asked for, from what you have already read, and say in the report what "
+    "you did not get to check.")
+
 # LOOP-15, 2026-10-05. Every call resends the whole conversation, so a tool
 # result read in round one was paid for again on every later round. Measured:
 # one investigation spent 624,169 prompt tokens over 8 calls and 32 tool
@@ -2496,6 +2504,7 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
                    "total_tokens": 0, "estimated": True}
     answers, tool_names, refused = [], [], []
     error = None
+    hit_ceiling = False
 
     # Per-turn, same as run(): the fence's provenance question is "what had it
     # just read when it wrote this", and the unattended turn writes reports.
@@ -2532,10 +2541,16 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
             loop.close()
 
     async def _rounds() -> str:
-        nonlocal error
+        nonlocal error, hit_ceiling
 
         for _round in range(UNATTENDED_MAX_ROUNDS + 1):
             _shorten_old_results(messages, aged, _round)
+            final = _round == UNATTENDED_MAX_ROUNDS
+            if final:
+                hit_ceiling = True
+                messages.append({"role": "user", "content":
+                                 UNATTENDED_FINAL_NOTE.format(
+                                     rounds=UNATTENDED_MAX_ROUNDS)})
             round_usage = {}
             response_text = ""
             calls = []
@@ -2564,7 +2579,8 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
             if response_text.strip():
                 answers.append(response_text)
 
-            if not calls:
+            if not calls or final:
+                # Tool calls on the last round are not run.
                 return response_text
 
             results = []
@@ -2675,16 +2691,14 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
                                  "content": tr["content"]})
                 aged.append((len(messages) - 1, _round, tr))
 
-        error = (f"the unattended turn hit its {UNATTENDED_MAX_ROUNDS}-round "
-                 f"ceiling without concluding. That is a real failure: it "
-                 f"spent {total_usage['total_tokens']:,} tokens and reached no "
-                 f"verdict.")
         return ""
 
     try:
-        final = _run_rounds()
-        if final and final.strip():
-            answers.append(final)
+        _run_rounds()
+        if hit_ceiling and not answers and not error:
+            error = (f"it used all {UNATTENDED_MAX_ROUNDS} rounds of lookups "
+                     f"and, asked to answer from what it had read, still gave "
+                     f"no answer")
     except Exception as e:
         logger.error(f"unattended turn failed: {e}", exc_info=True)
         error = f"{type(e).__name__}: {e}"
@@ -2692,4 +2706,5 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
     total_usage["total_tokens"] = (total_usage["prompt_tokens"]
                                    + total_usage["completion_tokens"])
     return {"answers": answers, "tool_calls": tool_names,
-            "refused_calls": refused, "usage": total_usage, "error": error}
+            "refused_calls": refused, "usage": total_usage, "error": error,
+            "hit_ceiling": hit_ceiling}

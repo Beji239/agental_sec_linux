@@ -149,8 +149,8 @@ DEFAULT_CONFIG = {
         "label":    None
     },
     "dns_monitor": {
-        "enabled":          False,
-        "source":           "pihole",
+        "enabled":          True,
+        "source":           "auto",
         "path":             "",
         "interval_minutes": 15,
         "label":            None
@@ -1229,6 +1229,9 @@ def _start_port_scanner_clock(config: dict, modules: dict,
         f"pass taken by anything else postpones the next.")
 
 
+_dns_tracker = None
+
+
 def _start_dns_importer(config: dict, dns_monitor, session_id: str) -> None:
     """
     Import from the resolver now, then on a timer, on a daemon thread.
@@ -1258,15 +1261,38 @@ def _start_dns_importer(config: dict, dns_monitor, session_id: str) -> None:
     """
     from tools import dns_inspector
 
+    from core.sensor_watch import LoopTracker
+
     block = config.get("dns_monitor", {}) or {}
     interval = max(1, int(block.get("interval_minutes", 15))) * 60
     MAX_CATCHUP_PASSES = 20
 
+    def idle():
+        st = dns_monitor.status(config)
+        return None if st["available"] else st["reason"]
+
+    global _dns_tracker
+    _dns_tracker = live = LoopTracker(interval, idle=idle)
+
     def loop():
         catchup = 0
+        waiting_said = False
         while True:
             try:
+                # Waiting for a router or a resolver file is not a failure.
+                why = idle()
+                if why:
+                    if not waiting_said:
+                        logger.info(f"DNS importer: {why}.")
+                        waiting_said = True
+                    time.sleep(interval)
+                    continue
+                waiting_said = False
                 result = dns_monitor.import_once(config)
+                if result.get("ran"):
+                    live.ok()
+                else:
+                    live.failed(result.get("reason"))
                 if result.get("ran") and result.get("more_available"):
                     catchup += 1
                     if catchup < MAX_CATCHUP_PASSES:
@@ -1293,10 +1319,13 @@ def _start_dns_importer(config: dict, dns_monitor, session_id: str) -> None:
                     except Exception as ie:
                         logger.error(f"DNS inspection error: {ie}")
             except Exception as e:
+                live.failed(e)
                 logger.error(f"DNS import error: {e}")
             time.sleep(interval)
 
-    threading.Thread(target=loop, name="dns-importer", daemon=True).start()
+    t = threading.Thread(target=loop, name="dns-importer", daemon=True)
+    t.start()
+    live.begin(t)
     logger.info(f"DNS importer started, every {interval // 60} minute(s).")
 
 
@@ -2078,16 +2107,17 @@ def main(argv=None):
     except Exception as e:
         logger.error(f"Could not register this sensor: {e}")
 
-    # DNS ingestion. Off unless a resolver is configured.
+    # DNS ingestion. On by default; it waits, without failing, until the
+    # router agent is enrolled or a resolver file is set.
     try:
         from tools import dns_monitor
         dns_state = dns_monitor.status(config)
-        if dns_state["available"]:
+        if (config.get("dns_monitor") or {}).get("enabled"):
             _start_dns_importer(config, dns_monitor, session_id)
-        else:
-            logger.info(f"DNS ingestion off: {dns_state['reason']}. This is "
-                        f"the only sensor that covers devices this host "
-                        f"cannot see.")
+        if not dns_state["available"]:
+            logger.info(f"DNS ingestion not reading: {dns_state['reason']}. "
+                        f"This is the only sensor that covers devices this "
+                        f"host cannot see.")
     except Exception as e:
         logger.error(f"Could not start DNS ingestion: {e}")
 
@@ -2318,6 +2348,31 @@ def main(argv=None):
                      "and the executable queue still works; nothing is "
                      "assessing them unattended.")
 
+    # The sensor watchdog: once a minute, says which sensors are collecting.
+    try:
+        from core import sensor_watch
+
+        def _extra_sensors():
+            from tools import lan_live, place_watch, router_monitor
+            from core.sensor_watch import LoopTracker
+            from tools import dns_monitor as _dm
+            dns = _dns_tracker or LoopTracker(
+                60, idle=lambda: _dm.status(config)["reason"]
+                or "switched off in Settings")
+            lan = lan_live.get() or LoopTracker(60, idle=lambda: (
+                "switched off in config.json"
+                if (config.get("gateway") or {}).get("enabled")
+                else "no router agent is enrolled, so there is no live "
+                     "router traffic to read"))
+            return {"lan_live": lan,
+                    "place_watch": place_watch.get(),
+                    "dns_monitor": dns,
+                    "router_monitor": router_monitor.tracker(config)}
+
+        sensor_watch.start(modules, session_id, extras=_extra_sensors)
+    except Exception as e:
+        logger.error(f"Sensor watch did not start: {e}")
+
     # The clean shutdown. Two doors reach it: the signal handler below and
     # the dashboard's stop button.
     _shutdown_lock = threading.Lock()
@@ -2329,6 +2384,12 @@ def main(argv=None):
                        "registry_monitor", "gateway", "feed_matcher", "probe")
 
     def _quiet_writers(wait_seconds=3.0):
+        # First, so the sensors stopping here are not reported as quiet.
+        try:
+            from core import sensor_watch
+            sensor_watch.stop()
+        except Exception as e:
+            logger.warning(f"Sensor watch did not stop cleanly: {e}")
         try:
             from tools import lan_live
             if lan_live.get() is not None:

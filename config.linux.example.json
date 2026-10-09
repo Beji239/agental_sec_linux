@@ -483,10 +483,13 @@
       "Home). Nothing is sent and the resolver is never written to. This is",
       "the only sensor that covers devices this host cannot see, because a",
       "device that cannot resolve cannot connect.",
-      "Off by default: it needs a path to a real resolver's database."
+      "source auto reads the router's own DNS log as soon as the router",
+      "agent is enrolled (see gateway below), or the file in path once one",
+      "is set: a .db is read as Pi-hole, a .json as AdGuard. Until then it",
+      "reads nothing and says it is waiting for a resolver."
     ],
-    "enabled": false,
-    "source": "pihole",
+    "enabled": true,
+    "source": "auto",
     "path": "",
     "interval_minutes": 15,
     "label": null
@@ -503,6 +506,21 @@
     "interval_seconds": 300,
     "learn_hours": 72,
     "max_alerts_per_pass": 20
+  },
+
+  "gateway": {
+    "_comment": [
+      "The router agent, for an OpenWrt router: router clients, the DNS log,",
+      "live traffic per device and blocking at the router, over SSH with a",
+      "key. scripts/install_gateway_agent.sh --enroll <router address> fills",
+      "this in and switches it on; restart the app afterwards."
+    ],
+    "enabled": false,
+    "host": "",
+    "port": 22,
+    "user": "root",
+    "interval_minutes": 5,
+    "label": null
   },
 
   "router_monitor": {

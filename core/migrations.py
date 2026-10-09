@@ -142,7 +142,9 @@ logger = logging.getLogger(__name__)
 # each program and device normally reaches (Threat Map place learning).
 # v61: place_traffic, an hourly tally of where this machine's traffic went, so
 # the Threat Map covers the last day without scanning the packets table.
-SCHEMA_VERSION = 61
+# v62, 2026-10-09: sensor_gaps, the stretches a sensor or the app itself was
+# not collecting, shaded on the Timeline.
+SCHEMA_VERSION = 62
 
 
 # HELPERS
@@ -4183,6 +4185,35 @@ def _migrate_place_traffic(conn) -> int:
     return added
 
 
+SENSOR_GAPS_DDL = (
+    """CREATE TABLE IF NOT EXISTS sensor_gaps (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sensor      TEXT NOT NULL,
+    reason      TEXT,
+    started_at  TEXT NOT NULL,
+    ended_at    TEXT,
+    session_id  TEXT
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_sensor_gaps_time "
+    "ON sensor_gaps(started_at, ended_at)",
+    # The watchdog's last check, one row. Kept out of user_preferences, which
+    # the integrity journal reads as policy.
+    """CREATE TABLE IF NOT EXISTS sensor_watch_beat (
+    id        INTEGER PRIMARY KEY CHECK (id = 1),
+    at        INTEGER NOT NULL,
+    first_at  INTEGER NOT NULL
+)""",
+)
+
+
+def _migrate_sensor_gaps(conn) -> int:
+    """v62: when each sensor was not collecting. Idempotent."""
+    added = 0 if _table_exists(conn, "sensor_gaps") else 1
+    for ddl in SENSOR_GAPS_DDL:
+        conn.execute(ddl)
+    return added
+
+
 def _migrate_merge_carried(conn) -> int:
     """v59: known_devices.merge_carried, the flags and labels a merge moved."""
     if "merge_carried" in _columns(conn, "known_devices"):
@@ -4300,6 +4331,7 @@ def run_migrations(db_path: Path = None) -> dict:
         merge_carried_added    = _migrate_merge_carried(conn)
         place_baseline_added   = _migrate_place_baseline(conn)
         place_traffic_added    = _migrate_place_traffic(conn)
+        sensor_gaps_added      = _migrate_sensor_gaps(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4316,6 +4348,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "merge_carried_added": merge_carried_added,
             "place_baseline_added": place_baseline_added,
             "place_traffic_added": place_traffic_added,
+            "sensor_gaps_added":   sensor_gaps_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,

@@ -622,12 +622,15 @@ CONFIG_FIELDS = [
 
     {"path": "dns_monitor.enabled", "type": "bool", "label": "Resolver ingest",
      "why": ("The only sensor here that covers devices this host cannot see. "
-             "It needs a resolver you run; without one this stays off and "
-             "reads nothing.")},
+             "On by default; it starts reading as soon as the router agent is "
+             "enrolled or a resolver file is set, and reads nothing until "
+             "then.")},
     {"path": "dns_monitor.source", "type": "choice", "label": "Resolver type",
-     "choices": ["pihole", "adguard", "router"],
-     "why": ("pihole reads pihole-FTL.db, adguard reads querylog.json, router "
-             "reads the router's dnsmasq log through the gateway agent.")},
+     "choices": ["auto", "router", "pihole", "adguard"],
+     "why": ("auto reads the router as soon as its agent is enrolled, or the "
+             "file below when one is set. router reads the router's dnsmasq "
+             "log through the gateway agent, pihole reads pihole-FTL.db, "
+             "adguard reads querylog.json.")},
     {"path": "dns_monitor.path", "type": "text", "label": "Resolver database path",
      "why": "The file itself. Read-only; this tool never writes to it."},
     {"path": "dns_monitor.interval_minutes", "type": "int", "min": 1, "max": 1440,

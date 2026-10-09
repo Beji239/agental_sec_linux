@@ -2022,7 +2022,37 @@ def _usage_dict(result: dict) -> dict:
         # all, and the two must stay distinguishable in the column.
         "tool_names": list(calls) if calls is not None else None,
         "refused_calls": list(refused) if refused is not None else None,
+        "hit_ceiling": bool((result or {}).get("hit_ceiling")),
     }
+
+
+# What a verdict means, for the run line on the Agents page.
+VERDICT_WORDS = {
+    "real":        "a real problem",
+    "benign":      "harmless",
+    "needs_human": "needs your decision",
+    "no_action":   "nothing needed doing",
+}
+
+
+def _run_summary(parsed: dict, hit_ceiling: bool = False) -> str:
+    """One readable line for a run: the verdict in words, then the first
+    sentence of what the agent thinks it is."""
+    verdict = (parsed.get("verdict") or "").strip()
+    words = VERDICT_WORDS.get(verdict, verdict or "no verdict given")
+    text = " ".join((parsed.get("hypothesis") or parsed.get("report")
+                     or "").split())
+    first = text
+    for i, ch in enumerate(text):
+        if ch in ".!?" and (i + 1 == len(text) or text[i + 1] == " "):
+            first = text[:i + 1]
+            break
+    if len(first) > 240:
+        first = first[:237].rstrip() + "..."
+    line = f"Verdict: {words}." + (f" {first}" if first else "")
+    if hit_ceiling:
+        line += " (Answered at its lookup limit, from what it had read.)"
+    return line
 
 
 def _parse_report(replies: list) -> dict:
@@ -2356,8 +2386,8 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
     # _usage_dict until 2026-09-23; see its docstring.
     tool_names = usage.get("tool_names")
     if usage.get("error") or not usage.get("answers"):
-        detail = (f"the model call did not produce an answer: "
-                  f"{usage.get('error') or 'no answer text'}")
+        detail = (f"No report was written: "
+                  f"{usage.get('error') or 'the model gave no answer'}.")
         _record_run_tagged(session_id, trigger, "error", coverage=coverage,
                     usage=usage, started=started, at=now, detail=detail,
                     incident_id=subject.get("incident_id"),
@@ -2431,7 +2461,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
                 coverage=coverage, usage=usage, started=started, at=now,
                 report_id=report["report_id"],
                 incident_id=subject.get("incident_id"),
-                detail=(parsed.get("verdict") or "")[:200],
+                detail=_run_summary(parsed, usage.get("hit_ceiling")),
                 tool_names=tool_names)
 
     return {"outcome": "reported" if kind == "regular" else "investigated",

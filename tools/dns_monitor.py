@@ -74,7 +74,30 @@ SOURCE_PIHOLE = "pihole"
 SOURCE_ADGUARD = "adguard"
 # dnsmasq on the router, read through the gateway agent's dnslog verb.
 SOURCE_ROUTER = "router"
-VALID_SOURCES = {SOURCE_PIHOLE, SOURCE_ADGUARD, SOURCE_ROUTER}
+# The default: the router once an agent is enrolled, else a resolver file.
+SOURCE_AUTO = "auto"
+VALID_SOURCES = {SOURCE_PIHOLE, SOURCE_ADGUARD, SOURCE_ROUTER, SOURCE_AUTO}
+WAITING_FOR_RESOLVER = (
+    "waiting for a resolver: enroll the router agent "
+    "(scripts/install_gateway_agent.sh --enroll <router address>) or set a "
+    "Pi-hole or AdGuard file path in Settings")
+
+
+def resolve_source(config: dict) -> str | None:
+    """The source to read. auto picks the router, then a resolver file."""
+    block = (config or {}).get("dns_monitor", {}) or {}
+    source = block.get("source") or SOURCE_AUTO
+    if source != SOURCE_AUTO:
+        return source
+    gw_block = (config or {}).get("gateway", {}) or {}
+    if gw_block.get("enabled") and gw_block.get("host"):
+        return SOURCE_ROUTER
+    path = str(block.get("path") or "").lower()
+    if path.endswith(".json"):
+        return SOURCE_ADGUARD
+    if path:
+        return SOURCE_PIHOLE
+    return None
 
 # The agent returns at most this many log lines per call.
 ROUTER_LOG_LINES = 2000
@@ -783,11 +806,15 @@ def status(config: dict) -> dict:
     if not block.get("enabled"):
         return {"available": False, "reason": "disabled in config.json"}
 
-    source = block.get("source")
+    source = block.get("source") or SOURCE_AUTO
     if source not in VALID_SOURCES:
         return {"available": False,
                 "reason": f"source must be one of {sorted(VALID_SOURCES)}, "
                           f"got {source!r}"}
+    source = resolve_source(config)
+    if source is None:
+        return {"available": False, "waiting": True,
+                "reason": WAITING_FOR_RESOLVER}
 
     if source == SOURCE_ROUTER:
         gw_block = (config or {}).get("gateway", {}) or {}

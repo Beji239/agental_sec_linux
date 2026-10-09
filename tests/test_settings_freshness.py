@@ -193,6 +193,30 @@ check("a failed refresh says so", "refresh failed, these rows are from" in ui,
       True)
 check("busy has a colour", "busy: 'var(--amber)'" in ui, True)
 check("the dashboard tile can say stuck", "stuck, ${esc(behind.join" in ui, True)
+check("and its dot is red when stuck, amber when behind",
+      "(blind || failing || stuck) ? 'var(--red)'" in ui
+      and "behind ? 'var(--amber)'" in ui, True)
+
+# The previous figure is kept at the START of a poll. Kept at the end, a
+# status read between polls saw two equal numbers and called every backlog
+# stuck while it drained 800 records a poll.
+_mo = ev.split("def monitor_once(")[1].split("\ndef ")[0]
+check("monitor_once keeps the previous figure before reporting new ones",
+      _mo.index("_remember_previous_drain()") < _mo.index("_report_progress("),
+      True)
+check("and the end of the poll no longer overwrites it",
+      "_remember_previous_drain()" in
+      ev.split("def _finish_poll(")[1].split("\ndef ")[0], False)
+em._drain_remaining.clear(); em._drain_previous.clear()
+em._last_report_at.clear(); em._read_failures.clear()
+em._remember_previous_drain()
+em._report_progress("journald", 800, 2701, now=1.0)
+em._remember_previous_drain()
+em._report_progress("journald", 800, 1901, now=61.0)
+check("between polls, a draining source is not stuck",
+      em._stalled_channels(now=70.0), [])
+em._drain_remaining.clear(); em._drain_previous.clear()
+em._last_report_at.clear()
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

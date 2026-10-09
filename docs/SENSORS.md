@@ -231,6 +231,24 @@ remote Linux hosts over SSH are described in [ROUTER.md](ROUTER.md).
 - **CISA KEV.** The known exploited vulnerabilities catalogue, with CVSS
   scores from NVD and CIRCL, on the Runbook tab.
 
+## When a sensor goes quiet
+
+Once a minute AgentalSec checks every sensor that runs on its own: whether it
+can see, whether it is still running, and whether its last good reading is
+recent for how often it reads. The header shows **All sensors OK** or how
+many are quiet; click it for the names and reasons above the Dashboard tiles.
+
+- A sensor that was collecting and stops raises **SYS-1001**, a high alert,
+  so you get a desktop notice and the agent looks at it. Its return raises
+  **SYS-1002**.
+- A sensor switched off in Settings, or one waiting for a router or a
+  resolver it has not been given, is shown as off with the reason, not as a
+  fault.
+- The **Timeline** has a bar across its window: green while every sensor was
+  collecting, amber where one was quiet, grey while AgentalSec was not
+  running, striped before the check existed. A quiet stretch on a green part
+  is a calm one.
+
 ## Data the sensors keep, and for how long
 
 - Packets 7 days, events 30 days, findings 90 days, baselines a year. Config:

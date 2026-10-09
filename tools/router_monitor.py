@@ -1213,6 +1213,22 @@ def collector_running() -> bool:
     return _collector_thread is not None and _collector_thread.is_alive()
 
 
+_tracker = None
+
+
+def tracker(config: dict):
+    """The collector's liveness for core/sensor_watch, idle while it is off."""
+    global _tracker
+    if _tracker is None:
+        from core.sensor_watch import LoopTracker
+        block = (config or {}).get("router_monitor", {}) or {}
+        _tracker = LoopTracker(
+            max(1, int(block.get("interval_minutes", 10) or 10)) * 60,
+            idle=lambda: (None if status(config)["available"]
+                          else status(config)["reason"]))
+    return _tracker
+
+
 def ensure_collector(config: dict, session_id: str) -> bool:
     """
     Start the collection loop if it is not already running. Idempotent.
@@ -1234,6 +1250,8 @@ def ensure_collector(config: dict, session_id: str) -> bool:
     block = (config or {}).get("router_monitor", {}) or {}
     interval = max(1, int(block.get("interval_minutes", 10))) * 60
 
+    live = tracker(config)
+
     def loop():
         while True:
             try:
@@ -1246,9 +1264,12 @@ def ensure_collector(config: dict, session_id: str) -> bool:
                     return
                 result = collect_once(config, session_id=session_id)
                 if not result.get("ran"):
+                    live.failed(result.get("reason"))
                     logger.warning(f"Router collection skipped: "
                                    f"{result.get('reason')}")
-                elif result.get("first_pass"):
+                else:
+                    live.ok()
+                if result.get("ran") and result.get("first_pass"):
                     logger.info(
                         f"Router collection: first pass, "
                         f"{result.get('clients_seen', 0)} neighbour entries "
@@ -1256,12 +1277,14 @@ def ensure_collector(config: dict, session_id: str) -> bool:
                         f"new on a first pass, because everything would be."
                     )
             except Exception as e:
+                live.failed(e)
                 logger.error(f"Router collection error: {e}")
             time.sleep(interval)
 
     _collector_thread = threading.Thread(
         target=loop, name="router-collector", daemon=True)
     _collector_thread.start()
+    live.begin(_collector_thread)
     logger.info(f"Router collector started, every {interval // 60} minute(s).")
     return True
 

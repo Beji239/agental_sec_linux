@@ -1223,6 +1223,17 @@
   .module-state { font-size: 10px; color: var(--text-dim); }
   .module-tile .set-link { font-size: 10px; display: inline-block; margin-top: 2px; }
   .module-pending { font-size: 10px; color: var(--amber); line-height: 1.4; margin-top: 2px; }
+  .sw-line { font-family: var(--mono); font-size: 11px; line-height: 1.6; margin-bottom: 4px; }
+  .tl-cover { position: relative; height: 14px; border-radius: 3px; margin: 4px 0 4px;
+              background: var(--green-dim); overflow: hidden; }
+  .tl-gap { position: absolute; top: 0; bottom: 0; background: var(--amber); opacity: .85; }
+  .tl-gap.app { background: var(--text-dim); }
+  .tl-gap.unchecked { background: repeating-linear-gradient(45deg, var(--text-dim) 0 3px, var(--bg) 3px 7px);
+                      opacity: 1; }
+  .tl-cover-axis { display: flex; justify-content: space-between; font-family: var(--mono);
+                   font-size: 10px; color: var(--text-dim); }
+  .tl-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+            vertical-align: -1px; margin-right: 4px; }
   #module-pending {
     font-size: 11px;
     color: var(--amber);
@@ -1580,6 +1591,8 @@
     <div class="pill" id="pill-ai"><span class="dot"></span> AI</div>
     <div class="pill" id="pill-vpn"><span class="dot"></span> VPN</div>
     <div class="pill" id="pill-sniffer"><span class="dot"></span> Sniffer</div>
+    <div class="pill" id="pill-sensors" style="cursor:pointer;"
+         onclick="openSensorWatch()"><span class="dot"></span> Sensors</div>
     <div class="pill" id="pill-protected">PROTECTED</div>
 
     <span id="model-note" title="Which model reasons about your network"></span>
@@ -1683,6 +1696,7 @@
     </div>
     <div class="card">
       <div class="card-title">Module Status</div>
+      <div id="sensor-watch-detail"></div>
       <div id="module-pending"></div>
       <div id="module-grid"></div>
     </div>
@@ -1796,11 +1810,15 @@
         the traffic from its own moment appear together. The line above the
         list says how much of the window is not shown.
         <br><br>
-        <b>What it cannot tell you:</b> it shows what was WRITTEN DOWN, not
-        what happened. A quiet hour here can mean a quiet network or a sensor
-        that was not running, and this page cannot tell those apart. Check the
-        Dashboard tiles for what was actually collecting before reading a gap
-        as calm.
+        <b>The bar under the filters</b> shows whether the sensors were
+        collecting across the window:
+        <span class="tl-key" style="background:var(--green-dim)"></span>all collecting,
+        <span class="tl-key" style="background:var(--amber)"></span>a sensor was quiet,
+        <span class="tl-key" style="background:var(--text-dim)"></span>AgentalSec was not running,
+        <span class="tl-key" style="background:repeating-linear-gradient(45deg, var(--text-dim) 0 2px, var(--bg) 2px 5px)"></span>not checked.
+        A quiet stretch on a green part of the bar is a calm one; on a shaded
+        part, the sensor named under the bar was not recording. Hover a shaded
+        part for the sensor and the reason.
       </div>
       <div class="timeline-filters">
         <div class="tfilter active" onclick="setTimeFilter(this,'2h')">2h</div>
@@ -1816,6 +1834,7 @@
           </label>
         </div>
       </div>
+      <div id="timeline-coverage"></div>
       <div id="timeline-summary"
            style="font-family:var(--mono);font-size:11px;line-height:1.6;
                   color:var(--text-dim);margin-bottom:10px;"></div>
@@ -3395,6 +3414,38 @@ async function updateStatusPills() {
 
     updateModuleGrid(d.modules || {}, d.module_settings || {});
   } catch(e) {}
+  refreshSensorWatch();
+}
+
+// The sensor watchdog's answer, checked once a minute on the server.
+async function refreshSensorWatch() {
+  let w;
+  try {
+    const r = await fetch('/api/sensors/watch', { headers: authHeaders() });
+    if (!r.ok) return;
+    w = await r.json();
+  } catch (e) { return; }
+  const quiet = (w.sensors || []).filter(s => s.state === 'quiet');
+  const tip = quiet.length
+    ? quiet.map(s => `${s.sensor.replace(/_/g, ' ')}: ${s.reason}`).join('\n')
+    : (w.checked_at ? `${w.ok} collecting, ${w.off} switched off` : 'The first check runs a minute after start');
+  setPill('pill-sensors', w.checked_at ? (quiet.length ? 'error' : 'ok') : '',
+          w.label || 'Sensors', tip + '\nClick for details');
+  const box = document.getElementById('sensor-watch-detail');
+  if (!box) return;
+  if (!w.checked_at) {
+    box.innerHTML = '<div class="sw-line">Sensor check: the first one runs a minute after start.</div>';
+    return;
+  }
+  box.innerHTML = quiet.length
+    ? quiet.map(s => `<div class="sw-line k-red"><b>${esc(s.sensor.replace(/_/g, ' '))}</b> is quiet: ${esc(s.reason)}</div>`).join('')
+    : `<div class="sw-line k-green">All ${Number(w.ok) || 0} running sensors are collecting, checked ${esc(fmtTime(w.checked_at))}.</div>`;
+}
+
+function openSensorWatch() {
+  showPage('dashboard');
+  const box = document.getElementById('sensor-watch-detail');
+  if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // THE MODEL LINE
@@ -3675,8 +3726,14 @@ function updateModuleGrid(modules, ms) {
     // remove. Grey rather than red: OFF is a choice, not a fault.
     const off = state && typeof state === 'object' && state.off_by_config;
     const ok  = state && state !== 'not_loaded' && state !== 'error';
-    const dot = (blind || failing) ? 'var(--red)'
+    // The dot follows the backlog line too: red when stuck, amber behind.
+    const behind = state && typeof state === 'object' && state.backlog
+      && typeof state.backlog === 'object'
+      && Object.values(state.backlog).some(n => n > 0);
+    const stuck = behind && Array.isArray(state.stalled) && state.stalled.length > 0;
+    const dot = (blind || failing || stuck) ? 'var(--red)'
               : off ? 'var(--text-dim)'
+              : behind ? 'var(--amber)'
               : ok ? 'var(--green)' : 'var(--text-dim)';
     const lbl = off ? 'off'
               : typeof state === 'object' ? (state.running ? 'running' : 'loaded')
@@ -4250,6 +4307,40 @@ function setTimeFilter(el, val) {
   loadTimeline();
 }
 
+// The coverage bar: the window, with the stretches a sensor or the app was
+// not collecting shaded, and one line per stretch under it.
+function renderTimelineCoverage(win, gaps, watchedSince) {
+  const box = document.getElementById('timeline-coverage');
+  if (!box) return;
+  if (!win || !win.since || !win.until) { box.innerHTML = ''; return; }
+  const t0 = parseUtc(win.since).getTime(), t1 = parseUtc(win.until).getTime();
+  const span = Math.max(1, t1 - t0);
+  // Before the first sensor check nothing was checked, so it is not green.
+  const w0 = watchedSince ? parseUtc(watchedSince).getTime() : t1;
+  const unchecked = Math.min(1, Math.max(0, (w0 - t0) / span));
+  const bars = (unchecked > 0
+    ? `<div class="tl-gap unchecked" title="Not checked: the sensor check started ${esc(watchedSince ? fmtTime(watchedSince) : 'after this window')}" style="left:0;width:${(unchecked * 100).toFixed(2)}%"></div>`
+    : '') + gaps.map(g => {
+    const a = Math.max(0, (parseUtc(g.start).getTime() - t0) / span);
+    const b = Math.min(1, (parseUtc(g.end).getTime() - t0) / span);
+    const tip = `${g.label}: ${g.reason || 'not collecting'}, ${fmtTime(g.start)} to ${g.open ? 'now' : fmtTime(g.end)}`;
+    return `<div class="tl-gap${g.sensor === 'agentalsec' ? ' app' : ''}" title="${esc(tip)}"`
+         + ` style="left:${(a * 100).toFixed(2)}%;width:${Math.max(0.3, (b - a) * 100).toFixed(2)}%"></div>`;
+  }).join('');
+  const lines = gaps.length
+    ? gaps.slice(0, 8).map(g =>
+        `<div>${esc(g.label)}: ${g.sensor === 'agentalsec' ? 'not running' : 'quiet'}, `
+        + `${esc(fmtTime(g.start))} to ${g.open ? 'now' : esc(fmtTime(g.end))}`
+        + `${g.sensor === 'agentalsec' ? '' : ` (${esc(g.reason || 'no reason recorded')})`}</div>`).join('')
+      + (gaps.length > 8 ? `<div>${gaps.length - 8} more, hover the bar</div>` : '')
+    : (unchecked >= 1 ? '<div>The sensor check had not started yet in this window.</div>'
+       : unchecked > 0 ? `<div>Every sensor was collecting from ${esc(fmtTime(watchedSince))}, when the sensor check started.</div>`
+       : '<div>Every sensor was collecting for the whole window.</div>');
+  box.innerHTML = `<div class="tl-cover">${bars}</div>`
+    + `<div class="tl-cover-axis"><span>${esc(fmtTime(win.since))}</span><span>${esc(fmtTime(win.until))}</span></div>`
+    + `<div style="font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--text-dim);margin:4px 0 10px;">${lines}</div>`;
+}
+
 async function loadTimeline() {
   const since = getTimeFilterISO(timeFilter);
   const only  = document.getElementById('timeline-findings-only');
@@ -4282,6 +4373,8 @@ async function loadTimeline() {
     if (sum) sum.textContent = '';
     return;
   }
+
+  renderTimelineCoverage(d.window, d.gaps || [], d.watched_since);
 
   let rows = d.rows;
   if (hidePackets) rows = rows.filter(r => r.kind !== 'packet');
@@ -7566,6 +7659,30 @@ function reportCard(r) {
   return parts.join('');
 }
 
+// A run's stored detail, for reading: the internal cooldown tags are cut,
+// and rows written before verdicts were put in words are translated.
+const RUN_VERDICT_WORDS = {
+  real: 'a real problem', benign: 'harmless',
+  needs_human: 'needs your decision', no_action: 'nothing needed doing',
+};
+function runDetailText(detail) {
+  let d = String(detail || '').replace(/^(\[(urgent incident|flood) [^\]]*\]\s*)+/, '').trim();
+  if (RUN_VERDICT_WORDS[d]) return `Verdict: ${RUN_VERDICT_WORDS[d]}.`;
+  d = d.replace(/^the model call did not produce an answer: /, 'No report was written: ');
+  d = d.replace(/the unattended turn hit its (\d+)-round ceiling without concluding\. That is a real failure: it spent [\d,]+ tokens and reached no verdict\./,
+                'it used all $1 rounds of lookups without reaching a verdict.');
+  return d;
+}
+
+// Each tool once, with how many times it was called, most used first.
+function toolSummary(tools) {
+  const counts = {};
+  tools.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([t, n]) => n > 1 ? `${t} (${n})` : t).join(', ');
+}
+
 function runRow(r) {
   const colour = r.outcome === 'error' ? 'var(--red)'
     : (r.outcome === 'budget' ? 'var(--amber)'
@@ -7588,9 +7705,9 @@ function runRow(r) {
       + (r.report_id ? ' <span style="color:var(--text-dim);">, report #'
           + esc(String(r.report_id)) + '</span>' : '')
     + '</div>'
-    + (r.detail ? '<div style="font-size:11px;font-family:var(--mono);'
-        + 'color:var(--text-dim);margin-top:4px;line-height:1.6;">'
-        + esc(r.detail) + '</div>' : '')
+    + (runDetailText(r.detail) ? '<div style="font-size:12px;'
+        + 'color:var(--text);margin-top:4px;line-height:1.6;">'
+        + esc(runDetailText(r.detail)) + '</div>' : '')
     // WHAT IT CALLED, added 2026-09-23. These names were collected by
     // run_unattended and dropped by _usage_dict for the whole life of the
     // duty loop, so a run row said what the agent concluded and never what it
@@ -7600,14 +7717,16 @@ function runRow(r) {
         : '<div style="font-size:11px;font-family:var(--mono);'
           + 'color:var(--text-dim);margin-top:4px;line-height:1.6;">'
           + (r.tools.length
-              ? 'called: ' + esc(r.tools.join(', '))
-              : 'called: nothing, it answered without a tool')
+              ? 'looked at: ' + esc(toolSummary(r.tools))
+              : 'looked at: nothing, it answered without a tool')
           + '</div>')
     + '<div style="font-size:11px;font-family:var(--mono);'
       + 'color:var(--text-dim);margin-top:4px;">'
       + fmtTokens(r.tokens_spent) + ' tokens'
       + (r.tokens_estimated ? ' (estimated)' : '')
-      + ' , ' + (r.model_calls || 0) + ' call(s)'
+      + ', ' + (r.model_calls || 0) + ' model call' + ((r.model_calls || 0) === 1 ? '' : 's')
+      + (r.tools && r.tools.length
+          ? ', ' + r.tools.length + ' lookup' + (r.tools.length === 1 ? '' : 's') : '')
     + '</div></div>';
 }
 
@@ -7739,6 +7858,7 @@ const SOURCE_NAMES = {
   registry_monitor: 'Startup items', ebpf_events: 'Kernel watch',
   port_owner: 'Open sockets', auditd: 'Audit log', av_scanner: 'Virus scan',
   remediation: 'This app', port_scanner: 'Port scan', place_watch: 'Place learning',
+  sensor_watch: 'Sensor check',
 };
 
 async function suppressDetection(did) {

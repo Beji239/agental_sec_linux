@@ -2021,9 +2021,9 @@ def register_routes(app):
 
         One caller, the page, and it is the caller this route exists for.
         """
-        from core import timeline
+        from core import sensor_watch, timeline
 
-        return jsonify(timeline.timeline_rows(
+        out = timeline.timeline_rows(
             since=request.args.get("since"),
             until=request.args.get("until"),
             limit=_int_arg("limit", 200, high=me.MAX_QUERY_LIMIT),
@@ -2034,7 +2034,20 @@ def register_routes(app):
             # that genuinely wants one run.
             all_sessions=(request.args.get("all_sessions", "true").lower()
                           != "false"),
-        ))
+        )
+        # When a sensor or the app was not collecting, shaded on the page.
+        win = out.get("window") or {}
+        out["gaps"] = (sensor_watch.gaps(win["since"], win["until"])
+                       if win.get("since") and win.get("until") else [])
+        out["watched_since"] = sensor_watch.watched_since()
+        return jsonify(out)
+
+    @app.route("/api/sensors/watch")
+    @require_api_key
+    def sensors_watch():
+        """The header pill: which sensors are collecting, from the watchdog."""
+        from core import sensor_watch
+        return jsonify(sensor_watch.current())
 
     @app.route("/api/behavioral/baseline")
     @require_api_key

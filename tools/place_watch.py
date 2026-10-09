@@ -10,6 +10,7 @@
 
 import logging
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 from core import geoip
@@ -60,12 +61,15 @@ class PlaceWatch:
         self._tally = {}
         self._thread = None
         self.last_pass = None
+        self._started_at = None
+        self._last_ok_at = None
 
     # Thread
 
     def start(self) -> bool:
         if not self.cfg.get("enabled"):
             return False
+        self._started_at = time.time()
         self._thread = threading.Thread(target=self._loop, name="place_watch",
                                         daemon=True)
         self._thread.start()
@@ -75,6 +79,17 @@ class PlaceWatch:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=wait)
+
+    def liveness(self) -> dict:
+        """Is the learning loop alive and recent. Read by core/sensor_watch."""
+        t = self._thread
+        err = (self.last_pass or {}).get("error")
+        return {"started": t is not None,
+                "thread_alive": bool(t is not None and t.is_alive()),
+                "running": not self._stop.is_set(),
+                "interval": int(self.cfg["interval_seconds"]),
+                "started_at": self._started_at, "last_ok_at": self._last_ok_at,
+                "consecutive_failures": 0, "last_error": err}
 
     def _loop(self):
         while not self._stop.wait(5 if self.last_pass is None
@@ -289,6 +304,7 @@ class PlaceWatch:
         self.last_pass = {"at": stamp, "observations": len(obs),
                           "new_places": learned,
                           "alerts": raised, "cursors": cursors}
+        self._last_ok_at = time.time()
         return {"ran": True, **self.last_pass}
 
     def _raise(self, new: list) -> int:

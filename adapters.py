@@ -273,12 +273,16 @@ class _BaseAdapter:
         # whole project is built to avoid.
         self._last_error = None
         self._consecutive_failures = 0
+        # For the sensor watchdog: when the loop started and last polled clean.
+        self._started_at = None
+        self._last_ok_at = None
 
     def start(self):
         """Start the poll loop on a daemon thread."""
         if self._running:
             return
         self._running = True
+        self._started_at = time.time()
         self._thread = threading.Thread(target=self._loop, name=type(self).__name__,
                                         daemon=True)
         self._thread.start()
@@ -293,6 +297,7 @@ class _BaseAdapter:
                 self.poll()
                 self._last_error = None
                 self._consecutive_failures = 0
+                self._last_ok_at = time.time()
             except Exception as e:
                 self._consecutive_failures += 1
                 self._last_error = f"{type(e).__name__}: {e}"
@@ -310,6 +315,22 @@ class _BaseAdapter:
 
     def poll(self):
         """One pass. Overridden. Must write whatever findings it raises."""
+
+    def liveness(self) -> dict:
+        """Is the poll loop alive and recent. Read by core/sensor_watch."""
+        t = self._thread
+        try:
+            interval = int(self.poll_interval)
+        except Exception:
+            interval = 60
+        return {"started": t is not None,
+                "thread_alive": bool(t is not None and t.is_alive()),
+                "running": bool(self._running),
+                "interval": interval,
+                "started_at": self._started_at,
+                "last_ok_at": self._last_ok_at,
+                "consecutive_failures": self._consecutive_failures,
+                "last_error": self._last_error}
 
     def status(self) -> dict:
         out = {

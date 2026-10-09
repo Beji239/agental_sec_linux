@@ -111,6 +111,7 @@ class LanLive:
         self.status = {"ok": False, "read": UNREAD, "error": None,
                        "last_poll": None, "polls": 0, "counters": None}
         self._last_ok = None
+        self._started_at = None
         self._last_counters = None
         self._last_dns = 0.0
         self._last_inventory = 0.0
@@ -122,9 +123,22 @@ class LanLive:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
+        self._started_at = time.time()
         self._thread = threading.Thread(target=self._loop, name="lan-live",
                                         daemon=True)
         self._thread.start()
+
+    def liveness(self) -> dict:
+        """Is the poll loop alive and recent. Read by core/sensor_watch."""
+        t = self._thread
+        with self._lock:
+            err = self.status.get("error")
+        return {"started": t is not None,
+                "thread_alive": bool(t is not None and t.is_alive()),
+                "running": not self._stop.is_set(),
+                "interval": int(self.cfg["poll_seconds"]),
+                "started_at": self._started_at, "last_ok_at": self._last_ok,
+                "consecutive_failures": 0, "last_error": err}
 
     def stop(self, wait: float = 5.0):
         self._stop.set()

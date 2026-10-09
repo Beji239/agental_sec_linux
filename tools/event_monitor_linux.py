@@ -2732,6 +2732,10 @@ def monitor_once(markers: dict = None, sources: list = None,
     markers = dict(markers or {})
 
     start_time = time.time()
+    # Taken BEFORE this poll's figures, so a status read between polls
+    # compares this poll with the last one. Taken at the end, the two were
+    # always equal and every backlog read as stuck.
+    _remember_previous_drain()
     events = []
     gaps = []
     failures = {}
@@ -2897,7 +2901,6 @@ def _finish_poll(events, stored, findings, gaps, failures, markers,
             + (f" ({gap['count']} record(s))" if gap.get("count") else ""))
 
     truncated_total = max(0, len(stored) - EVENT_RETURN_CAP)
-    _remember_previous_drain()
 
     by_source = defaultdict(int)
     for entry in events:

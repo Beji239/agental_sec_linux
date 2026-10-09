@@ -14,9 +14,13 @@
 #
 # --enroll logs in to the router ONCE as its administrator (you type the
 # router's password, or your own key is used if the router already has it).
+# On OpenWrt it also turns on dnsmasq's query log, which the DNS reader needs.
+# It then switches the gateway block on in config.json; --remove switches it
+# off and puts the query log setting back if enroll changed it.
 set -uo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG="${AGENTAL_CONFIG:-$PROJECT_ROOT/config.json}"
 AGENT_SRC="$PROJECT_ROOT/tools/gateway_agent.sh"
 CONF_DIR="$HOME/.config/agental_sec"
 KEY="$CONF_DIR/gateway_ed25519"
@@ -68,10 +72,10 @@ plan() {
     say "       install the agent as agentalsec-gw (root-only, mode 700)"
     say "       add the key to authorized_keys with command= forcing the agent,"
     say "       and no port forwarding, agent forwarding, X11 or terminal"
+    say "     on OpenWrt, turn on dnsmasq's query log (log-queries) so the"
+    say "     router's DNS lookups can be read"
     say "  4. run the agent's probe and print what this router can do"
-    say ""
-    say "Then add to config.json:"
-    say '  "gateway": {"enabled": true, "host": "<router address>"}'
+    say "  5. switch the gateway block on in $CONFIG"
     say ""
     say "Run: $0 --enroll <router address>"
 }
@@ -111,8 +115,68 @@ touch "\$AK"; chmod 600 "\$AK"
 grep -vF "$body" "\$AK" | grep -v " $HOST_TAG\$" > "\$AK.new" || true
 printf '%s\n' "command=\"\$DEST\",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty $pub" >> "\$AK.new"
 mv "\$AK.new" "\$AK"
-echo "INSTALLED agent=\$DEST authorized_keys=\$AK boot=\$BOOT"
+DNSLOG=unsupported
+if command -v uci >/dev/null 2>&1 && uci -q get dhcp.@dnsmasq[0] >/dev/null; then
+    if [ "\$(uci -q get dhcp.@dnsmasq[0].logqueries)" = "1" ]; then
+        DNSLOG=already-on
+    else
+        uci set dhcp.@dnsmasq[0].logqueries=1
+        SIZE="\$(uci -q get system.@system[0].log_size)"
+        mkdir -p /etc/agentalsec
+        printf 'log_size=%s\n' "\$SIZE" > /etc/agentalsec/dnslog_enabled_by_agent
+        if [ -z "\$SIZE" ] || [ "\$SIZE" -lt 1024 ]; then
+            uci set system.@system[0].log_size=1024
+        fi
+        uci commit dhcp; uci commit system
+        /etc/init.d/dnsmasq restart >/dev/null 2>&1
+        /etc/init.d/log restart >/dev/null 2>&1
+        DNSLOG=turned-on
+    fi
+fi
+echo "INSTALLED agent=\$DEST authorized_keys=\$AK boot=\$BOOT dnslog=\$DNSLOG"
 EOF
+}
+
+# Sets the gateway block in config.json; the rest of the file is kept.
+set_config() {
+    local enabled="$1"
+    if [[ ! -f "$CONFIG" ]]; then
+        say "  $CONFIG does not exist yet; copy config.linux.example.json to it,"
+        say "  then run this again or set the gateway block in Settings."
+        return 1
+    fi
+    python3 - "$CONFIG" "$enabled" "$HOST" "$PORT" "$USER_NAME" <<'PY' || return 1
+import json, os, sys, tempfile
+path, enabled, host, port, user = sys.argv[1:6]
+with open(path, encoding="utf-8") as f:
+    cfg = json.load(f)
+gw = cfg.get("gateway") or {}
+if enabled == "1":
+    gw.update(enabled=True, host=host, port=int(port), user=user)
+    gw.setdefault("interval_minutes", 5)
+    dns = cfg.setdefault("dns_monitor", {})
+    # A resolver file the owner set up on purpose is left alone.
+    if not (dns.get("enabled") and dns.get("source") in ("pihole", "adguard")
+            and dns.get("path")):
+        dns.update(enabled=True, source="auto")
+elif gw.get("host") == host:
+    gw["enabled"] = False
+else:
+    print("  config.json names another router, so it was left as it is")
+    sys.exit(0)
+cfg["gateway"] = gw
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)))
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+os.chmod(tmp, os.stat(path).st_mode & 0o777)
+os.replace(tmp, path)
+PY
+    if [[ "$enabled" == 1 ]]; then
+        say "  config.json: gateway switched on for $HOST, DNS source auto"
+    else
+        say "  config.json: gateway switched off"
+    fi
 }
 
 agent_call() {
@@ -153,7 +217,18 @@ enroll() {
     out="$(remote_install_script "$pub" | ssh "${PINNED[@]}" "$USER_NAME@$HOST" 'sh -s' 2>&1)"
     printf '%s\n' "$out" | grep -q '^INSTALLED' || die "the install did not finish: $out"
     say "  $(printf '%s\n' "$out" | grep '^INSTALLED')"
+    case "$out" in
+        *dnslog=turned-on*) say "  dnsmasq query logging was off and is now on" ;;
+        *dnslog=unsupported*) say "  not OpenWrt: turn on DNS query logging in the router yourself if it has it" ;;
+    esac
     verify
+    say ""
+    if set_config 1; then
+        say "Restart AgentalSec to start reading the router."
+    else
+        say "Set by hand in config.json, then restart the app:"
+        say "  \"gateway\": {\"enabled\": true, \"host\": \"$HOST\", \"port\": $PORT, \"user\": \"$USER_NAME\"}"
+    fi
 }
 
 verify() {
@@ -174,9 +249,10 @@ verify() {
     else
         say "  [FAIL] the key ran something other than the agent: $forced"
     fi
-    say ""
-    say "Now add to config.json and restart the app:"
-    say "  \"gateway\": {\"enabled\": true, \"host\": \"$HOST\", \"port\": $PORT, \"user\": \"$USER_NAME\"}"
+    if ! printf '%s\n' "$out" | grep -q '^cap=dnslog'; then
+        say "  [NOTE] no DNS query lines in the router's log yet, so DNS names"
+        say "         are not read. They appear once a device looks something up."
+    fi
 }
 
 remove() {
@@ -185,6 +261,13 @@ remove() {
 for d in /usr/local/sbin /usr/sbin /root; do rm -f "\$d/agentalsec-gw"; done
 [ -x /etc/init.d/agentalsec-gw ] && /etc/init.d/agentalsec-gw disable
 rm -f /etc/init.d/agentalsec-gw
+if [ -f /etc/agentalsec/dnslog_enabled_by_agent ] && command -v uci >/dev/null 2>&1; then
+    uci set dhcp.@dnsmasq[0].logqueries=0
+    SIZE="\$(sed -n 's/^log_size=//p' /etc/agentalsec/dnslog_enabled_by_agent)"
+    if [ -n "\$SIZE" ]; then uci set system.@system[0].log_size="\$SIZE"; else uci -q delete system.@system[0].log_size; fi
+    uci commit dhcp; uci commit system
+    /etc/init.d/dnsmasq restart >/dev/null 2>&1; /etc/init.d/log restart >/dev/null 2>&1
+fi
 rm -rf /etc/agentalsec
 nft delete table inet agentalsec_gw 2>/dev/null
 for ak in /etc/dropbear/authorized_keys "\$HOME/.ssh/authorized_keys"; do
@@ -194,7 +277,8 @@ echo REMOVED
 EOF
     say "Its blocks were lifted and its saved state removed. Sinkholes stay"
     say "until the router reboots."
-    say "Remove the gateway block from config.json, and $KEY if nothing else uses it."
+    set_config 0 || true
+    say "Delete $KEY if nothing else uses it, and restart the app."
 }
 
 case "$MODE" in

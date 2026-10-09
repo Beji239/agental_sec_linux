@@ -236,6 +236,11 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 
 class _FakeMonitor:
+    # The importer asks status() each pass, to tell waiting from failing.
+    def status(self, config):
+        return {"available": True, "source": "pihole", "path": None,
+                "reason": None}
+
     def import_once(self, config):
         return {"ran": True, "more_available": False, "inserted": 0,
                 "read": 0, "cursor": 0, "source": "pihole", "reason": None}
