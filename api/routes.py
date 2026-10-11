@@ -2450,6 +2450,26 @@ def register_routes(app):
             return jsonify({"error": f"no report with id {report_id}"}), 404
         return jsonify({"report": rows[0], "status": duty.status()})
 
+    # The daily security report: latest only unless older=1, which lists the
+    # 30 days kept. The page itself comes from the second route.
+    @app.route("/api/daily-reports")
+    @require_api_key
+    def daily_reports_list():
+        from core import daily_report
+        older = (request.args.get("older") or "").lower() in ("1", "true")
+        return jsonify({"reports": daily_report.list_reports(older),
+                        "count": daily_report.count(),
+                        "keep_days": daily_report.KEEP_DAYS})
+
+    @app.route("/api/daily-reports/<int:report_id>")
+    @require_api_key
+    def daily_report_page(report_id):
+        from core import daily_report
+        body = daily_report.get_html(report_id)
+        if body is None:
+            return jsonify({"error": f"no daily report with id {report_id}"}), 404
+        return jsonify({"id": report_id, "html": body})
+
     # DISMISSING REPORTS. 2026-09-25, the owner's instruction.
     #
     # "we need a dismiss button plus check box for agent reports, also a

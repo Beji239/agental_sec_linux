@@ -129,6 +129,7 @@ def engine() -> dict:
         tool = None
     return {"installed": bool(clamscan or clamdscan), "tool": tool,
             "daemon": daemon, "database_age_days": age_days,
+            "database_updated": newest,
             "database_stale": age_days is None or age_days > STALE_DATABASE_DAYS}
 
 
@@ -214,6 +215,19 @@ def watched_files(max_bytes: int) -> list:
     return files
 
 
+def _tally(eng: dict = None, **counts):
+    """Add this pass to the day's counters, which the daily report reads."""
+    try:
+        from core import daily_report
+        updated = (eng or {}).get("database_updated")
+        note = (time.strftime("%Y-%m-%d %H:%M", time.localtime(updated))
+                if updated else None)
+        for name, n in counts.items():
+            daily_report.tally(name, n, note=note if name == "av_passes" else None)
+    except Exception as e:                              # noqa: BLE001
+        logger.debug(f"could not count this scan pass: {e}")
+
+
 class Scanner:
     """The pass state: what was already scanned, so a file is read once."""
 
@@ -260,20 +274,25 @@ class Scanner:
         self.state["last"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         if not eng["installed"]:
             self.state["last_error"] = f"not installed: {INSTALL_COMMAND}"
+            _tally(av_missing=1)
             return []
         batch, programs = self.candidates()
         if not batch:
             self.state["last_error"] = None
+            _tally(eng, av_passes=1)
             return []
         res = scan_paths([p for p, _, _ in batch],
                          timeout=int(self.cfg["scan_timeout_seconds"]), eng=eng)
         if not res["ok"]:
             self.state["last_error"] = res["error"]
+            _tally(av_failed=1)
             return []
         self.state["last_error"] = res.get("warnings") or None
         for p, s, m in batch:
             self.seen[p] = (s, m)
         self.state["scanned"] += res["scanned"]
+        _tally(eng, av_passes=1, av_files=res["scanned"],
+               av_infected=len(res["infected"]))
         findings = []
         for hit in res["infected"]:
             pids = programs.get(hit["path"], [])

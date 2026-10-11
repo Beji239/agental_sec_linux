@@ -608,9 +608,9 @@
       "so if nobody typed the analyst did not exist that hour.",
       "",
       "TWO TRIGGERS. An EMERGENCY (a UDP flood, high inbound AND outbound",
-      "volume) runs as soon as the condition is seen. FOUR REGULAR MOMENTS a",
-      "day, at local hours 9, 13, 17 and 21; each wakes, reports on up to two",
-      "findings from DIFFERENT tools, and goes back to sleep.",
+      "volume) runs as soon as the condition is seen. REGULAR MOMENTS at local",
+      "hours 13 and 17 each report on up to two findings from DIFFERENT tools.",
+      "The last hour in wake_hours (21) writes the daily security report.",
       "",
       "enabled: false means NOTHING IS INVESTIGATING ANYTHING. That is",
       "reported as blind by query_agent_reports and by the Agents tab rather",
@@ -627,7 +627,7 @@
     "tick_seconds": 60,
     "max_investigations_per_hour": 3,
     "daily_token_ceiling": 2000000,
-    "wake_hours": [9, 13, 17, 21]
+    "wake_hours": [13, 17, 21]
   },
 
   "sensor_backends": {

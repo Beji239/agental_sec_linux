@@ -58,7 +58,8 @@ How to enrol a router: [docs/ROUTER.md](docs/ROUTER.md).
   can do, approval, the duty loop
 - [docs/ROUTER.md](docs/ROUTER.md), the router agent, Pi-hole and AdGuard
   Home, other Linux machines over SSH
-- [SETUP.md](SETUP.md), installation step by step
+- [SETUP.md](SETUP.md), installation step by step, and
+  [updating an install](SETUP.md#updating)
 
 ## How it works
 
@@ -137,8 +138,9 @@ finding was produced. It has no shell.
 - **It asks you** when it needs something only you know, makes predictions
   that are graded afterwards, and remembers past cases.
 - **It works while you are away.** An incident watcher groups findings as
-  they arrive, and a duty loop wakes four times a day, or at once in an
-  emergency, to investigate and write a report.
+  they arrive, and a duty loop wakes during the day, or at once in an
+  emergency, to investigate and write a report. Each evening it writes a
+  daily security report you can print or save as PDF.
 
 **Nothing changes without your approval.** Ending a process, a firewall
 block, quarantining a file, disabling a service, a block on the router: each

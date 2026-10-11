@@ -539,9 +539,14 @@ def popup_due(in_chat: bool = False, actions_waiting: int = 0) -> dict:
         # actions.pending_count) rather than from an import here, so this
         # module keeps knowing nothing about the action queue.
         actions_waiting = int(actions_waiting or 0)
+        # Every open question, shown or not; the tab badge counts these.
+        open_count = conn.execute(
+            "SELECT COUNT(*) FROM operator_question WHERE state = 'open'"
+        ).fetchone()[0]
 
         if not waiting and not actions_waiting:
             return {"due": False, "waiting": 0, "actions_waiting": 0,
+                    "open": open_count,
                     "reason": "nothing is waiting to be shown"}
 
         spent = conn.execute(
@@ -553,14 +558,14 @@ def popup_due(in_chat: bool = False, actions_waiting: int = 0) -> dict:
 
     if in_chat:
         return {"due": False, "waiting": len(waiting),
-                "actions_waiting": actions_waiting,
+                "actions_waiting": actions_waiting, "open": open_count,
                 "reason": ("the owner is in the chat tab, so ask the owner there instead "
                            "of interrupting the owner"),
                 "ask_in_chat": True, "questions": waiting}
 
     if spent >= cap:
         return {"due": False, "waiting": len(waiting),
-                "actions_waiting": actions_waiting,
+                "actions_waiting": actions_waiting, "open": open_count,
                 "reason": f"the interruption budget is spent, {spent} of {cap} "
                           f"in the last 24 hours"}
 
@@ -569,12 +574,12 @@ def popup_due(in_chat: bool = False, actions_waiting: int = 0) -> dict:
         if since and (now - since) < timedelta(minutes=gap):
             mins = int((now - since).total_seconds() // 60)
             return {"due": False, "waiting": len(waiting),
-                    "actions_waiting": actions_waiting,
+                    "actions_waiting": actions_waiting, "open": open_count,
                     "reason": f"the owner was interrupted {mins} minutes ago and the "
                               f"minimum gap is {gap}"}
 
     return {"due": True, "waiting": len(waiting), "questions": waiting,
-            "actions_waiting": actions_waiting,
+            "actions_waiting": actions_waiting, "open": open_count,
             "budget_left": cap - spent - 1}
 
 

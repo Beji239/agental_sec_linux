@@ -117,9 +117,20 @@ to 40 a day. Config: `incident_watcher`.
 **Duty loop.** The analyst wakes on its own:
 
 - at once when an emergency condition, such as a flood, is seen;
-- at four regular times a day (`duty_loop.wake_hours`, by default 9, 13, 17
-  and 21 local time), when it investigates up to two open findings from
-  different tools and writes a report.
+- at regular times (`duty_loop.wake_hours`, by default 13 and 17 local
+  time), when it investigates up to two open findings from different tools
+  and writes a report;
+- at the last hour in that list (21 by default), when it writes the daily
+  security report.
+
+**Daily security report.** One page for every day the app ran, on the Agents
+tab: a status, the day in brief, what needs your decision, how much of the
+day was watched, incidents, attempts to get in, malware checks, your network,
+actions, and the analyst's assessment. Every fact is counted from the
+database; only the assessment is model text, from one call with no tools
+(about 2,000 tokens). A day the app ran but was off at report time gets its
+report at the next start. Reports are kept for 30 days and can be printed or
+saved as PDF.
 
 It is capped at three investigations an hour and a daily token ceiling
 (`duty_loop.daily_token_ceiling`); when a cap is reached it examines nothing,

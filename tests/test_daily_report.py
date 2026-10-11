@@ -1,0 +1,308 @@
+"""
+tests/test_daily_report.py, the daily security report.
+
+Facts are counted from the database, the status follows them, the HTML keeps
+the app's punctuation rules, one report per day, the window carries on from
+the previous evening's report, a first start writes only the latest missed
+day, the 21:00 wake writes the report instead of a routine one, and a catch-up
+does not use up a regular wake hour. Runs on a scratch database with made-up
+data and a stubbed model.
+"""
+import json
+import pathlib
+import sqlite3
+import sys
+import tempfile
+from datetime import date, datetime, timedelta, timezone
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+fails = []
+
+
+def check(label, got, want):
+    ok = got == want
+    print(f"  {'PASS' if ok else 'FAIL'}  {label}: {got!r}"
+          + ("" if ok else f"  (want {want!r})"))
+    if not ok:
+        fails.append(label)
+
+
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="dailyreport_"))
+DB = tmp / "t.db"
+DB.write_text("")
+sqlite3.connect(DB).executescript(
+    (ROOT / "Schema.SQL").read_text(encoding="utf-8"))
+
+from core import memory_engine as me            # noqa: E402
+me.DB_PATH = DB
+from core import migrations                     # noqa: E402
+migrations.run_migrations(DB)
+from core import agent_loop, daily_report as dr, duty  # noqa: E402
+
+dr._state["started"] = 0            # the sensor watch wait is over
+model = {"n": 0, "prompt": None}
+
+
+def fake_complete(system, prompt):
+    model["n"] += 1
+    model["prompt"] = prompt
+    return {"text": json.dumps({
+                "assessment": "A quiet day — one real event. It failed.",
+                "recommendations": ["Allow only key logins for SSH."]}),
+            "usage": {"calls": 1, "prompt_tokens": 900,
+                      "completion_tokens": 100, "total_tokens": 1000,
+                      "estimated": False},
+            "error": None}
+
+
+agent_loop.complete_once = fake_complete
+
+DAY = date.today() - timedelta(days=2)
+START, END = dr.day_bounds(DAY)
+
+
+def at(h, m=0, day=DAY):
+    """UTC SQL time for a local hour on a day."""
+    return dr._sql(datetime(day.year, day.month, day.day, h, m).astimezone())
+
+
+def iso(h, m=0, day=DAY):
+    return dr._iso(datetime(day.year, day.month, day.day, h, m).astimezone())
+
+
+with sqlite3.connect(DB) as c:
+    tables = {r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    c.execute("INSERT INTO sensor_watch_beat (id, at, first_at) VALUES (1, ?, ?)",
+              (0, int((START - timedelta(days=5)).timestamp())))
+    for h in range(0, 24):
+        c.execute("INSERT INTO watcher_run (session_id, ran_at, outcome) "
+                  "VALUES ('s', ?, 'ok')", (at(h, 5),))
+    c.execute("INSERT INTO sensor_gaps (sensor, reason, started_at, ended_at) "
+              "VALUES ('agentalsec', 'AgentalSec was not running', ?, ?)",
+              (at(2, 6), at(4, 26)))
+    c.execute("INSERT INTO sensor_gaps (sensor, reason, started_at, ended_at) "
+              "VALUES ('packet_sniffer', 'could not open the network card', ?, ?)",
+              (at(13, 5), at(13, 20)))
+    ev = ("INSERT INTO events (session_id, occurred_at, source, event_type, "
+          "username, src_ip, description) VALUES ('s', ?, 'auth.log', ?, ?, ?, ?)")
+    for i in range(5):
+        c.execute(ev, (at(3, 12 + i), "failed_login", "root", "203.0.113.45",
+                       "sshd[1]: Failed password for root"))
+    c.execute(ev, (at(9), "successful_login", "ada", None,
+                   "pam_unix(lightdm:session): session opened for user ada"))
+    c.execute(ev, (at(9, 30), "successful_login", "root", None,
+                   "pam_unix(cron:session): session opened for user root"))
+    c.execute(ev, (at(10), "successful_login", "ada", "198.51.100.7",
+                   "sshd[2]: Accepted publickey for ada"))
+    fi = ("INSERT INTO findings (session_id, found_at, source, severity, "
+          "entity_type, entity_value, title, detection_id, dismissed) "
+          "VALUES ('s', ?, ?, ?, 'ip', ?, ?, ?, ?)")
+    c.execute(fi, (at(9, 40), "lan_live", "medium", "192.0.2.149",
+                   "Contact with a listed address", "LAN-1010", 1))
+    c.execute(fi, (at(20, 35), "lan_live", "high", "192.0.2.125",
+                   "New device on the network: 192.0.2.125", "LAN-1008", 0))
+    c.execute(fi, (at(11), "process_monitor", "medium", "/tmp/x",
+                   "Running from suspicious location: /tmp/x", "LNX-1101", 0))
+    inc = ("INSERT INTO incident (incident_key, detection_id, entity_type, "
+           "entity_value, source, severity, severity_rank, title, "
+           "first_seen_at, last_seen_at, finding_count, status, status_at) "
+           "VALUES (?, ?, 'ip', ?, 'x', ?, ?, ?, ?, ?, ?, ?, ?)")
+    c.execute(inc, ("k1", "LNX-1002", "203.0.113.45", "high", 3,
+                    "SSH password guessing", at(3, 12), at(3, 19), 5,
+                    "triaged", at(3, 20)))
+    c.execute(inc, ("k2", "LAN-1008", "192.0.2.125", "high", 3,
+                    "New device joined the network", at(20, 35), at(20, 35), 1,
+                    "new", at(20, 35)))
+    c.execute(inc, ("k3", "LAN-1010", "192.0.2.149", "medium", 2,
+                    "Laptop contacted a listed address", at(9, 40), at(9, 40),
+                    1, "triaged", at(9, 41)))
+    c.execute(inc, ("k4", "LAN-1010", "192.0.2.150", "medium", 2,
+                    "Laptop contacted a listed address", at(18, 2), at(18, 2),
+                    1, "triaged", at(18, 3)))
+    rep = ("INSERT INTO duty_report (session_id, created_at, kind, trigger, "
+           "incident_id, verdict, saw, body) VALUES ('s', ?, 'incident', "
+           "'regular', ?, ?, 'x', 'b')")
+    c.execute(rep, (at(3, 21), 1, "real"))
+    c.execute(rep, (at(9, 42), 3, "benign"))
+    c.execute(rep, (at(18, 4), 4, "benign"))
+    c.execute("INSERT INTO action_request (session_id, created_at, verb, "
+              "target, params_json, evidence_json, reason, evidence_fingerprint, proposed_by, incident_id, "
+              "state) VALUES ('s', ?, 'block_device', '192.0.2.125', '{}', '{}', 'r', 'f', "
+              "'model', 2, 'pending')", (at(20, 40),))
+    c.execute("INSERT INTO port_owner_change (sweep_id, detected_at, kind, "
+              "proto, scope, local_address, local_port, comm) VALUES "
+              "(1, ?, 'appeared', 'tcp', 'listen', '0.0.0.0', 8080, 'python3')",
+              (at(12),))
+    c.execute("INSERT INTO port_owner_change (sweep_id, detected_at, kind, "
+              "proto, scope, local_address, local_port, comm) VALUES "
+              "(1, ?, 'appeared', 'tcp', 'listen', '127.0.0.1', 9090, 'x')",
+              (at(12),))
+    c.execute("INSERT INTO lan_traffic_minute (minute, ip, mac, up_bytes, "
+              "down_bytes, up_packets, down_packets) VALUES (?, ?, '', ?, 0, 1, 1)",
+              (iso(15), "192.0.2.149", 1_200_000_000))
+
+check("the migration made daily_report",
+      {"daily_report", "daily_tally"} <= tables, True)
+check("schema is v63 or later", migrations.SCHEMA_VERSION >= 63, True)
+
+dr.tally("av_passes", 3, note="2026-10-09 06:14", day=DAY)
+dr.tally("av_passes", 2, day=DAY)
+dr.tally("av_files", 40, day=DAY)
+with me._get_readonly_conn() as conn:
+    t = dr._tallies(conn, DAY)
+check("tallies add up", t["av_passes"]["value"], 5)
+check("and the note survives a later pass without one",
+      t["av_passes"]["note"], "2026-10-09 06:14")
+
+print("\nfacts")
+written = END - timedelta(hours=3)          # 21:00 on the day
+f = dr.collect(DAY, written)
+check("window runs to the time of writing", f["end"], written)
+check("failed logins counted", f["logins"]["failed_total"], 5)
+check("by service", f["logins"]["failed"], {"SSH": 5})
+check("cron sessions are not logins", f["logins"]["success"], 2)
+check("a login from another address is named",
+      list(f["logins"]["remote"]), ["198.51.100.7"])
+check("a loopback listener is not a new open port",
+      [p["local_port"] for p in f["new_ports"]], [8080])
+check("app off time is a gap", len(f["coverage"]["off"]), 1)
+check("a quiet sensor is listed", len(f["coverage"]["quiet"]), 1)
+check("watched time leaves out the 2 h 20 min off",
+      round(f["coverage"]["window_seconds"] - f["coverage"]["watched_seconds"]),
+      140 * 60)
+kinds = {r["id"]: r["kind"] for r in f["incidents"]["rows"]}
+check("incident outcomes from verdicts and cards",
+      kinds, {1: "real", 2: "decision", 3: "harmless", 4: "harmless"})
+harmless = [g for g in f["folded"] if g["kind"] == "harmless"]
+check("harmless repeats fold into one row", [g["times"] for g in harmless], [2])
+check("a real incident makes the day red", f["status"]["level"], "red")
+check("the brief has at most three lines", len(f["brief"]) <= 3, True)
+check("the virus scan passes are read", dr._malware_rows(f)[0][1][0],
+      "5 passes, 40 files")
+
+print("\nrendering")
+a = dr._parse_assessment(fake_complete("", "")["text"])
+check("model dashes become commas", a["text"],
+      "A quiet day, one real event. It failed.")
+page = dr.render(f, dict(a, usage={"total_tokens": 1000}))
+for word in ("The day in brief", "Needs your decision", "Coverage",
+             "Incidents", "Attempts to get in", "Malware and suspicious",
+             "Your network", "Actions", "The agent's assessment"):
+    check(f"section {word}", word in page or word.replace("'", "&#x27;") in page,
+          True)
+check("no em or en dash in the page",
+      any(ch in page for ch in "—–"), False)
+check("no pipe in the page text", " | " in page, False)
+check("titles are escaped", "<script" in dr.render(
+    dict(f, folded=[dict(harmless[0], title="<script>x</script>")]), a), False)
+
+print("\nwriting")
+model["n"] = 0
+r = dr.write(DAY, "s", trigger="manual", now=written)
+check("written", r["outcome"], "reported")
+check("assessed by one model call", (r["assessed"], model["n"]), (True, 1))
+check("the digest has the facts", "SSH password guessing" in model["prompt"], True)
+check("a second write does nothing", dr.write(DAY, "s")["outcome"], "exists")
+with sqlite3.connect(DB) as c:
+    run = c.execute("SELECT trigger, outcome, tokens_spent, detail FROM duty_run "
+                    "ORDER BY id DESC LIMIT 1").fetchone()
+check("the spend is on a duty run row", run[:3], ("manual", "reported", 1000))
+check("tagged as a catch-up", run[3].startswith(dr.CATCH_UP_TAG), True)
+listed = dr.list_reports()
+check("latest only by default", len(listed), 1)
+check("the page can be read back", "Daily security report" in
+      dr.get_html(listed[0]["id"]), True)
+
+print("\nthe next day's window")
+NEXT = DAY + timedelta(days=1)
+with sqlite3.connect(DB) as c:
+    c.execute("INSERT INTO watcher_run (session_id, ran_at, outcome) "
+              "VALUES ('s', ?, 'ok')", (at(10, 0, NEXT),))
+with me._get_readonly_conn() as conn:
+    w = dr.window_for(conn, NEXT, dr.day_bounds(NEXT)[1])
+check("starts where the evening report ended", w[0], written)
+
+print("\nmissed days")
+dr.expire()
+with sqlite3.connect(DB) as c:
+    c.execute("DELETE FROM daily_report")
+OLD = DAY - timedelta(days=6)
+with sqlite3.connect(DB) as c:
+    c.execute("INSERT INTO watcher_run (session_id, ran_at, outcome) "
+              "VALUES ('s', ?, 'ok')", (at(10, 0, OLD),))
+now = datetime.now(timezone.utc)
+check("with no report yet, only the latest missed day",
+      dr.missing_days(now), [NEXT])
+with sqlite3.connect(DB) as c:
+    c.execute("INSERT INTO daily_report (day, window_start, window_end, "
+              "created_at, status, html) VALUES (?, ?, ?, ?, 'green', 'x')",
+              (OLD.isoformat(), at(0, 0, OLD), at(21, 0, OLD), at(21, 0, OLD)))
+check("after a report, every later day the app ran",
+      dr.missing_days(now), [DAY, NEXT])
+f2 = dr.collect(DAY, written)
+check("the off stretch before the day is stated once",
+      bool(f2["off_before"]), True)
+check("and names the days with no report",
+      f2["off_before"]["skipped"][0], OLD + timedelta(days=1))
+with sqlite3.connect(DB) as c:
+    c.execute("INSERT INTO daily_report (day, window_start, window_end, "
+              "created_at, status, html) VALUES (?, ?, ?, ?, 'green', 'x')",
+              ((date.today() - timedelta(days=40)).isoformat(), "a", "b", "c"))
+check("reports older than 30 days are deleted", dr.expire(), 1)
+
+print("\nthe schedule")
+check("the default wake hours drop 9", duty.DEFAULT_WAKE_HOURS, (13, 17, 21))
+duty._wake_hours = lambda: (13, 17, 21)
+today = date.today()
+
+
+def local_at(h, m=0):
+    return datetime(today.year, today.month, today.day, h, m).astimezone(
+        timezone.utc)
+
+
+with sqlite3.connect(DB) as c:
+    c.execute("DELETE FROM duty_run")
+    c.execute("INSERT INTO duty_run (session_id, ran_at, ended_at, trigger, "
+              "outcome, detail) VALUES ('s', ?, ?, 'manual', 'reported', ?)",
+              (dr._sql(local_at(13, 2)), dr._sql(local_at(13, 2)),
+               dr.CATCH_UP_TAG + "x] green"))
+check("a catch-up row does not use the 13:00 wake",
+      duty._next_regular_moment(local_at(13, 10))["due_now"], True)
+check("21:00 is the daily hour",
+      duty._next_regular_moment(local_at(21, 1))["daily_hour"], True)
+
+from core import sensor_health              # noqa: E402
+sensor_health.warnings_for = lambda tool, modules: []
+duty.emergency_check = lambda *a, **k: {"emergency": False}
+duty.urgent_incident = lambda now=None: None
+ran = {"regular": 0}
+duty.run_once = lambda *a, **k: ran.__setitem__("regular", ran["regular"] + 1) \
+    or {"outcome": "reported"}
+with sqlite3.connect(DB) as c:
+    c.execute("DELETE FROM daily_report")
+    c.execute("DELETE FROM duty_run")
+    c.execute("DELETE FROM watcher_run")
+    c.execute("INSERT INTO watcher_run (session_id, ran_at, outcome) "
+              "VALUES ('s', ?, 'ok')", (dr._sql(local_at(20, 50)),))
+dr._state["next_catch_up"] = 0
+out = duty._tick_once("s", modules={}, now=local_at(21, 0))
+check("the 21:00 poll writes the daily report", (out.get("kind"),
+      out.get("day")), ("daily", today.isoformat()))
+check("and not a routine report", ran["regular"], 0)
+with sqlite3.connect(DB) as c:
+    trig = c.execute("SELECT trigger FROM duty_run ORDER BY id DESC").fetchone()
+check("its run row serves the 21:00 hour", trig[0], "regular")
+out = duty._tick_once("s", modules={}, now=local_at(21, 1))
+check("the next poll is not a wake", out.get("outcome"), "not_due")
+
+print("\nno tools for the assessment call")
+check("an empty allowlist sends no tools", agent_loop._tools_payload(()), [])
+check("no allowlist still sends them all",
+      len(agent_loop._tools_payload()) > 10, True)
+
+print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
+sys.exit(1 if fails else 0)

@@ -494,8 +494,8 @@ def main():
 
     section("12. the schedule is the owner's local hours")
     sched = duty._next_regular_moment()
-    check("four regular wake-ups are configured", len(sched["hours"]) == 4,
-          f"hours={sched['hours']}")
+    check("three wake-ups are configured, the last for the daily report",
+          len(sched["hours"]) == 3, f"hours={sched['hours']}")
     check("they are the local hours, not UTC",
           sched["local_hour"] == __import__("datetime").datetime.now().hour,
           f"reported local hour {sched['local_hour']}")

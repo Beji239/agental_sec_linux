@@ -216,6 +216,30 @@ python3 main.py --check
 python3 scripts/run_tests.py
 ```
 
+## Updating
+
+```bash
+./scripts/update.sh
+```
+
+It fetches the latest code, reinstalls the Python packages, lists what
+changed and names anything else to run. Then restart AgentalSec; the database
+updates itself at that start. `./scripts/update.sh --check` only shows whether
+an update is waiting.
+
+The same by hand:
+
+```bash
+git pull
+pip install --user --break-system-packages -r requirements.txt
+```
+
+Then restart the app. With a router enrolled, run
+`./scripts/install_gateway_agent.sh --enroll <router address>` again when the
+router agent changed. Your `config.json` is never overwritten, so a new
+setting keeps its default until you change it in Settings. What each version
+changed is on the repository's Releases page.
+
 ## Maintenance
 
 ```bash

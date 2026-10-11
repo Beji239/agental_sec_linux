@@ -123,7 +123,8 @@ class BadDutyInput(ValueError):
 
 DEFAULT_TICK_SECONDS       = 60
 DEFAULT_MAX_PER_HOUR       = 3
-DEFAULT_WAKE_HOURS         = (9, 13, 17, 21)
+# The last hour writes the daily security report (core/daily_report.py).
+DEFAULT_WAKE_HOURS         = (13, 17, 21)
 DEFAULT_DAILY_TOKEN_CEILING = 2_000_000
 
 # THE SHARE OF THE CEILING ONLY AN EMERGENCY OR AN URGENT INCIDENT MAY SPEND.
@@ -314,7 +315,7 @@ def _max_per_hour() -> int:
 
 def _wake_hours() -> tuple:
     """
-    The local hours at which the four regular wake-ups happen.
+    The local hours of the wake-ups; the last one writes the daily report.
 
     LOCAL, not UTC, and the difference is the point: "around the day's ordinary
     points" is a statement about the owner's day. The machine is at UTC-7, so a
@@ -1010,6 +1011,10 @@ DUTY_TOOL_ALLOWLIST = (
     "query_runbook", "query_performance",
     # the two writes the loop is allowed, both of which only touch our records
     "file_action_request", "write_prediction",
+    # Questions for the owner. Filing one changes nothing on the machine and
+    # waits for the popup budget; before 2026-10-11 the prompt named the tool
+    # and the loop could not call it, so it never asked anything.
+    "ask_operator", "query_operator_answers",
 )
 
 
@@ -1429,6 +1434,7 @@ WHAT TO DO, in order:
 4. Reach a verdict. One of: `real`, `benign`, `needs_human`, or `no_action`.
 5. If the verdict is `needs_human` and there is an action that would stop it, FILE it with file_action_request. That is a proposal and nothing runs from it. State your objection in the reason if you have one.
 6. If the verdict is `no_action`, you must say WHAT YOU SAW. Not "all clear", the specific things you read and why none of them needed doing.
+7. {ask}
 
 IF THE CASE FILE SAYS IT COULD NOT BE READ, that is a real limitation of this run and you must say so in your report. An assessment made with no history is a different thing from one made with it, and a reader has to be able to tell which they are reading.
 
@@ -1459,6 +1465,7 @@ WHAT TO DO:
 1. Read enough about each finding to say something true about it. Use your read tools, the entity, its baseline, the packets or events around it, the register entry for the detection that raised it. The host block above is the freshest look at this machine's own listening ports and their owning processes; if either finding touches a port, an address or a process here, that is evidence and query_port_owner answers for any port it did not list.
 2. You MAY look at other findings or incidents if these two turn out to be uninteresting, but the report stays about these two: the page picks them so the report has a subject.
 3. If either finding genuinely warrants an action, file it with file_action_request and say so in the report. Otherwise say plainly that neither did, and what you looked at to decide that.
+4. {ask}
 
 {voice}
 
@@ -1493,6 +1500,7 @@ WHAT TO DO, in order:
 3. Reach a verdict. One of: `real`, `benign`, `needs_human`, or `no_action`.
 4. If it is real or needs a human and blocking the peer would stop it, FILE block_device for that address with file_action_request. That is a proposal and nothing runs from it. Say in the reason that a block here is at this host only.
 5. If the verdict is `no_action`, you must say WHAT YOU SAW.
+6. {ask}
 
 {voice}
 
@@ -1505,6 +1513,36 @@ ANSWER WITH A JSON OBJECT AND NOTHING ELSE, in exactly this shape:
   "report": "the report body for the Agents page, in this app's voice, a short paragraph or three"
 }}
 """
+
+
+# The step every duty prompt carries, so the loop asks rather than guesses.
+ASK_STEP = (
+    "If the deciding fact is one only the owner knows, ASK THE OWNER with "
+    "ask_operator instead of guessing: whether a device is theirs "
+    "(identify_device), whether they recognise a destination or a program "
+    "(identify_destination, identify_process), whether something is normal "
+    "for them (expected_behaviour), or whether they made a change "
+    "(confirm_change). Read query_operator_answers first and use the answer "
+    "if one was already given. Asking does not hold up this report: write it "
+    "with what you know, say that you asked, and use `needs_human` when the "
+    "answer decides the verdict. Never write that a device or a change is "
+    "probably the owner's without either their answer or a measurement "
+    "behind it.")
+
+
+# The step every duty prompt carries, so the loop asks rather than guesses.
+ASK_STEP = (
+    "If the deciding fact is one only the owner knows, ASK THE OWNER with "
+    "ask_operator instead of guessing: whether a device is theirs "
+    "(identify_device), whether they recognise a destination or a program "
+    "(identify_destination, identify_process), whether something is normal "
+    "for them (expected_behaviour), or whether they made a change "
+    "(confirm_change). Read query_operator_answers first and use the answer "
+    "if one was already given. Asking does not hold up this report: write it "
+    "with what you know, say that you asked, and use `needs_human` when the "
+    "answer decides the verdict. Never write that a device or a change is "
+    "probably the owner's without either their answer or a measurement "
+    "behind it.")
 
 
 def _emergency_block(emergency: dict) -> str:
@@ -1838,9 +1876,11 @@ def _next_regular_moment(now: datetime = None) -> dict:
         try:
             with me._get_readonly_conn() as conn:
                 if _table_ready(conn, "duty_run"):
+                    # A daily report caught up late does not use the hour.
                     already = conn.execute(
-                        "SELECT COUNT(*) FROM duty_run WHERE ran_at >= ?",
-                        (hour_start,)).fetchone()[0]
+                        "SELECT COUNT(*) FROM duty_run WHERE ran_at >= ? "
+                        "AND COALESCE(detail, '') NOT LIKE ?",
+                        (hour_start, _catch_up_like())).fetchone()[0]
                     if already:
                         due = False
         except Exception as e:
@@ -1853,9 +1893,35 @@ def _next_regular_moment(now: datetime = None) -> dict:
     return {"due_now": due, "local_hour": local.hour, "hours": list(hours),
             "next_hour": next_hour,
             "next_is_tomorrow": not later,
+            # The last hour of the day is the daily report, not a routine one.
+            "daily_hour": local.hour == hours[-1],
             "note": (f"Regular wake-ups at local hours "
-                     f"{', '.join(str(h) for h in hours)}. This machine is "
+                     f"{', '.join(str(h) for h in hours[:-1]) or 'none'}, and "
+                     f"the daily report at {hours[-1]}. This machine is "
                      f"at {local.strftime('%Z') or local.tzname()}.")}
+
+
+def _catch_up_like() -> str:
+    from core import daily_report
+    return daily_report.CATCH_UP_TAG.replace("[", "_") + "%"
+
+
+def _daily_report(session_id: str, now: datetime, schedule: dict):
+    """The daily report's share of a poll, or None. Never raises."""
+    try:
+        from core import daily_report
+        hours = schedule.get("hours") or list(_wake_hours())
+        if not _tick_lock.acquire(blocking=False):
+            return None
+        _duty_state["tick_started_at"] = _sql_ts(_now())
+        try:
+            return daily_report.tick(session_id, now, max(hours))
+        finally:
+            _duty_state["tick_started_at"] = None
+            _tick_lock.release()
+    except Exception as e:                              # noqa: BLE001
+        logger.error(f"daily report failed: {e}", exc_info=True)
+        return None
 
 
 def _held_by_budget(now: datetime):
@@ -1987,7 +2053,10 @@ def _tick_once(session_id: str, modules: dict = None,
                        urgent.get("title"), urgent.get("severity"))
         return _run("emergency", incident_id=urgent["id"], urgent=True)
 
-    if not schedule.get("due_now"):
+    daily = _daily_report(session_id, now, schedule)
+    if daily:
+        return daily
+    if not schedule.get("due_now") or schedule.get("daily_hour"):
         return {"outcome": "not_due", "schedule": schedule,
                 "emergency": emergency}
 
@@ -2321,7 +2390,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
             emergency_block=_fenced(_emergency_block(flood)),
             coverage_block=_coverage_block(coverage),
             host_block=_fenced(host_block) if host_block else host_block,
-            voice=REPORT_VOICE)
+            voice=REPORT_VOICE, ask=ASK_STEP)
         subject = {"emergency_peer": flood.get("peer"),
                    "packets": flood.get("n")}
     elif kind == "incident":
@@ -2361,7 +2430,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
             coverage_block=_coverage_block(coverage),
             case_block=_fenced(case_block) if case_block else case_block,
             host_block=_fenced(host_block) if host_block else host_block,
-            voice=REPORT_VOICE)
+            voice=REPORT_VOICE, ask=ASK_STEP)
         subject = {"incident_id": row.get("id"),
                    "detection_id": row.get("detection_id"),
                    "entity_value": row.get("entity_value")}
@@ -2371,7 +2440,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
             findings_block=_fenced(_findings_block(rows)),
             coverage_block=_coverage_block(coverage),
             host_block=_fenced(host_block) if host_block else host_block,
-            voice=REPORT_VOICE)
+            voice=REPORT_VOICE, ask=ASK_STEP)
         subject = {"finding_id": rows[0].get("id") if rows else None,
                    "second_finding_id": rows[1].get("id") if len(rows) > 1
                    else None,

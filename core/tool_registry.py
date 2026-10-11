@@ -2586,10 +2586,15 @@ TOOL_MANIFEST = [
         "name": "ask_operator",
         "description": (
             "Ask the owner something you cannot work out yourself.\n\n"
-            "USE THIS SPARINGLY AND IT WILL KEEP WORKING. The owner is interrupted "
-            "under a budget, questions gather and one popup carries several, "
-            "and a question the owner is shown and ignores for ten days retires "
-            "itself. Nothing here is urgent-jumpable, on purpose.\n\n"
+            "ASK WHEN ONLY THE OWNER KNOWS, rather than guessing. Whether a "
+            "device is theirs, whether they recognise a destination or a "
+            "program, whether something is normal for them or a change was "
+            "theirs: those are the owner's to answer, and a report that says "
+            "'probably the owner's' without asking is a guess. The owner is "
+            "interrupted under a budget, questions gather and one popup "
+            "carries several, and a question the owner is shown and ignores "
+            "for ten days retires itself, so asking costs little. Nothing "
+            "here is urgent-jumpable, on purpose.\n\n"
             "ASK ONLY AFTER YOU HAVE TRIED. This refuses outright if the "
             "research worker already resolved the thing, because asking the owner "
             "what RDAP could have told you is the fastest way to make the owner "
@@ -3017,6 +3022,12 @@ TOOL_MANIFEST = [
         "input_schema": {
             "type": "object",
             "properties": {
+                "ip": {"type": "string",
+                       "description": ("One address only: who reached it "
+                                       "(programs and devices), the names "
+                                       "seen for it, where it is, and its "
+                                       "alerts. Use this before asking the "
+                                       "owner about a destination.")},
                 "country_code": {
                     "type": "string",
                     "description": "Optional ISO 2-letter code to filter by, e.g. KR, DE, CN. "
@@ -5287,6 +5298,28 @@ def _query_threat_map(params: dict) -> dict:
     """
     from core import geoip
     from core import memory_engine as me
+
+    # One address: the map's side panel view, who reached it and its alerts.
+    one = (params.get("ip") or "").strip()
+    if one:
+        import ipaddress
+        from core import place_map
+        try:
+            one = str(ipaddress.ip_address(one))
+        except ValueError:
+            return {"error": f"{one!r} is not an IP address."}
+        return place_map.point(one, session_id=_session_id)
+
+    # One address: the map's side panel view, who reached it and its alerts.
+    one = (params.get("ip") or "").strip()
+    if one:
+        import ipaddress
+        from core import place_map
+        try:
+            one = str(ipaddress.ip_address(one))
+        except ValueError:
+            return {"error": f"{one!r} is not an IP address."}
+        return place_map.point(one, session_id=_session_id)
 
     limit = params.get("limit")
     try:

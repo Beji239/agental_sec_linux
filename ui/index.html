@@ -2754,6 +2754,25 @@
   -->
   <div class="page" id="page-agents">
     <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span class="card-title" style="margin:0;">Daily security report</span>
+        <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
+               title="Reports are kept for 30 days and then deleted.">
+          <input type="checkbox" id="daily-show-older" onchange="loadDailyReports()">
+          Show earlier reports (30 days)
+        </label>
+      </div>
+      <div style="color:var(--text-dim);font-size:12px;margin:10px 0;line-height:1.5;">
+        Written at 21:00, the last wake of the day, for every day the app ran.
+        A day the app ran but was off at 21:00 gets its report at the next start.
+        Every fact is counted from the database; only the agent's assessment
+        at the end is written by the model.
+      </div>
+      <div id="daily-reports"></div>
+    </div>
+
+    <div class="card">
+
       <div class="row" style="justify-content:space-between;align-items:center;">
         <span class="card-title" style="margin:0;">What the agent did while nobody was asking</span>
         <div class="row" style="gap:8px;">
@@ -2779,8 +2798,9 @@
       <div class="card-title">The duty loop</div>
       <div style="color:var(--text-dim);font-size:12px;margin-bottom:14px;line-height:1.5;">
         It wakes on its own: <b>emergency</b> when a flood condition is seen,
-        and at <b>four regular moments</b> a day, when it reports on up to two
-        findings from different tools and goes back to sleep.
+        at <b>13:00 and 17:00</b>, when it reports on up to two findings from
+        different tools and goes back to sleep, and at <b>21:00</b>, when it
+        writes the daily security report.
         Between those moments it looks at the clock every minute and does
         nothing, the line below counts those looks <b>separately from
         wake-ups</b>, so a quiet schedule cannot be mistaken for a loop that
@@ -3317,7 +3337,7 @@ function loadPage(name) {
   if (name === 'performance') loadPerformance();
   if (name === 'questions')   loadQuestions();
   if (name === 'actions')     loadActions();
-  if (name === 'agents')      loadAgents();
+  if (name === 'agents')      { loadAgents(); loadDailyReports(); }
   if (name === 'review')     { loadBlindingBudget(); loadDismissed(); loadSuppressions();
                                loadReviewQueue(); loadIntegrity(); loadRetention();
                                loadExpectedPorts(); }
@@ -5613,7 +5633,14 @@ async function loadThreatMap() {
 
   let d;
   try {
-    d = await fetch('/api/threatmap', { headers: authHeaders() }).then(r => r.json());
+    const r = await fetch('/api/threatmap', { headers: authHeaders() });
+    d = await r.json().catch(() => ({}));
+    // An error reply is not a missing location database.
+    if (!r.ok) {
+      stat.textContent = 'The map could not be loaded: '
+        + (d.error || ('the app answered ' + r.status)) + '.';
+      return;
+    }
   } catch(e) {
     stat.textContent = 'Could not reach AgentalSec.';
     return;
@@ -6703,7 +6730,7 @@ async function loadPerformance() {
       const parts = [esc(dev.entity_value)];
       if (blind) parts.push(`${blind} hours not measured`);
       if (need && have < need) parts.push(`${have} of ${need} hours toward a baseline`);
-      const sub = parts.join(' , ');
+      const sub = parts.join(', ');
       return `
         <div class="perf-row">
           <div class="perf-name">
@@ -6776,8 +6803,8 @@ async function loadQuestions() {
       const tried = (q.tried || []).map(t =>
         `<div>${esc(t.source)}: ${esc(t.said)}</div>`).join('');
       const hints = (q.hints || []).map(h => h.url
-        ? `<div class="q-hint"><a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.label)}</a> , ${esc(h.why)}</div>`
-        : `<div class="q-hint">${esc(h.label)} , ${esc(h.why)}</div>`).join('');
+        ? `<div class="q-hint"><a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.label)}</a>: ${esc(h.why)}</div>`
+        : `<div class="q-hint">${esc(h.label)}: ${esc(h.why)}</div>`).join('');
 
       const answered = q.state !== 'open';
       // THE ANSWER THAT WAS FILED BUT NEVER REACHED THE QUESTION. The owner answered
@@ -6816,7 +6843,7 @@ async function loadQuestions() {
 
       return `
         <div class="q-card">
-          <div class="q-topic">${esc(q.topic.replace(/_/g, ' '))} , ${esc(q.entity_value)}</div>
+          <div class="q-topic">${esc(q.topic.replace(/_/g, ' '))}: ${esc(q.entity_value)}</div>
           <div class="q-text">${esc(q.question)}</div>
           ${q.why_stuck ? `<div class="q-block"><b>Why it is stuck:</b> ${esc(q.why_stuck)}</div>` : ''}
           ${tried ? `<div class="q-block"><b>Already tried:</b>${tried}</div>` : ''}
@@ -6863,8 +6890,24 @@ async function checkQuestionPopup() {
     const d = await fetch('/api/questions/popup?in_chat=' + (inChat ? 'true' : 'false'),
       { headers: authHeaders() }).then(r=>r.json());
 
-    if (typeof d.waiting === 'number') setQuestionBadge(d.waiting);
+    // The badge counts every open question, shown or not.
+    if (typeof d.open === 'number') setQuestionBadge(d.open);
+    else if (typeof d.waiting === 'number') setQuestionBadge(d.waiting);
     if (typeof d.actions_waiting === 'number') setActionBadge(d.actions_waiting);
+    // He is in the chat: say it there, once, and start the expiry clock.
+    if (d.ask_in_chat && (d.questions || []).length) {
+      const qs = d.questions;
+      appendSystemNote((qs.length === 1 ? 'It has a question for you: '
+                        : 'It has ' + qs.length + ' questions for you: ')
+        + qs.slice(0, 3).map(q => q.question).join(' ')
+        + ' Answer on the Questions tab, or tell it here.');
+      fetch('/api/questions/shown-in-chat', {
+        method: 'POST',
+        headers: Object.assign({'Content-Type':'application/json'}, authHeaders()),
+        body: JSON.stringify({ question_ids: qs.map(q => q.id) })
+      }).catch(() => {});
+      return;
+    }
     if (!d.due) return;
 
     const claimed = await fetch('/api/questions/popup/claim', {
@@ -6987,7 +7030,13 @@ function renderActions() {
 
   // the pending cards, rendered with the SAME component chat uses.
   const waiting = (d.requests || []).filter(r => r.state === 'pending');
-  if (!waiting.length) {
+  const hidden = (s.awaiting_decision || 0) - waiting.length;
+  if (!waiting.length && hidden > 0) {
+    // The filter hid them; they are still waiting.
+    pending.innerHTML = '<div class="empty-state">' + hidden + ' card(s) are '
+      + 'waiting on you but the filter above hides them. Choose Everything '
+      + 'to see them.</div>';
+  } else if (!waiting.length) {
     pending.innerHTML = '<div class="empty-state">Nothing is waiting on you. '
       + 'That is not the same as nothing having been proposed, anything the '
       + 'agent asked for is below, with what happened to it.</div>';
@@ -7077,12 +7126,12 @@ function actionRow(r) {
     + '<div class="q-topic">' + esc(card.action || r.verb || '?')
       + ' <span style="color:var(--text-dim);">#' + esc(String(r.id)) + '</span>'
       + (r.incident_id
-          ? ' , incident #' + esc(String(r.incident_id)) : '')
+          ? ', incident #' + esc(String(r.incident_id)) : '')
       + '</div>'
     + '<div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:6px 0 0 0;">'
       + 'proposed by ' + esc(r.proposed_by || '?')
       + (r.created_at ? ' at ' + esc(fmtTime(r.created_at)) : '')
-      + ' , ' + esc(r.target || '')
+      + ', ' + esc(r.target || '')
       + '<br>' + esc(card.reason || r.reason || 'no reason recorded')
     + '</div>'
     + '<div style="font-size:12px;line-height:1.6;margin-top:8px;color:' + colour + ';">'
@@ -7197,8 +7246,8 @@ function renderExecutorState(st) {
   } else {
     lines.push('<span style="color:var(--green);">&#10003; running</span>');
   }
-  lines.push('ran ' + (st.executed || 0) + ' , failed '
-    + (st.failed || 0) + ' , refused by the tool ' + (st.refused || 0));
+  lines.push('ran ' + (st.executed || 0) + ', failed '
+    + (st.failed || 0) + ', refused by the tool ' + (st.refused || 0));
   if (st.awaiting_execution) {
     lines.push('approved and not yet run: ' + st.awaiting_execution);
   }
@@ -7220,6 +7269,84 @@ async function refreshActionBadge() {
       { headers: authHeaders() }).then(r => r.json());
     setActionBadge((d.summary && d.summary.awaiting_decision) || 0);
   } catch (e) {}
+}
+
+// The daily security report. Each report is a whole HTML page, shown in a
+// sandboxed frame so its styles stay its own, and printed from that frame.
+const DAILY_COLOURS = { green: 'var(--green)', amber: 'var(--amber)',
+                        red: 'var(--red)' };
+
+async function loadDailyReports() {
+  const box = document.getElementById('daily-reports');
+  const older = document.getElementById('daily-show-older');
+  let d;
+  try {
+    d = await fetch('/api/daily-reports' + (older && older.checked ? '?older=1' : ''),
+                    { headers: authHeaders() }).then(r => r.json());
+  } catch (e) {
+    box.innerHTML = '<div class="empty-state">Could not load the daily reports.</div>';
+    return;
+  }
+  const reports = d.reports || [];
+  if (!reports.length) {
+    box.innerHTML = '<div class="empty-state">No daily report yet. The first '
+      + 'is written at 21:00, or at the next start for a day the app ran but '
+      + 'was off at 21:00.</div>';
+    return;
+  }
+  box.innerHTML = reports.map((r, i) => {
+    const day = new Date(r.day + 'T12:00:00').toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const colour = DAILY_COLOURS[r.status] || 'var(--text-dim)';
+    return '<details class="daily-report" data-id="' + r.id + '"'
+      + (i === 0 ? ' open' : '') + ' style="margin:8px 0;">'
+      + '<summary style="cursor:pointer;">'
+      + '<b>' + esc(day) + '</b> <span style="color:' + colour
+      + ';font-weight:700;margin:0 6px;">' + esc((r.status || '').toUpperCase())
+      + '</span><span class="finding-desc">' + esc(r.headline || '') + '</span>'
+      + '</summary>'
+      + '<div class="row" style="margin:8px 0;"><button class="btn" '
+      + 'onclick="printDailyReport(' + r.id + ')" title="Opens the print dialog; '
+      + 'choose Save as PDF there for a file.">Print / Save as PDF</button></div>'
+      + '<iframe id="daily-frame-' + r.id + '" sandbox="allow-same-origin allow-modals" '
+      + 'style="width:100%;height:600px;border:0;border-radius:6px;background:#fff;"></iframe>'
+      + '</details>';
+  }).join('')
+    + (older && !older.checked && (d.count || 0) > 1
+       ? '<div class="finding-desc">' + (d.count - 1) + ' earlier report(s) '
+         + 'kept; tick Show earlier reports to see them.</div>' : '');
+  box.querySelectorAll('details.daily-report').forEach(el => {
+    el.addEventListener('toggle', () => { if (el.open) fillDailyFrame(el.dataset.id); });
+    if (el.open) fillDailyFrame(el.dataset.id);
+  });
+}
+
+function fillDailyFrame(id) {
+  const frame = document.getElementById('daily-frame-' + id);
+  if (!frame) return Promise.resolve(null);
+  if (frame.dataset.loaded) return Promise.resolve(frame);
+  return fetch('/api/daily-reports/' + id, { headers: authHeaders() })
+    .then(r => r.json())
+    .then(d => new Promise(resolve => {
+      frame.onload = () => {
+        try {
+          frame.style.height = (frame.contentDocument.documentElement.scrollHeight + 24) + 'px';
+        } catch (e) { /* the fixed height stays */ }
+        resolve(frame);
+      };
+      frame.srcdoc = d.html || '<p>Could not load this report.</p>';
+      frame.dataset.loaded = '1';
+    }))
+    .catch(() => null);
+}
+
+async function printDailyReport(id) {
+  const el = document.querySelector('details.daily-report[data-id="' + id + '"]');
+  if (el) el.open = true;
+  const frame = await fillDailyFrame(id);
+  if (!frame) { alert('Could not load this report to print it.'); return; }
+  frame.contentWindow.focus();
+  frame.contentWindow.print();
 }
 
 // THE AGENTS TAB, v37, T4
@@ -7578,7 +7705,7 @@ function renderDutyState(st) {
   if (st.ticks !== undefined) {
     lines.push('wake-ups this session: ' + st.ticks
       + (st.polls !== undefined
-          ? ' , looked at the clock ' + st.polls + ' time(s)'
+          ? ', looked at the clock ' + st.polls + ' time(s)'
           : ''));
   }
   if (st.last_poll) lines.push('last clock check: ' + esc(fmtTime(st.last_poll)));
@@ -7646,9 +7773,9 @@ function reportCard(r) {
       + '<span style="color:' + colour + ';">' + esc(r.verdict || 'no verdict')
       + '</span>'
       + ' <span style="color:var(--text-dim);">#' + esc(String(r.id))
-      + ' , ' + esc(r.kind === 'regular' ? 'regular report'
+      + ', ' + esc(r.kind === 'regular' ? 'regular report'
                                          : 'incident ' + (r.incident_id || '?'))
-      + ' , ' + esc(r.trigger || '?') + ' , ' + esc(fmtTime(r.created_at))
+      + ', ' + esc(r.trigger || '?') + ', ' + esc(fmtTime(r.created_at))
       + '</span>'
       + (dismissed
           ? ' <span style="color:var(--amber);">DISMISSED '
@@ -7722,7 +7849,7 @@ function reportCard(r) {
   }
   parts.push('<div style="font-size:11px;font-family:var(--mono);'
     + 'color:var(--text-dim);margin-top:8px;line-height:1.6;">'
-    + meta.join(' , ') + '</div>');
+    + meta.join(', ') + '</div>');
   parts.push('</div>');
   return parts.join('');
 }
@@ -7767,7 +7894,7 @@ function runRow(r) {
       + '<span style="color:' + colour + ';font-family:var(--mono);">'
       + esc(r.trigger) + ' / ' + esc(r.outcome) + '</span>'
       + ' <span style="color:var(--text-dim);">' + esc(fmtTime(r.ran_at))
-      + ' , ' + esc(what) + '</span>'
+      + ', ' + esc(what) + '</span>'
       + (r.incident_id ? ' <span style="color:var(--text-dim);">, incident #'
           + esc(String(r.incident_id)) + '</span>' : '')
       + (r.report_id ? ' <span style="color:var(--text-dim);">, report #'

@@ -154,7 +154,12 @@ def main():
           f"last_skip={st.get('last_skip')}")
 
     section("phase 2 — a poll IN a wake hour wakes it exactly once")
-    set_wake_hours([local_hour])
+    if local_hour == 23:
+        # The last wake hour writes the daily report, so a routine hour needs
+        # a later one beside it.
+        print("  the 23:00 hour cannot hold a routine wake; run this at another hour")
+        sys.exit(1)
+    set_wake_hours([local_hour, 23])
     time.sleep(16)
     st2 = duty.status()
     rows = duty.query_runs(limit=50)

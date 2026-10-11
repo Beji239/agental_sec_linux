@@ -1066,6 +1066,8 @@ def _tools_payload(allowlist=None) -> list[dict]:
     tools plus the two writes that touch this app's own records. The chat path
     passes nothing and gets everything, which is what it has always had.
     """
+    if allowlist is not None and not allowlist:
+        return []                      # an empty allowlist is no tools (MS-1)
     names = set(allowlist) if allowlist else None
     return [
         {
@@ -1242,6 +1244,8 @@ async def _stream_openai(messages: list, allowlist=None,
         "tools":       _tools_payload(allowlist),
         "tool_choice": "auto",
     }
+    if not payload["tools"]:
+        del payload["tools"], payload["tool_choice"]
 
     # WHAT THIS REQUEST CARRIES, kept whether or not the provider answers.
     usage["calls"] += 1
@@ -2477,6 +2481,43 @@ def _shorten_old_results(messages: list, aged: list, current_round: int):
         messages[idx]["content"] = (
             note if tr.get("untrusted")
             else content[:UNATTENDED_OLD_RESULT_CHARS] + "\n" + note)
+
+
+def complete_once(system: str, prompt: str) -> dict:
+    """One model call with no tools and no history.
+
+    Returns {"text", "usage", "error"} and raises nothing. The daily report's
+    assessment uses it: the facts are in the prompt, so no lookups are needed.
+    """
+    if not _api_key:
+        return {"text": "", "usage": {}, "error": "no API key is configured"}
+    if not _model:
+        return {"text": "", "usage": {}, "error": "no model is configured"}
+    usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+             "estimated": True}
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": prompt}]
+    out = {"text": "", "error": None}
+
+    async def _one():
+        async for chunk in _stream_model(messages, (), usage):
+            if chunk["type"] == "text":
+                out["text"] += chunk["token"]
+            elif chunk["type"] == "error":
+                out["error"] = chunk["message"]
+                return
+
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(_one())
+    except Exception as e:                              # noqa: BLE001
+        out["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        loop.close()
+    usage["total_tokens"] = (int(usage.get("prompt_tokens") or 0)
+                             + int(usage.get("completion_tokens") or 0))
+    return {"text": out["text"], "usage": usage, "error": out["error"]}
 
 
 def run_unattended(instruction: str, session_id: str, allowlist=None,

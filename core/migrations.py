@@ -144,7 +144,9 @@ logger = logging.getLogger(__name__)
 # the Threat Map covers the last day without scanning the packets table.
 # v62, 2026-10-09: sensor_gaps, the stretches a sensor or the app itself was
 # not collecting, shaded on the Timeline.
-SCHEMA_VERSION = 62
+# v63, 2026-10-11: daily_report, the day's security report as HTML, and
+# daily_tally, per-day counters a sensor keeps only in memory (ClamAV passes).
+SCHEMA_VERSION = 63
 
 
 # HELPERS
@@ -4214,6 +4216,43 @@ def _migrate_sensor_gaps(conn) -> int:
     return added
 
 
+DAILY_REPORT_DDL = (
+    """CREATE TABLE IF NOT EXISTS daily_report (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    day           TEXT NOT NULL UNIQUE,
+    window_start  TEXT NOT NULL,
+    window_end    TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    headline      TEXT,
+    html          TEXT NOT NULL,
+    facts_json    TEXT,
+    assessed      INTEGER NOT NULL DEFAULT 0,
+    tokens_spent  INTEGER NOT NULL DEFAULT 0,
+    session_id    TEXT
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_daily_report_created "
+    "ON daily_report(created_at)",
+    # Local day, counter name, value. note holds a short fact such as a date.
+    """CREATE TABLE IF NOT EXISTS daily_tally (
+    day      TEXT NOT NULL,
+    name     TEXT NOT NULL,
+    value    INTEGER NOT NULL DEFAULT 0,
+    note     TEXT,
+    updated  TEXT,
+    PRIMARY KEY (day, name)
+)""",
+)
+
+
+def _migrate_daily_report(conn) -> int:
+    """v63: the daily security report and its counters. Idempotent."""
+    added = 0 if _table_exists(conn, "daily_report") else 1
+    for ddl in DAILY_REPORT_DDL:
+        conn.execute(ddl)
+    return added
+
+
 def _migrate_merge_carried(conn) -> int:
     """v59: known_devices.merge_carried, the flags and labels a merge moved."""
     if "merge_carried" in _columns(conn, "known_devices"):
@@ -4332,6 +4371,7 @@ def run_migrations(db_path: Path = None) -> dict:
         place_baseline_added   = _migrate_place_baseline(conn)
         place_traffic_added    = _migrate_place_traffic(conn)
         sensor_gaps_added      = _migrate_sensor_gaps(conn)
+        daily_report_added     = _migrate_daily_report(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4349,6 +4389,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "place_baseline_added": place_baseline_added,
             "place_traffic_added": place_traffic_added,
             "sensor_gaps_added":   sensor_gaps_added,
+            "daily_report_added":  daily_report_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,
