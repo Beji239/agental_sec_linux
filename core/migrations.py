@@ -146,7 +146,8 @@ logger = logging.getLogger(__name__)
 # not collecting, shaded on the Timeline.
 # v63, 2026-10-11: daily_report, the day's security report as HTML, and
 # daily_tally, per-day counters a sensor keeps only in memory (ClamAV passes).
-SCHEMA_VERSION = 63
+# v64: daily_report.dismissed and dismissed_at, the tick box on the Agents tab.
+SCHEMA_VERSION = 64
 
 
 # HELPERS
@@ -4253,6 +4254,19 @@ def _migrate_daily_report(conn) -> int:
     return added
 
 
+def _migrate_daily_report_dismissal(conn) -> int:
+    """v64: a dismissed daily report is hidden, never deleted. Idempotent."""
+    cols = _columns(conn, "daily_report")
+    added = 0
+    if "dismissed" not in cols:
+        conn.execute("ALTER TABLE daily_report ADD COLUMN dismissed "
+                     "INTEGER NOT NULL DEFAULT 0")
+        added = 1
+    if "dismissed_at" not in cols:
+        conn.execute("ALTER TABLE daily_report ADD COLUMN dismissed_at TEXT")
+    return added
+
+
 def _migrate_merge_carried(conn) -> int:
     """v59: known_devices.merge_carried, the flags and labels a merge moved."""
     if "merge_carried" in _columns(conn, "known_devices"):
@@ -4372,6 +4386,7 @@ def run_migrations(db_path: Path = None) -> dict:
         place_traffic_added    = _migrate_place_traffic(conn)
         sensor_gaps_added      = _migrate_sensor_gaps(conn)
         daily_report_added     = _migrate_daily_report(conn)
+        daily_dismissal_added  = _migrate_daily_report_dismissal(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4390,6 +4405,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "place_traffic_added": place_traffic_added,
             "sensor_gaps_added":   sensor_gaps_added,
             "daily_report_added":  daily_report_added,
+            "daily_dismissal_added": daily_dismissal_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,

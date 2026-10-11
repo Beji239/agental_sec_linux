@@ -130,7 +130,8 @@ actions, and the analyst's assessment. Every fact is counted from the
 database; only the assessment is model text, from one call with no tools
 (about 2,000 tokens). A day the app ran but was off at report time gets its
 report at the next start. Reports are kept for 30 days and can be printed or
-saved as PDF.
+saved as PDF. Tick a report and press dismiss ticked to hide it; nothing is
+deleted, and Show dismissed brings it back.
 
 It is capped at three investigations an hour and a daily token ceiling
 (`duty_loop.daily_token_ceiling`); when a cap is reached it examines nothing,

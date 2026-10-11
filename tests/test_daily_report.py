@@ -299,10 +299,106 @@ check("its run row serves the 21:00 hour", trig[0], "regular")
 out = duty._tick_once("s", modules={}, now=local_at(21, 1))
 check("the next poll is not a wake", out.get("outcome"), "not_due")
 
+print("\nwhat was done about it")
+D3 = DAY - timedelta(days=1)
+with sqlite3.connect(DB) as c:
+    c.execute(inc, ("k9", "LNX-1002", "203.0.113.99", "high", 3,
+                    "SSH password guessing", at(4, 0, D3), at(4, 5, D3), 9,
+                    "resolved", at(4, 20, D3)))
+    nine = c.execute("SELECT MAX(id) FROM incident").fetchone()[0]
+    c.execute(rep, (at(4, 10, D3), nine, "real"))
+    c.execute("INSERT INTO action_request (session_id, created_at, verb, "
+              "target, params_json, reason, evidence_fingerprint, proposed_by, "
+              "incident_id, state, decided_at, executed_at, outcome) VALUES "
+              "('s', ?, 'block_device', '203.0.113.99', '{}', 'r', 'f', "
+              "'model', ?, 'executed', ?, ?, 'success')",
+              (at(4, 11, D3), nine, at(4, 15, D3), at(4, 16, D3)))
+    c.execute(fi, (at(4, 16, D3), "remediation", "info", "203.0.113.99",
+                   "Device blocked at this host: 203.0.113.99", "REM-1004", 0))
+f3 = dr.collect(D3, dr.day_bounds(D3)[1])
+row = next(r for r in f3["incidents"]["rows"] if r["id"] == nine)
+check("a real incident that was dealt with stays real",
+      (row["kind"], row["outcome"]), ("real", "real, dealt with"))
+check("the day is amber, not red, once it was dealt with",
+      f3["status"]["level"], "amber")
+check("and the sentence says so",
+      "1 real problem found, and dealt with." in f3["status"]["sentence"], True)
+check("the action is listed as taken",
+      [a["text"] for a in f3["actions"]["taken"]],
+      ["Device blocked at this host: 203.0.113.99"])
+page3 = dr.render(f3, {"text": "", "error": "x"})
+check("the red card names the action", "block device 203.0.113.99, executed"
+      in page3, True)
+with sqlite3.connect(DB) as c:
+    c.execute("INSERT INTO findings (session_id, found_at, source, severity, "
+              "entity_type, entity_value, title, detection_id, dismissed) "
+              "VALUES ('s', ?, 'av_scanner', 'high', 'file', '/tmp/x.bin', "
+              "'Malware found by ClamAV', 'AV-1001', 0)", (at(6, 0, D3),))
+f4 = dr.collect(D3, dr.day_bounds(D3)[1])
+check("malware not yet quarantined is said plainly",
+      ("Malware found." in f4["status"]["sentence"], f4["status"]["level"]),
+      (True, "red"))
+with sqlite3.connect(DB) as c:
+    c.execute("INSERT INTO findings (session_id, found_at, source, severity, "
+              "entity_type, entity_value, title, detection_id, dismissed) "
+              "VALUES ('s', ?, 'remediation', 'info', 'file', '/tmp/x.bin', "
+              "'File quarantined: /tmp/x.bin', 'REM-1006', 0)", (at(6, 5, D3),))
+f5 = dr.collect(D3, dr.day_bounds(D3)[1])
+check("quarantined malware says so, and the day stays red",
+      ("Malware found and quarantined." in f5["status"]["sentence"],
+       f5["status"]["level"]), (True, "red"))
+
 print("\nno tools for the assessment call")
 check("an empty allowlist sends no tools", agent_loop._tools_payload(()), [])
 check("no allowlist still sends them all",
       len(agent_loop._tools_payload()) > 10, True)
+
+print("\ndismissing reports")
+from api.server import create_app, allowed_hosts   # noqa: E402
+KEY = "0" * 64
+app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}}, {}, "t",
+                 api_key=KEY)
+app.config["AGENTAL_ALLOWED_HOSTS"] = allowed_hosts({"flask": {"host": "127.0.0.1"}})
+web = app.test_client()
+H = {"X-API-Key": KEY}
+with sqlite3.connect(DB) as c:
+    c.execute("DELETE FROM daily_report")
+    for back in (3, 2, 1):
+        d = (date.today() - timedelta(days=back)).isoformat()
+        c.execute("INSERT INTO daily_report (day, window_start, window_end, "
+                  "created_at, status, html) VALUES (?, 'a', 'b', 'c', 'green', "
+                  "'<p>x</p>')", (d,))
+    ids = [r[0] for r in c.execute("SELECT id FROM daily_report ORDER BY day")]
+check("the schema has the dismissal columns",
+      {"dismissed", "dismissed_at"} <= {r[1] for r in sqlite3.connect(DB).execute(
+          "PRAGMA table_info(daily_report)")}, True)
+r = web.post("/api/daily-reports/dismiss", headers=H,
+             json={"report_ids": [ids[2], ids[1]]})
+check("two ticked reports are dismissed", (r.status_code,
+      r.get_json().get("changed")), (200, 2))
+listed = web.get("/api/daily-reports?older=1", headers=H).get_json()
+check("the list hides them", [x["id"] for x in listed["reports"]], [ids[0]])
+check("and counts them", listed["dismissed_count"], 2)
+check("the latest shown is the newest one left",
+      [x["id"] for x in web.get("/api/daily-reports", headers=H).get_json()["reports"]],
+      [ids[0]])
+gone = web.get("/api/daily-reports?dismissed=1", headers=H).get_json()
+check("Show dismissed lists them, newest first",
+      [x["id"] for x in gone["reports"]], [ids[2], ids[1]])
+check("nothing was deleted", sqlite3.connect(DB).execute(
+    "SELECT COUNT(*) FROM daily_report").fetchone()[0], 3)
+check("a dismissed day is not written again", dr.exists(
+    date.today() - timedelta(days=1)), True)
+r = web.post("/api/daily-reports/dismiss", headers=H,
+             json={"report_ids": [ids[2]], "restore": True})
+check("restore brings one back", r.get_json().get("changed"), 1)
+check("an empty tick list is refused", web.post(
+    "/api/daily-reports/dismiss", headers=H, json={"report_ids": []}).status_code, 400)
+ui = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
+check("each report has a tick box and the button posts the ticked ids",
+      all(x in ui for x in ('class="daily-tick"', "dismissDailyReports()",
+                            "/api/daily-reports/dismiss", "daily-show-dismissed",
+                            "restoreDailyReport(")), True)
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

@@ -38,6 +38,7 @@ NEW_ACCESS = ("LNX-1009", "LNX-1011", "LNX-1017", "LNX-2002")
 SCANS = ("LNX-1015",)
 RETURNED = ("LAN-1011",)
 MALWARE_AV = ("AV-1001",)
+QUARANTINED = ("REM-1006",)
 MASQUERADE = ("LNX-1102",)
 ODD_PLACES = ("LNX-1101", "LNX-3001", "LNX-3002")
 STARTUP = ("LNX-4001", "LNX-4002", "LNX-4003", "LNX-4004")
@@ -317,8 +318,14 @@ def _incidents(conn, start, end, names, day) -> dict:
     for r in rows:
         v = verdicts.get(r["id"]) or {}
         verdict = (v.get("verdict") or "").strip()
-        if r["status"] == "resolved":
-            kind, words = "resolved", "resolved"
+        # A real incident stays real after it was dealt with.
+        handled = r["status"] == "resolved" or any(
+            a["state"] == "executed" for a in actions.get(r["id"], []))
+        if verdict == "real" and handled:
+            kind, words = "real", "real, dealt with"
+        elif r["status"] == "resolved":
+            kind, words = "resolved", ("resolved, action taken" if handled
+                                       else "resolved")
         elif r["status"] == "dismissed":
             kind, words = "harmless", "harmless, dismissed"
         elif r["id"] in pending or verdict == "needs_human" \
@@ -338,6 +345,7 @@ def _incidents(conn, start, end, names, day) -> dict:
             "first": _parse(r["first_seen_at"]),
             "last": _parse(r["last_seen_at"]),
             "count": r["finding_count"] or 1, "kind": kind, "outcome": words,
+            "handled": handled,
             "note": plain(_first_sentence(note)) if note else "",
             "pending": pending.get(r["id"]),
             "actions": actions.get(r["id"], []),
@@ -591,6 +599,7 @@ def collect(day: date, written: datetime = None) -> dict:
             "returned": _findings(conn, start, end, RETURNED),
             "tally": _tallies(conn, day),
             "av_hits": _findings(conn, start, end, MALWARE_AV),
+            "quarantined": _findings(conn, start, end, QUARANTINED),
             "hashes": _hash_checks(conn, start, end),
             "masquerade": _findings(conn, start, end, MASQUERADE),
             "odd_places": _findings(conn, start, end, ODD_PLACES),
@@ -647,9 +656,15 @@ def _into_signs(f: dict) -> list:
     return signs
 
 
+def _all_quarantined(f: dict) -> bool:
+    hits = {r["entity_value"] for r in f["av_hits"]}
+    return bool(hits) and hits <= {r["entity_value"] for r in f["quarantined"]}
+
+
 def _status(f: dict) -> dict:
     rows = f["incidents"]["rows"]
     real = [r for r in rows if r["kind"] == "real"]
+    open_real = [r for r in real if not r.get("handled")]
     decide = ([r for r in rows if r["kind"] == "decision"]
               + [p for p in f["actions"]["pending"]
                  if p["id"] not in {(r["pending"] or {}).get("id")
@@ -662,7 +677,10 @@ def _status(f: dict) -> dict:
 
     parts = []
     if real:
-        parts.append(f"{_n(len(real), 'real problem')} found.")
+        parts.append(f"{_n(len(real), 'real problem')} found"
+                     + (", and dealt with." if not open_real
+                        else "." if len(open_real) == len(real)
+                        else f", {len(real) - len(open_real)} dealt with."))
     if decide:
         parts.append("One thing needs your decision." if len(decide) == 1
                      else f"{len(decide)} things need your decision.")
@@ -670,7 +688,8 @@ def _status(f: dict) -> dict:
                  else "No sign that anyone got in.")
     av = f["tally"]
     if malware:
-        parts.append("Malware found.")
+        parts.append("Malware found and quarantined." if _all_quarantined(f)
+                     else "Malware found.")
     elif (av.get("av_passes") or {}).get("value"):
         parts.append("No malware found.")
     else:
@@ -678,9 +697,9 @@ def _status(f: dict) -> dict:
                      "scan did not run.")
     parts.append(f"The sensors were watching for {_watched_words(f)}.")
 
-    if real or malware or f["into_host"]:
+    if open_real or malware or f["into_host"]:
         level = "red"
-    elif decide or into or share < WATCHED_AMBER or cov["quiet"]:
+    elif real or decide or into or share < WATCHED_AMBER or cov["quiet"]:
         level = "amber"
     else:
         level = "green"
@@ -693,7 +712,8 @@ def _brief(f: dict) -> list:
     day = f["day"]
     for r in f["status"]["real"]:
         lines.append(f"{r['title']} ({r['who']}), {_span(r['first'], r['last'], day)}. "
-                     f"Judged real.")
+                     + ("Judged real and dealt with." if r.get("handled")
+                        else "Judged real."))
     for d in f["status"]["decide"]:
         if "title" in d:
             lines.append(f"{d['title']} ({d['who']}), first seen "
@@ -928,7 +948,9 @@ def _malware_rows(f: dict) -> list:
         files = (t.get("av_files") or {}).get("value") or 0
         sig = (t.get("av_passes") or {}).get("note")
         av = (f"{_n(passes, 'pass', 'passes')}, {_n(files, 'file')}",
-              ("match found" if f["av_hits"] else "no match")
+              (("match found, quarantined" if _all_quarantined(f)
+                else "match found, NOT quarantined") if f["av_hits"]
+               else "no match")
               + (f"; signatures dated {sig}" if sig else ""))
     elif (t.get("av_missing") or {}).get("value"):
         av = ("not checked", "ClamAV is not installed")
@@ -1332,16 +1354,39 @@ def tick(session_id: str, now: datetime, last_wake_hour: int) -> dict | None:
     return None
 
 
-def list_reports(include_older: bool = False) -> list:
+def list_reports(include_older: bool = False,
+                 dismissed: bool = False) -> list:
+    """Newest first. Dismissed reports are hidden unless dismissed is set,
+    which lists only them; the latest only unless include_older."""
     with me._get_readonly_conn() as conn:
         if not _has(conn, "daily_report"):
             return []
         rows = conn.execute(
             "SELECT id, day, window_start, window_end, created_at, status, "
-            "headline, assessed, tokens_spent FROM daily_report "
-            "ORDER BY day DESC" + ("" if include_older else " LIMIT 1")
-        ).fetchall()
+            "headline, assessed, tokens_spent, dismissed, dismissed_at "
+            "FROM daily_report WHERE dismissed = ? ORDER BY day DESC"
+            + ("" if include_older or dismissed else " LIMIT 1"),
+            (1 if dismissed else 0,)).fetchall()
     return [dict(r) for r in rows]
+
+
+def dismiss(report_ids: list, restore: bool = False) -> dict:
+    """Hide the given reports, or show them again. Nothing is deleted."""
+    try:
+        ids = sorted({int(i) for i in report_ids or []})
+    except (TypeError, ValueError):
+        return {"success": False, "error": "report ids must be numbers"}
+    if not ids:
+        return {"success": False, "error": "no report was ticked"}
+    marks = ",".join("?" * len(ids))
+    stamp = None if restore else _sql(datetime.now(timezone.utc))
+    with me._get_conn() as conn:
+        n = conn.execute(
+            f"UPDATE daily_report SET dismissed = ?, dismissed_at = ? "
+            f"WHERE id IN ({marks}) AND dismissed = ?",
+            (0 if restore else 1, stamp, *ids, 1 if restore else 0)).rowcount
+    return {"success": True, "changed": n, "restored" if restore
+            else "dismissed": ids}
 
 
 def get_html(report_id: int) -> str | None:
@@ -1353,8 +1398,10 @@ def get_html(report_id: int) -> str | None:
     return row["html"] if row else None
 
 
-def count() -> int:
+def count(dismissed: bool = False) -> int:
     with me._get_readonly_conn() as conn:
         if not _has(conn, "daily_report"):
             return 0
-        return conn.execute("SELECT COUNT(*) FROM daily_report").fetchone()[0]
+        return conn.execute("SELECT COUNT(*) FROM daily_report WHERE "
+                            "dismissed = ?", (1 if dismissed else 0,)
+                            ).fetchone()[0]

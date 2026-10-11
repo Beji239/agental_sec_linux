@@ -2457,9 +2457,23 @@ def register_routes(app):
     def daily_reports_list():
         from core import daily_report
         older = (request.args.get("older") or "").lower() in ("1", "true")
-        return jsonify({"reports": daily_report.list_reports(older),
+        hidden = (request.args.get("dismissed") or "").lower() in ("1", "true")
+        return jsonify({"reports": daily_report.list_reports(older, hidden),
                         "count": daily_report.count(),
+                        "dismissed_count": daily_report.count(dismissed=True),
                         "keep_days": daily_report.KEEP_DAYS})
+
+    # Hides the ticked reports, or with restore shows them again. Nothing is
+    # deleted; reports still go after 30 days either way.
+    @app.route("/api/daily-reports/dismiss", methods=["POST"])
+    @require_api_key
+    def daily_reports_dismiss():
+        from core import daily_report
+        data = request.get_json(silent=True) or {}
+        out = daily_report.dismiss(data.get("report_ids") or [],
+                                   restore=bool(data.get("restore")))
+        return jsonify(out), (200 if out.get("success") else 400)
+
 
     @app.route("/api/daily-reports/<int:report_id>")
     @require_api_key

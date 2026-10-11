@@ -2756,11 +2756,20 @@
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span class="card-title" style="margin:0;">Daily security report</span>
-        <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
-               title="Reports are kept for 30 days and then deleted.">
-          <input type="checkbox" id="daily-show-older" onchange="loadDailyReports()">
-          Show earlier reports (30 days)
-        </label>
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
+          <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
+                 title="Reports are kept for 30 days and then deleted.">
+            <input type="checkbox" id="daily-show-older" onchange="loadDailyReports()">
+            Show earlier reports (30 days)
+          </label>
+          <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
+                 title="Dismissed reports are hidden, not deleted. Tick this to see them and bring any back.">
+            <input type="checkbox" id="daily-show-dismissed" onchange="loadDailyReports()">
+            Show dismissed
+          </label>
+          <button class="btn" id="daily-dismiss-btn" onclick="dismissDailyReports()" disabled
+                  title="Hide the ticked reports. Nothing is deleted; Show dismissed brings them back.">dismiss ticked</button>
+        </div>
       </div>
       <div style="color:var(--text-dim);font-size:12px;margin:10px 0;line-height:1.5;">
         Written at 21:00, the last wake of the day, for every day the app ran.
@@ -7276,30 +7285,59 @@ async function refreshActionBadge() {
 const DAILY_COLOURS = { green: 'var(--green)', amber: 'var(--amber)',
                         red: 'var(--red)' };
 
+let DAILY_TICKED = new Set();
+
 async function loadDailyReports() {
   const box = document.getElementById('daily-reports');
   const older = document.getElementById('daily-show-older');
+  const showDis = document.getElementById('daily-show-dismissed');
+  const dismissedView = !!(showDis && showDis.checked);
+  const btn = document.getElementById('daily-dismiss-btn');
+  let q = [];
+  if (older && older.checked) q.push('older=1');
+  if (dismissedView) q.push('dismissed=1');
   let d;
   try {
-    d = await fetch('/api/daily-reports' + (older && older.checked ? '?older=1' : ''),
+    d = await fetch('/api/daily-reports' + (q.length ? '?' + q.join('&') : ''),
                     { headers: authHeaders() }).then(r => r.json());
   } catch (e) {
     box.innerHTML = '<div class="empty-state">Could not load the daily reports.</div>';
     return;
   }
   const reports = d.reports || [];
+  // Ticks only count for reports still on screen.
+  const shown = new Set(reports.map(r => r.id));
+  DAILY_TICKED = new Set([...DAILY_TICKED].filter(id => shown.has(id)));
+  if (btn) btn.style.display = dismissedView ? 'none' : '';
+  updateDailyDismissBtn();
+  const hiddenNote = (!dismissedView && d.dismissed_count)
+    ? '<div class="finding-desc" style="margin-top:6px;">' + d.dismissed_count
+      + ' report(s) dismissed and hidden; tick Show dismissed to see them. '
+      + 'Nothing was deleted.</div>' : '';
   if (!reports.length) {
-    box.innerHTML = '<div class="empty-state">No daily report yet. The first '
-      + 'is written at 21:00, or at the next start for a day the app ran but '
-      + 'was off at 21:00.</div>';
+    box.innerHTML = (dismissedView
+      ? '<div class="empty-state">No dismissed report.</div>'
+      : '<div class="empty-state">No daily report' + (d.count ? ' left to show'
+          : ' yet. The first is written at 21:00, or at the next start for a '
+            + 'day the app ran but was off at 21:00') + '.</div>')
+      + hiddenNote;
     return;
   }
   box.innerHTML = reports.map((r, i) => {
     const day = new Date(r.day + 'T12:00:00').toLocaleDateString(undefined,
       { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const colour = DAILY_COLOURS[r.status] || 'var(--text-dim)';
-    return '<details class="daily-report" data-id="' + r.id + '"'
-      + (i === 0 ? ' open' : '') + ' style="margin:8px 0;">'
+    const pick = dismissedView
+      ? '<button class="btn" onclick="restoreDailyReport(' + r.id + ')" '
+        + 'title="Show this report in the list again.">restore</button>'
+      : '<input type="checkbox" class="daily-tick" data-id="' + r.id + '"'
+        + (DAILY_TICKED.has(r.id) ? ' checked' : '')
+        + ' onchange="tickDailyReport(' + r.id + ', this.checked)" '
+        + 'title="Tick to dismiss this report with the button above.">';
+    return '<div class="row" style="gap:8px;align-items:flex-start;margin:8px 0;">'
+      + '<div style="padding-top:2px;">' + pick + '</div>'
+      + '<details class="daily-report" data-id="' + r.id + '"'
+      + (i === 0 && !dismissedView ? ' open' : '') + ' style="flex:1;min-width:0;">'
       + '<summary style="cursor:pointer;">'
       + '<b>' + esc(day) + '</b> <span style="color:' + colour
       + ';font-weight:700;margin:0 6px;">' + esc((r.status || '').toUpperCase())
@@ -7310,15 +7348,54 @@ async function loadDailyReports() {
       + 'choose Save as PDF there for a file.">Print / Save as PDF</button></div>'
       + '<iframe id="daily-frame-' + r.id + '" sandbox="allow-same-origin allow-modals" '
       + 'style="width:100%;height:600px;border:0;border-radius:6px;background:#fff;"></iframe>'
-      + '</details>';
+      + '</details></div>';
   }).join('')
-    + (older && !older.checked && (d.count || 0) > 1
+    + (older && !older.checked && !dismissedView && (d.count || 0) > 1
        ? '<div class="finding-desc">' + (d.count - 1) + ' earlier report(s) '
-         + 'kept; tick Show earlier reports to see them.</div>' : '');
+         + 'kept; tick Show earlier reports to see them.</div>' : '')
+    + hiddenNote;
   box.querySelectorAll('details.daily-report').forEach(el => {
     el.addEventListener('toggle', () => { if (el.open) fillDailyFrame(el.dataset.id); });
     if (el.open) fillDailyFrame(el.dataset.id);
   });
+}
+
+function tickDailyReport(id, on) {
+  if (on) DAILY_TICKED.add(id); else DAILY_TICKED.delete(id);
+  updateDailyDismissBtn();
+}
+
+function updateDailyDismissBtn() {
+  const btn = document.getElementById('daily-dismiss-btn');
+  if (!btn) return;
+  btn.disabled = DAILY_TICKED.size === 0;
+  btn.textContent = DAILY_TICKED.size
+    ? 'dismiss ticked (' + DAILY_TICKED.size + ')' : 'dismiss ticked';
+}
+
+async function _dailyDismiss(ids, restore) {
+  try {
+    const r = await fetch('/api/daily-reports/dismiss', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      body: JSON.stringify({ report_ids: ids, restore: !!restore })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.success) alert('Nothing changed. ' + (d.error || ''));
+  } catch (e) { alert('Nothing changed: the app could not be reached.'); }
+}
+
+async function dismissDailyReports() {
+  const ids = [...DAILY_TICKED];
+  if (!ids.length) return;
+  await _dailyDismiss(ids, false);
+  DAILY_TICKED.clear();
+  loadDailyReports();
+}
+
+async function restoreDailyReport(id) {
+  await _dailyDismiss([id], true);
+  loadDailyReports();
 }
 
 function fillDailyFrame(id) {
