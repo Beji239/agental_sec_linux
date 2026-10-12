@@ -234,6 +234,8 @@ JOURNALLED = {
     # The weekly delete of old agent reports, one entry per report, so the
     # sealed-row check can tell it from somebody else's delete.
     "agent_report_expired",
+    # The same for wake-up lines (duty_run), kept one week like the reports.
+    "agent_run_expired",
 }
 
 
@@ -678,7 +680,13 @@ SEALED_TABLES = {
                     "tokens_completion", "tokens_spent", "tokens_estimated",
                     "model_calls", "coverage_json", "coverage_note", "detail",
                     "duration_ms", "tools_json"),
-        "excluded": {},
+        "excluded": {
+            "dismissed_at": ("Set when a person ticks the line away on the "
+                             "Agents tab. The move is journalled as "
+                             "report_dismissed; a seal over it would break "
+                             "on every click."),
+            "dismissed_by": "Same reason as dismissed_at.",
+        },
         "note": ("The agent's account of its own wake: when, why, what it "
                  "worked on, what it spent, what it called, and what it could "
                  "not see. Nothing updates a duty_run row after it is "
@@ -927,13 +935,15 @@ def _trim_consistent(conn, table: str, row_ref) -> bool:
 
 def _expiry_journalled(conn, table: str, row_ref) -> bool:
     """Did the app record deleting this row as an expiry (weekly report delete)?"""
-    if table != "duty_report":
+    op = {"duty_report": "agent_report_expired",
+          "duty_run": "agent_run_expired"}.get(table)
+    if op is None:
         return False
     try:
         return conn.execute(
-            "SELECT 1 FROM integrity_journal WHERE operation = "
-            "'agent_report_expired' AND table_name = ? AND row_ref = ? LIMIT 1",
-            (table, str(row_ref))).fetchone() is not None
+            "SELECT 1 FROM integrity_journal WHERE operation = ? "
+            "AND table_name = ? AND row_ref = ? LIMIT 1",
+            (op, table, str(row_ref))).fetchone() is not None
     except sqlite3.Error:
         return False
 

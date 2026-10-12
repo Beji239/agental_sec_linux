@@ -2435,11 +2435,26 @@ def register_routes(app):
             "summary": duty.summary(),
             "status":  duty.status(),
             "reports": reports,
-            "runs":    duty.query_runs(limit=limit),
+            "runs":    duty.query_runs(
+                limit=limit,
+                dismissed=(request.args.get("runs_show") or "") == "dismissed"),
             "show":    show or "open",
             "scope":   "all" if runs_arg == "all" else "this",
             "keep_days": duty.REPORT_KEEP_DAYS,
         })
+
+    # Ticked wake-up lines are hidden, or with restore shown again. Nothing
+    # is deleted; lines still go after a week like the reports.
+    @app.route("/api/agents/runs/dismiss", methods=["POST"])
+    @require_api_key
+    def agents_runs_dismiss():
+        from core import duty
+        data = request.get_json(silent=True) or {}
+        try:
+            return jsonify(duty.dismiss_runs(data.get("run_ids") or [],
+                                             restore=bool(data.get("restore"))))
+        except duty.BadDutyInput as e:
+            return jsonify({"success": False, "error": str(e)}), 400
 
     @app.route("/api/agents/<int:report_id>")
     @require_api_key

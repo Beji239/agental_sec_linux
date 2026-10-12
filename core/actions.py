@@ -517,7 +517,6 @@ def decide(request_id: int, approved: bool, decided_by: str = "user",
     logger.info("Action request %s was %s by %s", request_id, state,
                 decided_by)
     settle_incident(request_id)
-    settle_incident(request_id)
 
     # Journal the decision after the write, outside the connection, so the
     # journal can never roll back the decision it records.
@@ -547,52 +546,6 @@ def decide(request_id: int, approved: bool, decided_by: str = "user",
 
 
 # THE EXECUTOR — the piece that did not exist
-
-def settle_incident(request_id: int) -> dict | None:
-    """Move the incident a request was filed for off action_pending once the
-    request is settled: resolved when the action ran, triaged when it was
-    denied, failed or expired. Before this the incident waited forever and
-    the duty loop never looked at it again. Never raises."""
-    try:
-        with me._get_readonly_conn() as conn:
-            if not _table_ready(conn):
-                return None
-            req = conn.execute(
-                "SELECT incident_id, state FROM action_request WHERE id = ?",
-                (request_id,)).fetchone()
-            if not req or not req["incident_id"]:
-                return None
-            inc = conn.execute(
-                "SELECT status, actions_json FROM incident WHERE id = ?",
-                (req["incident_id"],)).fetchone()
-            busy = conn.execute(
-                "SELECT 1 FROM action_request WHERE incident_id = ? "
-                "AND state IN ('pending','approved') LIMIT 1",
-                (req["incident_id"],)).fetchone()
-        if not inc:
-            return None
-        try:
-            acts = json.loads(inc["actions_json"] or "[]")
-        except (TypeError, ValueError):
-            acts = []
-        for a in acts:
-            if isinstance(a, dict) and a.get("request_id") == request_id:
-                a["state"] = req["state"]
-        with me._get_conn() as conn:
-            conn.execute("UPDATE incident SET actions_json = ? WHERE id = ?",
-                         (json.dumps(acts), req["incident_id"]))
-        if busy or inc["status"] != "action_pending":
-            return None
-        from core import incident
-        return incident.set_status(
-            req["incident_id"],
-            "resolved" if req["state"] == "executed" else "triaged",
-            by="silence_timer" if req["state"] == "expired" else "user")
-    except Exception as e:                              # noqa: BLE001
-        logger.error(f"Could not settle the incident for request "
-                     f"{request_id}: {e}")
-        return None
-
 
 def settle_incident(request_id: int) -> dict | None:
     """Move the incident a request was filed for off action_pending once the
@@ -973,9 +926,6 @@ def expire_stale(session_id: str = "expiry") -> dict:
         expiring = [r[0] for r in conn.execute(
             "SELECT id FROM action_request WHERE state = 'pending' "
             "AND created_at < ?", (cutoff,)).fetchall()]
-        expiring = [r[0] for r in conn.execute(
-            "SELECT id FROM action_request WHERE state = 'pending' "
-            "AND created_at < ?", (cutoff,)).fetchall()]
         cur = conn.execute("""
             UPDATE action_request
                SET state = 'expired', executed_at = NULL,
@@ -987,8 +937,6 @@ def expire_stale(session_id: str = "expiry") -> dict:
               f"Retired {now}.", cutoff))
         count = cur.rowcount or 0
 
-    for rid in expiring:
-        settle_incident(rid)
     for rid in expiring:
         settle_incident(rid)
     if count:

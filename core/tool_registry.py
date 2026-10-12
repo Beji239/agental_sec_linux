@@ -5310,17 +5310,6 @@ def _query_threat_map(params: dict) -> dict:
             return {"error": f"{one!r} is not an IP address."}
         return place_map.point(one, session_id=_session_id)
 
-    # One address: the map's side panel view, who reached it and its alerts.
-    one = (params.get("ip") or "").strip()
-    if one:
-        import ipaddress
-        from core import place_map
-        try:
-            one = str(ipaddress.ip_address(one))
-        except ValueError:
-            return {"error": f"{one!r} is not an IP address."}
-        return place_map.point(one, session_id=_session_id)
-
     limit = params.get("limit")
     try:
         limit = max(1, min(int(limit), 500)) if limit is not None else 200

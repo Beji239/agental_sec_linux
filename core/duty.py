@@ -1367,7 +1367,73 @@ def expire_old_reports(days: int = REPORT_KEEP_DAYS) -> int:
     if ids:
         logger.info("Deleted %d duty report(s) older than %d days.",
                     len(ids), days)
+    try:
+        expire_old_runs(days)
+    except Exception as e:                          # noqa: BLE001
+        logger.warning(f"Could not expire old wake-up lines: {e}")
     return len(ids)
+
+
+def expire_old_runs(days: int = REPORT_KEEP_DAYS) -> int:
+    """Delete wake-up lines older than the keep window, the same week the
+    reports are kept. Each delete is journalled as agent_run_expired so the
+    integrity check reads it as housekeeping."""
+    from core import integrity
+
+    cutoff = _report_cutoff(days)
+    with me._get_conn() as conn:
+        if not _table_ready(conn, "duty_run"):
+            return 0
+        ids = [r[0] for r in conn.execute(
+            "SELECT id FROM duty_run WHERE ran_at < ? ORDER BY id",
+            (cutoff,)).fetchall()]
+        for rid in ids:
+            if integrity.record(
+                    "agent_run_expired", table_name="duty_run", row_ref=rid,
+                    payload={"cutoff": cutoff, "keep_days": days},
+                    conn=conn) is None:
+                raise RuntimeError(f"could not journal the expiry of wake-up "
+                                   f"#{rid}, nothing was deleted")
+            conn.execute("DELETE FROM duty_run WHERE id = ?", (rid,))
+    if ids:
+        logger.info("Deleted %d wake-up line(s) older than %d days.",
+                    len(ids), days)
+    return len(ids)
+
+
+def dismiss_runs(run_ids: list, restore: bool = False,
+                 by: str = "user") -> dict:
+    """Hide wake-up lines from the Agents tab, or show them again. Nothing
+    is deleted; each change is journalled."""
+    from core import integrity
+
+    try:
+        ids = sorted({int(i) for i in run_ids or []})
+    except (TypeError, ValueError):
+        raise BadDutyInput("run ids must be numbers")
+    if not ids:
+        raise BadDutyInput("no wake-up line was ticked")
+    now = _sql_ts(_now())
+    changed = []
+    with me._get_conn() as conn:
+        for rid in ids:
+            if restore:
+                cur = conn.execute(
+                    "UPDATE duty_run SET dismissed_at = NULL, "
+                    "dismissed_by = NULL WHERE id = ? "
+                    "AND dismissed_at IS NOT NULL", (rid,))
+            else:
+                cur = conn.execute(
+                    "UPDATE duty_run SET dismissed_at = ?, dismissed_by = ? "
+                    "WHERE id = ? AND dismissed_at IS NULL", (now, by, rid))
+            if cur.rowcount:
+                changed.append(rid)
+                integrity.record(
+                    "report_dismissed", table_name="duty_run", row_ref=rid,
+                    payload={"at": now, "by": by, "restored": restore},
+                    conn=conn)
+    return {"success": True, "changed": len(changed), "run_ids": changed,
+            "restored": restore}
 
 
 
@@ -1513,21 +1579,6 @@ ANSWER WITH A JSON OBJECT AND NOTHING ELSE, in exactly this shape:
   "report": "the report body for the Agents page, in this app's voice, a short paragraph or three"
 }}
 """
-
-
-# The step every duty prompt carries, so the loop asks rather than guesses.
-ASK_STEP = (
-    "If the deciding fact is one only the owner knows, ASK THE OWNER with "
-    "ask_operator instead of guessing: whether a device is theirs "
-    "(identify_device), whether they recognise a destination or a program "
-    "(identify_destination, identify_process), whether something is normal "
-    "for them (expected_behaviour), or whether they made a change "
-    "(confirm_change). Read query_operator_answers first and use the answer "
-    "if one was already given. Asking does not hold up this report: write it "
-    "with what you know, say that you asked, and use `needs_human` when the "
-    "answer decides the verdict. Never write that a device or a change is "
-    "probably the owner's without either their answer or a measurement "
-    "behind it.")
 
 
 # The step every duty prompt carries, so the loop asks rather than guesses.
@@ -2862,13 +2913,20 @@ def query_reports(kind: str = None, limit: int = 50,
     return rows
 
 
-def query_runs(limit: int = 50, outcome: str = None) -> list:
+def query_runs(limit: int = 50, outcome: str = None,
+               dismissed: bool = False) -> list:
     """The tick record, newest first. Every tick, including the ones that
-    did nothing: that is the point of the table."""
+    did nothing: that is the point of the table. Lines a person dismissed
+    are left out, or with dismissed=True only they are listed."""
     where, params = [], []
     if outcome:
         where.append("outcome = ?")
         params.append(outcome)
+    with me._get_readonly_conn() as conn:
+        if _table_ready(conn, "duty_run") and "dismissed_at" in {
+                r[1] for r in conn.execute("PRAGMA table_info(duty_run)")}:
+            where.append("dismissed_at IS NOT NULL" if dismissed
+                         else "dismissed_at IS NULL")
     sql = "SELECT * FROM duty_run"
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -3084,6 +3142,11 @@ def summary() -> dict:
             "SELECT COUNT(*) FROM duty_report WHERE dismissed_at IS NOT NULL"
         ).fetchone()[0] if "dismissed_at" in cols else 0)
         runs = conn.execute("SELECT COUNT(*) FROM duty_run").fetchone()[0]
+        run_cols = {r[1] for r in conn.execute(
+            "PRAGMA table_info(duty_run)").fetchall()}
+        dismissed_runs = (conn.execute(
+            "SELECT COUNT(*) FROM duty_run WHERE dismissed_at IS NOT NULL"
+        ).fetchone()[0] if "dismissed_at" in run_cols else 0)
         by_outcome = {r["outcome"]: r["n"] for r in conn.execute(
             "SELECT outcome, COUNT(*) n FROM duty_run GROUP BY outcome")}
         last_report = conn.execute(
@@ -3099,6 +3162,7 @@ def summary() -> dict:
         "reports_incident": by_kind.get("incident", 0),
         "reports_regular": by_kind.get("regular", 0),
         "runs": runs,
+        "dismissed_runs": dismissed_runs,
         "runs_investigated": by_outcome.get("investigated", 0),
         "runs_reported": by_outcome.get("reported", 0),
         "runs_budget": by_outcome.get("budget", 0),

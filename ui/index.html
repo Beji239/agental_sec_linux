@@ -2865,12 +2865,27 @@
     </div>
 
     <div class="card" style="margin-top:0;">
-      <div class="card-title">Every time it woke</div>
-      <div style="color:var(--text-dim);font-size:12px;margin-bottom:14px;line-height:1.5;">
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span class="card-title" style="margin:0;">Every time it woke</span>
+        <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
+          <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
+                 title="Dismissed lines are hidden, not deleted. Tick this to see them and bring any back.">
+            <input type="checkbox" id="agent-runs-dismissed" onchange="RUN_TICKED.clear(); loadAgents()">
+            Show dismissed
+          </label>
+          <button class="btn" id="run-tick-all" onclick="tickAllRuns()">tick all on this page</button>
+          <button class="btn" id="run-dismiss-btn" onclick="dismissTickedRuns()" disabled
+                  title="Hide the ticked lines. Nothing is deleted; Show dismissed brings them back.">dismiss ticked</button>
+        </div>
+      </div>
+      <div style="color:var(--text-dim);font-size:12px;margin:12px 0 14px;line-height:1.5;">
         <b>Most of these did nothing, on purpose.</b> <code>idle</code> means
         it looked for work and found none. <code>budget</code> means a cap
         stopped it <b>before it examined anything</b>, that is a limit, not a
         quiet network, and the two are never shown as the same thing.
+        Dismissing hides a line and deletes nothing. <b>Every line is deleted
+        a week after the wake-up</b>, the same as the reports.
+        <span id="agent-runs-hidden"></span>
       </div>
       <div id="agent-runs"></div>
     </div>
@@ -7461,6 +7476,8 @@ async function loadAgents() {
     let q = filter ? ('?kind=' + encodeURIComponent(filter)) : '';
     if (show) q += (q ? '&' : '?') + 'show=' + show;
     if (earlier && earlier.checked) q += (q ? '&' : '?') + 'runs=all';
+    const runsDis = document.getElementById('agent-runs-dismissed');
+    if (runsDis && runsDis.checked) q += (q ? '&' : '?') + 'runs_show=dismissed';
     AGENT_DATA = await fetch('/api/agents' + q,
                              { headers: authHeaders() }).then(r => r.json());
   } catch (e) {
@@ -7738,9 +7755,74 @@ function renderAgents() {
 
   // every wake-up.
   const runs = d.runs || [];
+  const runsDis = document.getElementById('agent-runs-dismissed');
+  const showingDismissed = !!(runsDis && runsDis.checked);
+  const onScreen = new Set(runs.map(r => Number(r.id)));
+  RUN_TICKED = new Set([...RUN_TICKED].filter(id => onScreen.has(id)));
+  ['run-tick-all', 'run-dismiss-btn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.style.display = showingDismissed ? 'none' : '';
+  });
+  updateRunDismissBtn();
+  const hiddenRuns = s.dismissed_runs || 0;
+  const hr = document.getElementById('agent-runs-hidden');
+  if (hr) hr.innerHTML = (hiddenRuns && !showingDismissed)
+    ? ' <b style="color:var(--amber);">' + hiddenRuns + ' line(s) are dismissed '
+      + 'and hidden.</b>' : '';
   document.getElementById('agent-runs').innerHTML = runs.length
-    ? runs.map(runRow).join('')
-    : '<div class="empty-state">No wake-up has been recorded yet.</div>';
+    ? runs.map(r => runRow(r, showingDismissed)).join('')
+    : '<div class="empty-state">' + (showingDismissed
+        ? 'No dismissed wake-up line.'
+        : 'No wake-up to show' + (hiddenRuns ? ': every recent one is dismissed.'
+                                             : ' yet.')) + '</div>';
+}
+
+// Ticked wake-up lines, kept across refreshes like AGENT_TICKED.
+let RUN_TICKED = new Set();
+
+function tickRun(id, on) {
+  if (on) RUN_TICKED.add(id); else RUN_TICKED.delete(id);
+  updateRunDismissBtn();
+}
+
+function tickAllRuns() {
+  document.querySelectorAll('.run-tick').forEach(cb => {
+    cb.checked = true; RUN_TICKED.add(Number(cb.value));
+  });
+  updateRunDismissBtn();
+}
+
+function updateRunDismissBtn() {
+  const b = document.getElementById('run-dismiss-btn');
+  if (!b) return;
+  b.disabled = RUN_TICKED.size === 0;
+  b.textContent = RUN_TICKED.size ? 'dismiss ticked (' + RUN_TICKED.size + ')'
+                                  : 'dismiss ticked';
+}
+
+async function _runDismiss(ids, restore) {
+  try {
+    const r = await fetch('/api/agents/runs/dismiss', {
+      method: 'POST',
+      headers: Object.assign({'Content-Type': 'application/json'}, authHeaders()),
+      body: JSON.stringify({ run_ids: ids, restore: !!restore })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.success) alert('Nothing changed. ' + (d.error || ''));
+  } catch (e) { alert('Nothing changed: the app could not be reached.'); }
+}
+
+async function dismissTickedRuns() {
+  const ids = [...RUN_TICKED];
+  if (!ids.length) return;
+  await _runDismiss(ids, false);
+  RUN_TICKED.clear();
+  loadAgents();
+}
+
+async function restoreRun(id) {
+  await _runDismiss([id], true);
+  loadAgents();
 }
 
 function renderDutyState(st) {
@@ -7797,7 +7879,11 @@ function renderDutyState(st) {
 
   const sched = st.schedule || {};
   if (sched.hours) {
-    lines.push('regular wake-ups at local hours: ' + sched.hours.join(', ')
+    // The last hour writes the daily report, the others are routine.
+    const hrs = sched.hours.slice();
+    const daily = hrs.pop();
+    lines.push('regular wake-ups at local hours: ' + (hrs.join(', ') || 'none')
+      + ', daily report at ' + daily
       + ', next at ' + String(sched.next_hour).padStart(2, '0')
       + ':00' + (sched.next_is_tomorrow ? ' tomorrow' : ''));
   }
@@ -7955,7 +8041,7 @@ function toolSummary(tools) {
     .map(([t, n]) => n > 1 ? `${t} (${n})` : t).join(', ');
 }
 
-function runRow(r) {
+function runRow(r, showingDismissed) {
   const colour = r.outcome === 'error' ? 'var(--red)'
     : (r.outcome === 'budget' ? 'var(--amber)'
       : (r.outcome === 'idle' ? 'var(--text-dim)' : 'var(--text)'));
@@ -7966,8 +8052,16 @@ function runRow(r) {
     idle:         'woke, nothing eligible',
     error:        'failed',
   }[r.outcome] || r.outcome;
+  const id = Number(r.id);
+  const pick = showingDismissed
+    ? '<button class="btn" style="padding:1px 7px;font-size:11px;margin-right:8px;" '
+      + 'onclick="restoreRun(' + id + ')" title="Show this line again.">restore</button>'
+    : '<input type="checkbox" class="run-tick" value="' + id + '"'
+      + (RUN_TICKED.has(id) ? ' checked' : '')
+      + ' onchange="tickRun(' + id + ', this.checked)" style="margin-right:8px;" '
+      + 'title="Tick to dismiss this line. Nothing is deleted.">';
   return '<div class="q-card" style="margin-bottom:8px;">'
-    + '<div style="font-size:12px;line-height:1.6;">'
+    + '<div style="font-size:12px;line-height:1.6;">' + pick
       + '<span style="color:' + colour + ';font-family:var(--mono);">'
       + esc(r.trigger) + ' / ' + esc(r.outcome) + '</span>'
       + ' <span style="color:var(--text-dim);">' + esc(fmtTime(r.ran_at))

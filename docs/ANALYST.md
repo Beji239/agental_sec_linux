@@ -142,7 +142,9 @@ whole conversation. It works with a smaller set of mostly read-only tools, and
 anything that would change your system becomes a request on the Actions tab,
 exactly as in the chat. Every change still goes through you. Its reports,
 and every wake-up including the ones that found nothing to do, are on the
-Agents tab. Set `duty_loop.enabled` to `false` to turn it off.
+Agents tab. Reports and wake-up lines are deleted after one week; tick any of
+them to dismiss it sooner (nothing is deleted by a dismissal). Set
+`duty_loop.enabled` to `false` to turn it off.
 
 Every wake-up also carries a few lines about the Threat Map instead of the
 whole map: new countries and networks reached since the last wake-up, how many
