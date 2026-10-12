@@ -1,7 +1,28 @@
 # AgentalSec Linux setup
 
-For Ubuntu, Debian and Linux Mint (tested on an Ubuntu 24.04 base, Python
-3.12). Run every command from the project folder unless it says otherwise.
+For Ubuntu, Debian and Linux Mint (the install is tested on Ubuntu 24.04 and
+22.04 and Debian 12, Python 3.10 to 3.12). Run every command from the project
+folder unless it says otherwise.
+
+## Automatic install
+
+**The install is now automatic.** Steps 1 to 9 below are done by one script:
+
+```bash
+git clone <repository-url> agental_sec_linux
+cd agental_sec_linux
+./scripts/install.sh
+```
+
+`<repository-url>` is the address under the green Code button on the
+repository's GitHub page. Run it as your own user; it asks for your
+password once, for the system packages. It asks for the model provider's chat address, model and key, and
+each can be left empty. `./scripts/install.sh --help` lists its options,
+such as `--with-clamav` for malware scanning and `--yes` for no questions.
+Running it again keeps everything already set up. The steps below are what it
+does, for doing it by hand, and steps 10 to 12 stay optional.
+
+## By hand
 
 Steps 1 to 9 are the install. **Step 9, the launchers, is required**: the app
 does not create its desktop and menu icons by itself. Steps 10 to 12 are

@@ -249,9 +249,10 @@ record. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 
 ## Requirements
 
-- Linux. Tested on Ubuntu 24.04 and Linux Mint; Debian works the same way.
+- Linux with apt. The automatic install is tested on Ubuntu 24.04, Ubuntu
+  22.04 (the base of Linux Mint 21) and Debian 12; the app runs on Linux Mint.
 - Any CPU that runs Python, including x86-64 and ARM64.
-- Python 3.11 or newer.
+- Python 3.10 or newer.
 - Root or `CAP_NET_RAW` for packet capture, given by the privileged launcher.
 - For the analyst: an account with a model provider, or a local
   OpenAI-compatible server. Everything else runs without one.
@@ -263,53 +264,37 @@ record. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 
 ## Quick start
 
-The full steps, with every optional part, are in [SETUP.md](SETUP.md).
+**The install is now automatic.** On Ubuntu, Debian or Linux Mint, three
+commands do the whole thing:
 
 ```bash
-sudo apt install -y git python3 python3-pip libpcap0.8 iproute2 net-tools \
-    nftables iptables iputils-ping openssh-client pkexec libnotify-bin auditd
 git clone <repository-url> agental_sec_linux
 cd agental_sec_linux
-pip install --user --break-system-packages -r requirements.txt
-cp config.linux.example.json config.json
-cp .env.example .env
-chmod 600 config.json .env
+./scripts/install.sh
 ```
 
-Put a dashboard key in `.env` as `AGENTAL_APP_API_KEY`:
+`<repository-url>` is the address under the green **Code** button at the
+top of this page. No `git` yet? `sudo apt install git` first.
 
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
+Run it as your own user, not with sudo. It first asks a few questions: your
+model provider's chat address, the model and its key (each can be left empty
+and set later on the Settings tab), and whether to add the optional malware
+scanner. Then it runs on its own, asking for your password once, for the
+system packages, and does every install step in [SETUP.md](SETUP.md): system
+and Python packages, the config files, a new dashboard key, the map and
+vendor data, a check of the result, and both launchers, **AgentalSec** and
+**AgentalSec (privileged)**, in your app menu, on your desktop and in the
+project folder. Running it again is safe: it keeps your settings and
+downloads nothing it already has.
 
-Then fetch the map and vendor data, and check the install:
+When it finishes, start AgentalSec from its icon. The dashboard opens at
+http://127.0.0.1:5000; enter the dashboard key the installer printed (it is
+also in `.env` as `AGENTAL_APP_API_KEY`). If a desktop icon says "untrusted",
+right-click it and choose "Allow launching".
 
-```bash
-python3 scripts/fetch_geoip.py
-python3 scripts/fetch_geoip.py --asn
-python3 scripts/update_oui.py
-python3 main.py --check
-```
-
-**Last step, and the one not to skip: install the launchers.** The app does
-not create them by itself. Run this once, from the project folder, as your
-own user (not with sudo):
-
-```bash
-./scripts/install_launchers.sh
-```
-
-It adds two launchers, **AgentalSec** and **AgentalSec (privileged)**, in
-three places: your app menu, your desktop and the project folder. From now on,
-start AgentalSec by clicking one of them. If a desktop icon says
-"untrusted", right-click it and choose "Allow launching". If you move the
-project folder, run the script again.
-
-Until the launchers are installed, every start of the app and every
-`main.py --check` prints a reminder with the exact command.
-
-The dashboard opens at http://127.0.0.1:5000. Set the model provider on its
-Settings tab.
+The optional parts (root helpers, your router, start on boot) and every step
+done by hand are in [SETUP.md](SETUP.md). To update later:
+`./scripts/update.sh`.
 
 ## Normal and privileged
 
