@@ -2166,7 +2166,12 @@ def main(argv=None):
 
     if modules.get("runbook"):
         try:
-            modules["runbook"].sync_cisa_kev()
+            kev = modules["runbook"].sync_cisa_kev()
+            # New KEV rows get their CVSS lookup now, capped; see top_up.
+            if kev.get("success") and modules.get("kev_cvss"):
+                top = modules["kev_cvss"].top_up()
+                if top.get("started"):
+                    logger.info(f"[kev_cvss] looking up {top.get('rows')} new KEV row(s)")
         except Exception as e:
             logger.warning(f"CISA KEV sync failed: {e}")
 
@@ -2223,19 +2228,13 @@ def main(argv=None):
             "means nothing looked, not that nothing matched."
         )
 
-    # THE CVSS BACKFILL IS BUILT HERE AND NOT STARTED. TODO 113.7, ported
-    # 2026-09-21. The CISA feed carries no severity, so the mirror's ratings
-    # have to be fetched one CVE at a time, which is ~1700 outbound lookups
-    # and about three and a half hours of them without an NVD key.
-    #
-    # A monitoring tool should not open that much third party traffic because
-    # somebody restarted it, so it waits for the button on the Runbook tab.
-    # The module is loaded so that button has something to call and so
-    # /api/runbook can answer with its state instead of "not loaded".
+    # The CISA feed carries no severity, so ratings are fetched per CVE.
+    # A full pass waits for the button on the Runbook tab; only rows new since
+    # the last sync are looked up on their own, capped, after each KEV sync.
     try:
         from tools.kev_cvss import CvssBackfill
         modules["kev_cvss"] = CvssBackfill()
-        logger.info("[OK] kev_cvss (idle until asked)")
+        logger.info("[OK] kev_cvss (full pass on request, new rows after each sync)")
     except Exception as e:
         modules["kev_cvss"] = None
         logger.warning(f"[SKIP] kev_cvss: {type(e).__name__}: {e}")

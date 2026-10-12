@@ -52,11 +52,20 @@ STATE_NO_SCORE  = "no_score"
 STATE_NOT_FOUND = "not_found"
 STATE_ERROR     = "error"
 
-# How long before a row is due again. An error is a transient thing most of
-# the time, so it comes back round quickly; a fetched score is close to
-# permanent, though NVD does revise scores, so it is rechecked eventually.
+# How long before a row is due again. An error comes back round quickly; a
+# checked row waits for its cached lookup to expire, so a recheck reaches NVD.
 RETRY_ERROR_AFTER_HOURS = 6
-RECHECK_OK_AFTER_DAYS   = 30
+
+# Rows a post-sync top-up looks up at most; bigger backlogs wait for the button.
+TOP_UP_LIMIT = 50
+
+
+def _cve_cache_days() -> float:
+    try:
+        from core import enrichment
+        return enrichment.TTL_SECONDS["cve"] / 86400
+    except Exception:
+        return 90
 
 _SENTENCES = {
     "never_checked": ("This row has not been looked up yet, so there is no "
@@ -235,19 +244,18 @@ class CvssBackfill:
     """
     Walk the KEV mirror and fetch a rating for every row that needs one.
 
-    NOT STARTED AT BOOT, on purpose. It is ~1700 outbound lookups, which is
-    about fifty minutes with an NVD key and three and a half hours without
-    one, and a monitoring tool should not open hours of third party traffic on
-    its own because somebody restarted it. The Runbook tab has a button.
+    A full pass is hours of outbound lookups, so it only starts from the
+    Runbook tab. After each KEV sync, top_up() looks up the new rows alone,
+    capped at TOP_UP_LIMIT.
 
-    Resumable by construction: the work list is computed from the table on
-    every pass, so a stop, a crash or a closed laptop costs the row in flight
-    and nothing else.
+    Resumable: the work list is read from the table on every pass.
     """
 
     def __init__(self, lookup=None,
                  retry_error_after_hours: int = RETRY_ERROR_AFTER_HOURS,
-                 recheck_ok_after_days: int = RECHECK_OK_AFTER_DAYS):
+                 recheck_ok_after_days: float = None):
+        if recheck_ok_after_days is None:
+            recheck_ok_after_days = _cve_cache_days()
         self._lookup = lookup or lookup_cve
         self._retry_error_after = timedelta(hours=retry_error_after_hours)
         self._recheck_ok_after  = timedelta(days=recheck_ok_after_days)
@@ -259,6 +267,8 @@ class CvssBackfill:
         # WHY THE WORK LIST CAME BACK EMPTY, when it did not come back empty
         # because the table is finished. See _due and _state_note.
         self._due_blocked = None
+        # What the last work list held, by kind; see _state_note.
+        self._due_counts = None
 
     # state
 
@@ -275,6 +285,8 @@ class CvssBackfill:
             "current":     None,
             "last_error":  None,
             "remaining":   None,
+            # "full" from the button, "top_up" after a sync.
+            "mode":        None,
         }
 
     def status(self) -> dict:
@@ -286,6 +298,7 @@ class CvssBackfill:
                 snap["remaining"] = len(self._due())
             except Exception:
                 snap["remaining"] = None
+        snap["waiting"] = dict(self._due_counts) if self._due_counts else None
         snap["rate"] = self._rate_note(snap.get("remaining"))
         snap["note"] = self._state_note(snap)
         return snap
@@ -317,9 +330,23 @@ class CvssBackfill:
         if remaining is None:
             return ("Not running. The number of unrated rows could not be "
                     "read, so this is not a claim that there are none.")
-        return (f"Not running. {remaining} KEV row(s) still have no severity, "
-                f"so the Runbook table cannot be triaged on it. Fetch CVSS on "
-                f"the Runbook tab starts it.")
+        # Rows due a recheck already have an answer, so they are not counted
+        # as rows with no severity.
+        c = snap.get("waiting") or {}
+        if not c:
+            return (f"Not running. {remaining} KEV row(s) are due a lookup. "
+                    f"Fetch CVSS on the Runbook tab starts it.")
+        parts = []
+        if c.get("never_checked"):
+            parts.append(f"{c['never_checked']} KEV row(s) have never been "
+                         f"looked up and have no severity")
+        if c.get("retry"):
+            parts.append(f"{c['retry']} failed lookup(s) are due a retry")
+        if c.get("recheck"):
+            parts.append(f"{c['recheck']} checked row(s) are due a recheck "
+                         f"and keep their current answer until then")
+        return ("Not running. " + "; ".join(parts)
+                + ". Fetch CVSS on the Runbook tab starts it.")
 
     def _rate_note(self, remaining: int = None) -> str:
         """
@@ -366,14 +393,14 @@ class CvssBackfill:
 
     # the work list
 
-    def _due(self, limit: int = None) -> list:
+    def _due(self, limit: int = None, fresh_only: bool = False) -> list:
         """
         Which rows need a lookup, most deserving first.
 
         Never-looked-at rows come first, newest KEV entries first inside that,
         because a row nobody has ever rated is worth more than a recheck of one
         that already has a score. Then failed attempts that are due a retry,
-        then old successes.
+        then old successes. fresh_only keeps just the never-looked-at rows.
 
         Restricted to the mirror. The five STATIC-* priors are hand-written
         code with reasoned severities on them, and a CVSS number has no
@@ -385,6 +412,7 @@ class CvssBackfill:
         now = _now()
         fresh, retry, recheck = [], [], []
         self._due_blocked = None
+        self._due_counts = None
 
         with _get_conn() as conn:
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(runbook)")}
@@ -417,7 +445,9 @@ class CvssBackfill:
             elif now - checked >= self._recheck_ok_after:
                 recheck.append(r["cve_id"])
 
-        due = fresh + retry + recheck
+        self._due_counts = {"never_checked": len(fresh), "retry": len(retry),
+                            "recheck": len(recheck)}
+        due = fresh if fresh_only else fresh + retry + recheck
         return due[:limit] if limit else due
 
     # the write
@@ -465,7 +495,7 @@ class CvssBackfill:
 
     # the loop
 
-    def run_once(self, limit: int = None) -> dict:
+    def run_once(self, limit: int = None, fresh_only: bool = False) -> dict:
         """
         Work the list once, synchronously. Returns the status snapshot.
 
@@ -478,9 +508,10 @@ class CvssBackfill:
             self._state = self._blank_state()
             self._state["running"]    = True
             self._state["started_at"] = _iso(_now())
+            self._state["mode"]       = "top_up" if fresh_only else "full"
         self._stop.clear()
 
-        due = self._due(limit)
+        due = self._due(limit, fresh_only)
 
         for cve in due:
             if self._stop.is_set():
@@ -539,7 +570,7 @@ class CvssBackfill:
         snap["rate"] = self._rate_note(snap.get("remaining"))
         return snap
 
-    def start(self, limit: int = None) -> dict:
+    def start(self, limit: int = None, fresh_only: bool = False) -> dict:
         """Run a pass in the background. Refuses to start a second one."""
         with self._lock:
             if self._state["running"]:
@@ -551,7 +582,7 @@ class CvssBackfill:
 
         def run():
             try:
-                self.run_once(limit)
+                self.run_once(limit, fresh_only)
             except Exception as e:
                 logger.error(f"[kev_cvss] pass failed: {e}", exc_info=True)
                 with self._lock:
@@ -561,6 +592,20 @@ class CvssBackfill:
         self._thread = threading.Thread(target=run, name="kev-cvss", daemon=True)
         self._thread.start()
         return {"started": True, "status": self.status()}
+
+    def top_up(self, limit: int = TOP_UP_LIMIT) -> dict:
+        """Look up the rows nobody has looked up yet, capped. Called after a
+        successful KEV sync; retries and rechecks wait for the button."""
+        try:
+            fresh = self._due(fresh_only=True)
+        except Exception as e:
+            return {"started": False,
+                    "error": f"work list could not be read ({type(e).__name__})"}
+        if not fresh:
+            return {"started": False, "reason": "no new KEV rows to look up"}
+        out = self.start(limit, fresh_only=True)
+        out["rows"] = min(len(fresh), limit) if limit else len(fresh)
+        return out
 
     def stop(self) -> dict:
         """Ask the loop to finish the row in flight and stop."""

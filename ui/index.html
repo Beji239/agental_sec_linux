@@ -3078,9 +3078,8 @@
              /api/runbook/sync route, which had been landed with no way to
              press it. -->
         <button class="btn" id="runbook-sync-btn" onclick="syncRunbook()">Sync CISA KEV</button>
-        <!-- The feed carries no severity at all, so the sync can only ever
-             leave that column blank. This one goes and fetches a real CVSS
-             rating per CVE, in the background, because it is ~1700 lookups. -->
+        <!-- The feed carries no severity. The sync fetches CVSS for new rows
+             itself; this button runs the full pass, retries and rechecks. -->
         <button class="btn" id="cvss-btn" onclick="startCvssBackfill()">Fetch CVSS</button>
         <button class="btn" id="cvss-stop-btn" onclick="stopCvssBackfill()" style="display:none;">Stop</button>
         <span id="runbook-sync-status" style="font-size:11px;color:var(--text-dim);"></span>
@@ -9380,8 +9379,11 @@ function cvssLine(out) {
   if (out.running)  return `Fetching CVSS. ${out.attempted||0} attempted (${counts})${left}. Current: ${out.current||'...'}`;
   if (out.stopped)  return `Stopped after ${out.attempted||0} lookups. ${counts}${left}. Press Fetch CVSS to carry on where it left off.`;
   if (out.complete) return `Every KEV row has been looked up. ${counts}.`;
+  if (out.mode === 'top_up' && out.attempted)
+    return `Looked up ${out.attempted} new KEV row(s) after the sync (${counts}). ${out.note||''}`;
   if (out.attempted) return `Paused. ${out.attempted} attempted (${counts})${left}.`;
-  return `${out.remaining||0} rows have no fetched rating yet. ${out.rate||''}`;
+  // The note splits never looked up from due a recheck, which already has an answer.
+  return `${out.note || ((out.remaining||0) + ' rows are due a lookup.')} ${out.rate||''}`;
 }
 
 async function refreshCvssStatus(redraw) {
@@ -9466,6 +9468,15 @@ async function syncRunbook() {
     if (out.rejected) bits.push(`${out.rejected} rejected`);
     st.textContent = 'Synced. ' + bits.join(', ') + '.';
 
+    // New rows get their CVSS lookup started by the sync; follow it.
+    const top = out.cvss_top_up || {};
+    if (top.started) {
+      st.textContent += ` Fetching CVSS for ${top.rows} new row(s).`;
+      if (cvssPoll) clearInterval(cvssPoll);
+      let ticks = 0;
+      cvssPoll = setInterval(() => { ticks++; refreshCvssStatus(ticks % 6 === 0); }, 5000);
+    }
+    refreshCvssStatus(false);
     searchRunbook();
   } catch (e) {
     st.textContent = 'Sync failed: ' + (e && e.message ? e.message : 'request did not complete');

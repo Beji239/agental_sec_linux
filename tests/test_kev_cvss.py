@@ -379,5 +379,68 @@ check_true("the progress line reads the real state", "out.complete" in ui)
 check_true("and reports a stop as a stop", "out.stopped" in ui)
 
 
+print("\n[13] a sync tops up new rows only, and a recheck is not a missing score")
+from core import enrichment as _enr                # noqa: E402
+check("a checked row is due again when its cached lookup expires",
+      kev_cvss.CvssBackfill()._recheck_ok_after.days,
+      int(_enr.TTL_SECONDS["cve"] / 86400))
+
+clear_runbook()
+seed("CVE-2026-98001", date_added="2026-09-01")
+seed("CVE-2026-98002", date_added="2026-09-02")
+kev_cvss.CvssBackfill(lookup=fixed_lookup(**{
+    "CVE-2026-98001": OK,
+    "CVE-2026-98002": {"state": "error", "note": "nvd: ReadTimeout"},
+})).run_once()
+for i in range(3):
+    seed(f"CVE-2026-981{i:02d}", date_added="2026-10-08")
+
+topped = []
+
+
+def top_watch(cve):
+    topped.append(cve)
+    return OK
+
+
+top_bf = kev_cvss.CvssBackfill(lookup=top_watch, retry_error_after_hours=0,
+                               recheck_ok_after_days=0)
+out = top_bf.top_up(limit=2)
+top_bf._thread.join(10)
+check("a top-up starts", out["started"], True)
+check("and says how many rows it took", out["rows"], 2)
+check("it looks up only never-checked rows, capped",
+      sorted(topped), ["CVE-2026-98100", "CVE-2026-98101"])
+st = top_bf.status()
+check("the status says it was a top-up", st["mode"], "top_up")
+# recheck_ok_after_days=0, so the two rows just looked up are due again too.
+check("and splits what is still waiting", st["waiting"],
+      {"never_checked": 1, "retry": 1, "recheck": 3})
+check_true("the note counts the never-checked row as having no severity",
+           "1 KEV row(s) have never been looked up and have no severity"
+           in st["note"])
+check_true("and the recheck row as keeping its answer",
+           "3 checked row(s) are due a recheck" in st["note"])
+
+top_bf.top_up()
+top_bf._thread.join(10)
+check("a top-up with nothing new does not start",
+      top_bf.top_up(), {"started": False, "reason": "no new KEV rows to look up"})
+check_true("and it never retried or rechecked",
+           "CVE-2026-98001" not in topped and "CVE-2026-98002" not in topped)
+
+clear_runbook()
+seed("CVE-2026-98201")
+kev_cvss.CvssBackfill(lookup=fixed_lookup(**{"CVE-2026-98201": OK})).run_once()
+st = kev_cvss.CvssBackfill(recheck_ok_after_days=0).status()
+check_true("rows only due a recheck are not called rows with no severity",
+           "no severity" not in st["note"] and "due a recheck" in st["note"])
+
+main_src = (ROOT / "main.py").read_text(encoding="utf-8")
+check_true("the boot sync tops up", 'modules["kev_cvss"].top_up()' in main_src)
+check_true("the sync route tops up", "_cvss_module().top_up()" in routes)
+check_true("the page follows the top-up", "out.cvss_top_up" in ui)
+
+
 print("\n" + ("ALL PASS" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

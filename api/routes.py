@@ -2992,6 +2992,13 @@ def register_routes(app):
                             "error": "runbook module is not loaded"}), 503
 
         result = rb.sync_cisa_kev()
+        if result.get("success"):
+            # New rows get their CVSS lookup now, capped; see top_up.
+            try:
+                result["cvss_top_up"] = _cvss_module().top_up()
+            except Exception as e:
+                result["cvss_top_up"] = {"started": False,
+                                         "error": type(e).__name__}
         return jsonify(result), (200 if result.get("success") else 502)
 
     # CVSS BACKFILL
@@ -3002,11 +3009,8 @@ def register_routes(app):
     # 'unknown' on most rows and the table cannot be triaged. These three
     # routes drive tools/kev_cvss.py, which goes and fetches a rating per CVE.
     #
-    # START RETURNS IMMEDIATELY. It is ~1700 outbound lookups, about fifty
-    # minutes with an NVD key and three and a half hours without one, so it
-    # runs on a background thread and the page polls /status. A route that
-    # blocked for that long would time out in the browser and leave the work
-    # running with nobody able to see it.
+    # START RETURNS IMMEDIATELY. A full pass is hours of lookups, so it runs
+    # on a background thread and the page polls /status.
 
     def _cvss_module():
         mod = get_modules().get("kev_cvss")
