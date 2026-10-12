@@ -271,6 +271,29 @@ check("and still refuses to let it read as quiet",
 check("a module that is genuinely absent still says so honestly",
       "NOT LOADED" in sh.warnings_for("query_packets", {})[0], True)
 
+# linux_monitor is a loaded-module sensor, so it needs the config read too.
+_saved_cfg = sh._config_cache
+try:
+    sh._config_cache = {"linux_monitor": {"enabled": False, "hosts": []}}
+    w = [l for l in sh.warnings_for("query_findings", {})
+         if l.startswith("linux_monitor")]
+    check("linux_monitor switched off says OFF", "OFF, not broken" in w[0], True)
+    sh._config_cache = {"linux_monitor": {"enabled": True, "hosts": []}}
+    w = [l for l in sh.warnings_for("query_findings", {})
+         if l.startswith("linux_monitor")]
+    check("on with no hosts is OFF too", "no hosts are listed" in w[0], True)
+    sh._config_cache = {"linux_monitor": {"enabled": True,
+                                          "hosts": [{"host": "192.0.2.8"}]}}
+    w = [l for l in sh.warnings_for("query_findings", {})
+         if l.startswith("linux_monitor")]
+    check("on with hosts and not loaded is NOT LOADED", "NOT LOADED" in w[0], True)
+    sh._config_cache = {"linux_monitor": {"enabled": False}}
+    ok, why = sh.measurement_is_possible("list_monitored_hosts", {})
+    check("off still cannot measure", ok, False)
+    check("and says it is off", "OFF, not broken" in why, True)
+finally:
+    sh._config_cache = _saved_cfg
+
 
 print("\n[12] a claim of measurement is REFUSED, not merely discouraged")
 # The prompt already tells the model not to write a measured row on a blind

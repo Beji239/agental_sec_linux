@@ -108,6 +108,23 @@ def _config_collector_trouble(name: str) -> str | None:
             f"rather than a failure and rather than a quiet network")
 
 
+def _switched_off(dep: str) -> str | None:
+    """Why a loaded-module sensor is off in config.json, or None if it is on."""
+    if dep != "linux_monitor":
+        return None
+    lm = _config().get("linux_monitor") or {}
+    if not lm.get("enabled"):
+        reason = "switched off in config.json"
+    elif not (lm.get("hosts") or lm.get("host")):
+        reason = "no hosts are listed in config.json"
+    else:
+        return None
+    return (f"{dep} is OFF, not broken: {reason}. It reads other Linux "
+            f"machines over SSH, so nothing it would add is in this answer, "
+            f"which is a configuration choice rather than a failure and "
+            f"rather than a quiet network")
+
+
 class UnregisteredTool(Exception):
     """A tool asked what it depends on and no entry exists for it."""
 
@@ -668,6 +685,9 @@ def warnings_for(tool: str, modules: dict) -> list[str]:
 
         matched = {k: v for k, v in (modules or {}).items()
                    if k == dep or k.startswith(dep + ":")}
+        if not matched and _switched_off(dep):
+            out.append(_switched_off(dep))
+            continue
         if not matched:
             # Same wording the readiness card uses, and for the same reason:
             # this cannot tell the two apart, so it says so rather than
@@ -706,7 +726,7 @@ def measurement_is_possible(tool: str, modules: dict) -> tuple[bool, str]:
         matched = {k: v for k, v in (modules or {}).items()
                    if k == dep or k.startswith(dep + ":")}
         if not matched:
-            problems.append(f"{dep} is not loaded")
+            problems.append(_switched_off(dep) or f"{dep} is not loaded")
             continue
         for key, mod in sorted(matched.items()):
             trouble = _module_trouble(key, mod)
