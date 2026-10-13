@@ -277,12 +277,13 @@ device is watched, nothing is called new.
 
 *False alarms per day for two weeks, with one rule picked out. Sample data.*
 
-**False alarms per day.** One dot per incident that fired that day, coloured
-by the rule's family. A filled dot is a false alarm, a red ring is real, a
-dashed ring is not sure, an empty ring has no verdict yet. It counts
-incidents, not alerts, so one big clean up does not make a day look huge.
-Click a rule to pick out its dots. A rule that keeps filling a row with false
-alarms is the one to tune.
+**False alarms per day.** Every alert costs you a look, and this shows which
+rules are worth it and which keep crying wolf. One dot per incident that fired
+that day, coloured by the rule's family. A filled dot is a false alarm, a red
+ring is real, a dashed ring is not sure, an empty ring has no verdict yet. It
+counts incidents, not alerts, so one big clean up does not make a day look
+huge. Click a rule to light up only its dots, and **Show all** to go back. A
+rule whose dots are mostly filled is the one to mute on the Detections tab.
 
 Under it, **Needs your verdict** lists incidents that have none yet, with
 three buttons: False alarm, Real, Not sure. You can also tell the analyst in

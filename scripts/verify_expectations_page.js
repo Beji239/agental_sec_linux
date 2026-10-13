@@ -61,9 +61,9 @@ function load() {
     'let EXP_PICKED = null;',
     grab(src, '_expBytes'), grab(src, 'drawDeviceOrbit'), grab(src, 'renderExpDevice'),
     src.slice(src.indexOf('const FA_FAMILY'), src.indexOf('function _faColour(')),
-    grab(src, '_faColour'), grab(src, '_faDot'), grab(src, 'renderFalseAlarms'),
+    grab(src, '_faColour'), grab(src, '_faDot'), grab(src, 'renderFalseAlarms'), grab(src, 'resetFalseAlarms'),
     'function _setFA(d) { FA_DATA = d; }',
-    'return { renderExpectations, renderExpDevice, renderFalseAlarms, _setFA };',
+    'return { renderExpectations, renderExpDevice, renderFalseAlarms, resetFalseAlarms, _setFA };',
   ].join('\n');
   return new Function(body)();
 }
@@ -191,6 +191,14 @@ ok(todo.includes('4 more without a verdict'), 'the open list says how many it le
 ok(!todo.includes('<img'), 'titles from outside are escaped in the list');
 ok(els['fa-rules'].innerHTML.includes('FED-1002: 2 false'), 'the rule totals are shown');
 ok(typeof els['fa-rules'].onclick === 'function' && typeof els['fa-todo'].onclick === 'function', 'rules and buttons listen for clicks');
+ok(els['fa-showing'].textContent === 'Showing every rule.' && els['fa-reset'].disabled, 'nothing picked, Show all is off');
+const chip = { closest: () => ({ getAttribute: () => 'FED-1002' }) };
+els['fa-rules'].onclick({ target: chip });
+const picked = els['fa-days'].innerHTML;
+ok((picked.match(/class="fa-dim"/g) || []).length === 3, 'picking a rule fades the other dots');
+ok(els['fa-showing'].textContent.includes('FED-1002 only') && !els['fa-reset'].disabled, 'a pick says which rule, and Show all is on');
+page.resetFalseAlarms();
+ok(!els['fa-days'].innerHTML.includes('fa-dim') && els['fa-reset'].disabled, 'Show all brings every dot back');
 
 console.log(`\n${passed} passed, ${FAIL.length} failed`);
 if (FAIL.length) { console.log('FAILURES:', JSON.stringify(FAIL, null, 2)); process.exit(1); }

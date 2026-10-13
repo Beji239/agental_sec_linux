@@ -1626,11 +1626,16 @@
   .fa-day { font-family: var(--mono); color: var(--text-dim); font-size: 11px; }
   .fa-count { font-family: var(--mono); color: var(--text-dim); font-size: 11px; text-align: right; }
   .fa-dots svg { display: inline-block; vertical-align: middle; margin: 1px; }
-  .fa-dots svg.fa-dim { opacity: 0.2; }
+  .fa-dots svg.fa-dim { opacity: 0.35; }
+  .fa-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            margin: 0 0 10px; font-size: 12px; color: var(--text-dim); }
+  .fa-bar .btn { font-size: 11px; padding: 3px 10px; }
+  .fa-bar .btn:disabled { opacity: 0.4; cursor: default; }
   .fa-rules { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
   .fa-rule { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: var(--radius);
              border: 1px solid var(--border); background: var(--bg3); color: var(--text); cursor: pointer; }
-  .fa-rule.on { border-color: var(--text-hi); color: var(--text-hi); }
+  .fa-rule.on { border-color: var(--text-hi); color: var(--text-hi); background: var(--bg2);
+                box-shadow: 0 0 0 1px var(--text-hi); }
   .fa-todo { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
              padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
   .fa-todo .btn { font-size: 11px; padding: 3px 8px; margin-left: 4px; }
@@ -2600,12 +2605,25 @@
     <div class="card">
       <div class="card-title">False alarms per day</div>
       <div class="exp-note" style="margin-top:0;">
-        One dot per incident that fired that day, coloured by the family of the rule that raised it.
-        A filled dot is a false alarm, a red ring is real, a dashed ring is not sure, and an empty
-        ring has no verdict yet. Incidents are counted, not alerts, so one big clean up does not
-        make a day look huge. Click a rule to pick out its dots.
+        <b>What it is for.</b> Every alert costs you a look. This block shows which rules are worth
+        that look and which keep crying wolf, so you know which ones to mute.
+      </div>
+      <div class="exp-note">
+        <b>How to use it.</b> Give each incident a verdict under <b>Needs your verdict</b> below.
+        After a week or two the pattern shows. A rule whose dots are mostly filled is crying wolf,
+        and you can mute it on the Detections tab. A rule with red rings is catching real things,
+        so keep it.
+      </div>
+      <div class="exp-note">
+        <b>How to read it.</b> Each row is a day and each dot is one incident that fired that day,
+        coloured by the family of its rule. A filled dot is a false alarm, a red ring is real, a
+        dashed ring is not sure, and an empty ring is still waiting for your verdict. Incidents are
+        counted, not alerts, so one big clean up does not make a day look huge. The boxes are the
+        twelve busiest rules with their totals. Click one to light up only its dots.
       </div>
       <div id="fa-rules" class="fa-rules"></div>
+      <div class="fa-bar"><span id="fa-showing"></span>
+        <button class="btn" id="fa-reset" onclick="resetFalseAlarms()">Show all</button></div>
       <div id="fa-days"></div>
       <div class="card-title" style="margin-top:16px;">Needs your verdict</div>
       <div id="fa-todo"></div>
@@ -8649,7 +8667,8 @@ function _faDot(d) {
     : d.verdict === 'not_sure' ? `<circle cx="7" cy="7" r="5" fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="2 2"/>`
     : `<circle cx="7" cy="7" r="5" fill="none" stroke="${c}" stroke-width="1.5"/>`;
   const dim = FA_PICK && FA_PICK !== d.rule ? ' class="fa-dim"' : '';
-  return `<svg width="14" height="14" viewBox="0 0 14 14"${dim}><title>${esc(tip)}</title>${shape}</svg>`;
+  const shown = FA_PICK === d.rule ? shape.replace('stroke-width="1.5"', 'stroke-width="2.5"') : shape;
+  return `<svg width="14" height="14" viewBox="0 0 14 14"${dim}><title>${esc(tip)}</title>${shown}</svg>`;
 }
 
 async function loadFalseAlarms() {
@@ -8677,6 +8696,11 @@ function renderFalseAlarms() {
     FA_PICK = FA_PICK === rule ? null : rule;
     renderFalseAlarms();
   };
+  const picked = rules.find(r => r.rule === FA_PICK);
+  document.getElementById('fa-showing').textContent = picked
+    ? `Showing ${picked.rule} only: ${picked.days} ${picked.days === 1 ? 'dot' : 'dots'} in the last two weeks. The rest are faded.`
+    : 'Showing every rule.';
+  document.getElementById('fa-reset').disabled = !FA_PICK;
   const days = (d.days || []).slice().reverse();
   document.getElementById('fa-days').innerHTML = d.note
     ? `<div class="exp-note">${esc(d.note)}</div>`
@@ -8703,6 +8727,11 @@ function renderFalseAlarms() {
     const holder = v && ev.target.parentElement;
     if (holder) setIncidentVerdict(Number(holder.getAttribute('data-incident')), v);
   };
+}
+
+function resetFalseAlarms() {
+  FA_PICK = null;
+  renderFalseAlarms();
 }
 
 async function setIncidentVerdict(id, verdict) {
