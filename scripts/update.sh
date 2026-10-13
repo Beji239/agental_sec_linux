@@ -78,6 +78,13 @@ fi
 if touched 'tools/read_helper.py|scripts/install_read_helper.sh'; then
     todo+=("The read helper changed. Run: sudo ./scripts/install_read_helper.sh --apply")
 fi
+# The security test tools, only when they were installed before.
+tools_home="${AGENTAL_TEST_TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/agentalsec-test-tools}"
+if [[ -d "$tools_home" ]] && touched 'scripts/install_test_tools.sh'; then
+    echo "Updating the security test tools..."
+    ./scripts/install_test_tools.sh --skip-system \
+        || todo+=("The security test tools did not update. Run: ./scripts/install_test_tools.sh")
+fi
 if touched 'scripts/install_audit_rules.sh'; then
     todo+=("The audit watches changed. Run: sudo ./scripts/install_audit_rules.sh --apply")
 fi

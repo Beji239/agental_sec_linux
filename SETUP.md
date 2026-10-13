@@ -237,6 +237,28 @@ python3 main.py --check
 python3 scripts/run_tests.py
 ```
 
+### Security test tools (developers only)
+
+Some tests scan the code with outside tools: Bandit, Semgrep, pip-audit,
+ShellCheck, gitleaks and Trivy. **The app does not need them, and a normal
+install leaves them out.** Without them, those tests report a skip that names
+the script below, and the rest of the suite runs as usual.
+
+To install them, run `./scripts/install.sh --with-test-tools`, answer yes when
+the installer asks, or run the script on its own at any time:
+
+```bash
+./scripts/install_test_tools.sh
+```
+
+It installs ShellCheck with apt and puts the rest in their own folder,
+`~/.local/share/agentalsec-test-tools`, apart from the app's Python packages.
+The versions are pinned in the script, and the gitleaks and Trivy downloads
+are checked against their published checksums. It is safe to run again.
+`./scripts/update.sh` updates the tools when a new version of the script
+arrives, but only if they were installed before. `--verify` shows what is
+installed, and `--remove` deletes the folder.
+
 ## Updating
 
 ```bash

@@ -9,6 +9,8 @@
 #     ./scripts/install.sh --with-clamav    also install ClamAV (step 11)
 #     ./scripts/install.sh --with-ebpf      also install the eBPF build tools
 #     ./scripts/install.sh --skip-system    do not run apt (packages are there)
+#     ./scripts/install.sh --with-test-tools  also install the security test
+#                                           tools (developers only)
 #
 # Without questions, the model settings come from the environment when set:
 # AGENTAL_PROVIDER_URL, AGENTAL_MODEL and AGENTAL_API_KEY.
@@ -18,20 +20,22 @@ set -uo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT" || { echo "install: cannot open $PROJECT_ROOT" >&2; exit 1; }
 
-ASK=1 CLAMAV=ask EBPF=ask SYSTEM=1
+ASK=1 CLAMAV=ask EBPF=ask SYSTEM=1 TESTTOOLS=ask
 for arg in "$@"; do
     case "$arg" in
         --yes|-y) ASK=0 ;;
         --with-clamav) CLAMAV=yes ;;
         --with-ebpf) EBPF=yes ;;
         --skip-system) SYSTEM=0 ;;
-        -h|--help) sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --with-test-tools) TESTTOOLS=yes ;;
+        -h|--help) sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
     esac
 done
 [[ -t 0 ]] || ASK=0
 [[ "$CLAMAV" == ask && "$ASK" == 0 ]] && CLAMAV=no
 [[ "$EBPF" == ask && "$ASK" == 0 ]] && EBPF=no
+[[ "$TESTTOOLS" == ask && "$ASK" == 0 ]] && TESTTOOLS=no
 
 STEP=0
 WARNINGS=()
@@ -71,6 +75,11 @@ if [[ "$ASK" == 1 ]]; then
     if [[ "$SYSTEM" == 1 && "$EBPF" == ask ]]; then
         yes_no "Install the build tools for the optional eBPF kernel camera?" n && EBPF=yes || EBPF=no
     fi
+    if [[ "$TESTTOOLS" == ask ]]; then
+        echo "      The security test tools are only for running the security"
+        echo "      tests; the app does not need them."
+        yes_no "Install the security test tools (about 400 MB)?" n && TESTTOOLS=yes || TESTTOOLS=no
+    fi
     if [[ -z "$(env_get AGENTAL_API_KEY)" && -z "$NEW_KEY" ]]; then
         echo "      The AI analyst needs your model provider's API key. A local"
         echo "      model server needs any placeholder, such as local. Leave it"
@@ -91,6 +100,7 @@ if [[ "$ASK" == 1 ]]; then
 fi
 [[ "$CLAMAV" == ask ]] && CLAMAV=no
 [[ "$EBPF" == ask ]] && EBPF=no
+[[ "$TESTTOOLS" == ask ]] && TESTTOOLS=no
 
 # 1. System packages
 step "System packages"
@@ -113,6 +123,7 @@ else
         command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
     done
     [[ -n "$term" ]] || BASE+=(xterm)
+    [[ "$TESTTOOLS" == yes ]] && BASE+=(python3-venv shellcheck)
     sudo apt-get update -q </dev/null >>"$APT_LOG" 2>&1 \
         || { tail -n 15 "$APT_LOG"; die "apt-get update failed, see above. Check the network and the apt sources, then run this again."; }
     apt_install "${BASE[@]}" \
@@ -299,6 +310,17 @@ else
 fi
 rm -f "$launch_out"
 
+# Optional: the security test tools, in their own folder.
+if [[ "$TESTTOOLS" == yes ]]; then
+    echo
+    echo "[+] Security test tools"
+    if ./scripts/install_test_tools.sh --skip-system </dev/null; then
+        ok "Bandit, Semgrep, pip-audit, ShellCheck, gitleaks and Trivy"
+    else
+        warn "the security test tools did not all install, see above. Later: ./scripts/install_test_tools.sh"
+    fi
+fi
+
 echo
 echo "Installed."
 echo
@@ -320,4 +342,5 @@ echo "  - root action helper:  sudo ./scripts/install_action_helper.sh --apply"
 echo "  - read helper:         sudo ./scripts/install_read_helper.sh --apply"
 echo "  - your router:         ./scripts/install_gateway_agent.sh --enroll ROUTER_ADDRESS"
 echo "  - start on boot:       SETUP.md step 12"
+echo "  - security test tools: ./scripts/install_test_tools.sh (developers only)"
 echo "To update later: ./scripts/update.sh"
