@@ -580,10 +580,36 @@ def _read_watch_24h(conn, now: datetime) -> list:
     return out
 
 
+def _given_names() -> tuple:
+    """The names the owner gave in the Network tab, by hardware address and
+    by address. Retired and merged rows are left out so an old name on a
+    reused MAC does not win."""
+    by_mac, by_ip = {}, {}
+    try:
+        with me._get_readonly_conn() as conn:
+            for r in conn.execute(
+                    "SELECT ip, mac, known_as FROM known_devices "
+                    "WHERE COALESCE(known_as, '') != '' AND retired_at IS NULL "
+                    "AND merged_into IS NULL ORDER BY last_seen"):
+                if r["mac"]:
+                    by_mac[r["mac"].lower()] = r["known_as"]
+                if r["ip"]:
+                    by_ip[r["ip"]] = r["known_as"]
+    except Exception as e:                                  # noqa: BLE001
+        logger.debug(f"expectations: device names unavailable: {e}")
+    return by_mac, by_ip
+
+
+def _name(names, ip, mac, hostname) -> str:
+    by_mac, by_ip = names
+    return (by_mac.get(mac) if mac else None) or by_ip.get(ip) or hostname or ip
+
+
 def _devices(live, rows) -> list:
     """The devices for the mood ring, with what the expectations say of each."""
     if live is None:
         return []
+    names = _given_names()
     with live._lock:
         inv = {ip: dict(v) for ip, v in live.inventory.items()}
         blocked = set(live.blocked)
@@ -604,7 +630,8 @@ def _devices(live, rows) -> list:
                  else "new" if ip in new
                  else "blocked" if ip in blocked or mac in blocked
                  else "holding")
-        out.append({"ip": ip, "mac": mac, "name": v.get("hostname") or ip,
+        out.append({"ip": ip, "mac": mac,
+                    "name": _name(names, ip, mac, v.get("hostname")),
                     "state": state})
     return out
 
@@ -661,14 +688,15 @@ def device_detail(ip: str, now: datetime = None, live=None) -> dict:
             live = lan_live.get()
         except Exception:                                   # noqa: BLE001
             live = None
-    mac, name, blocked, apps = "", ip, False, []
+    mac, hostname, blocked, apps = "", None, False, []
     if live is not None:
         with live._lock:
             inv = dict(live.inventory.get(ip) or {})
             mac = (inv.get("mac") or "").lower()
-            name = inv.get("hostname") or ip
+            hostname = inv.get("hostname")
             blocked = ip in live.blocked or bool(mac and mac in live.blocked)
             apps = list(live.app_blocks.get(mac) or [])
+    name = _name(_given_names(), ip, mac, hostname)
     day = now - timedelta(hours=24)
     out = {"ip": ip, "mac": mac, "name": name, "blocked": blocked,
            "apps_blocked": apps, "usual": [], "new": [], "countries": [],

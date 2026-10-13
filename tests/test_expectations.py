@@ -240,6 +240,26 @@ check("a contact first seen today is new",
       [c["contact"] for c in d["new"]] == ["<b>odd.example</b>"], d["new"])
 check("a block by hardware address is shown", d["blocked"] is True)
 check("the name comes from the router's list", d["name"] == "tv")
+tv = d["ip"]
+sql(("INSERT INTO known_devices (ip, mac, known_as, last_seen) VALUES "
+     "(?, 'aa:aa:aa:aa:aa:30', 'Living room TV', ?)", (tv, ex._iso(T))),
+    ("INSERT INTO known_devices (ip, mac, known_as, last_seen) VALUES "
+     "('192.0.2.31', NULL, 'Office speaker', ?)", (ex._iso(T),)),
+    ("INSERT INTO known_devices (ip, mac, known_as, last_seen, retired_at) "
+     "VALUES ('192.0.2.99', '00:00:5e:00:53:32', 'Old name', ?, ?)",
+     (ex._iso(T), ex._iso(T))))
+live.inventory["192.0.2.31"] = {"mac": "00:00:5e:00:53:31"}
+live.inventory["192.0.2.32"] = {"mac": "00:00:5e:00:53:32"}
+d = ex.device_detail(tv, now=T, live=live)
+check("the name given in the Network tab wins over the router's",
+      d["name"] == "Living room TV", d["name"])
+ring = {x["ip"]: x["name"] for x in ex._devices(live, [])}
+check("the ring uses the given name too",
+      ring.get(tv) == "Living room TV", ring)
+check("a device the router has no hostname for is named by its address",
+      ring.get("192.0.2.31") == "Office speaker", ring)
+check("a retired name on a reused hardware address is not used",
+      ring.get("192.0.2.32") == "192.0.2.32", ring)
 d = ex.device_detail("172.21.0.30", now=T - timedelta(days=2, hours=23),
                      live=live)
 check("under a day of watching, nothing is called new",
