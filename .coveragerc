@@ -1,0 +1,20 @@
+# Coverage settings for scripts/run_tests.py --coverage, which sets COV_ROOT.
+[run]
+branch = True
+parallel = True
+data_file = ${COV_ROOT}/coverage/data/.coverage
+source = ${COV_ROOT}
+omit =
+    ${COV_ROOT}/tests/*
+    ${COV_ROOT}/scripts/*
+    ${COV_ROOT}/coverage/*
+    ${COV_ROOT}/data/*
+    */__pycache__/*
+
+[report]
+show_missing = True
+skip_empty = True
+precision = 1
+
+[html]
+directory = ${COV_ROOT}/coverage/html

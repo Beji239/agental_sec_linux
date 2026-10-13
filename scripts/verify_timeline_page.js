@@ -172,6 +172,7 @@ function loadPage(src) {
     grabDecl(src, 'fmtTime'),
     grabDecl(src, 'parseUtc'),
     grabDecl(src, 'getTimeFilterISO'),
+    grabDecl(src, 'renderTimelineCoverage'),
     grabDecl(src, 'loadTimeline'),
     grabDecl(src, 'showDetection'),
     grabDecl(src, 'showMapEndpoint'),
@@ -307,7 +308,7 @@ async function main() {
   await page.loadTimeline();
   let html = els['timeline-list'].innerHTML;
   ok(/TCP 66 bytes/.test(html), 'the protocol and size are on the row', html.slice(0, 300));
-  ok(/10\.0\.0\.207:39932 to 34\.36\.133\.15:443/.test(html),
+  ok(/192\.0\.2\.207:39932 to 11\.22\.35\.15:443/.test(html),
      'both endpoints and both ports are on the row');
   ok(/process hermes, pid 291264/.test(html),
      'THE OWNING PROCESS IS NAMED on a packet row');
@@ -398,7 +399,7 @@ async function main() {
   // into an onclick attribute inside a single-quoted JS string, and escJs is
   // what makes a value with a quote in it safe to put there. Asserting on the
   // raw address would pass against a renderer that forgot to escape it.
-  ok(/onclick="showMapEndpoint\('34\.36\.133\.15'\)"/.test(html)
+  ok(/onclick="showMapEndpoint\('11\.22\.35\.15'\)"/.test(html)
      || /class="tl-jump tl-jump-map"/.test(html),
      'a public endpoint gets a map link', html.slice(0, 500));
   ok(/tl-jump-map/.test(html),

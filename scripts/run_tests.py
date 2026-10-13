@@ -13,6 +13,7 @@
 #   python scripts/run_tests.py --only enrichment
 #   python scripts/run_tests.py --list
 #   python scripts/run_tests.py --strict          # a skip is a failure
+#   python scripts/run_tests.py --coverage        # line and branch report
 #
 # HOW THE TESTS IN THIS PROJECT WORK, since they are not pytest.
 # Every file in tests/ is a standalone script. It prints its own checks, then
@@ -36,6 +37,7 @@
 
 import argparse
 import atexit
+import json
 import os
 import pathlib
 import re
@@ -93,7 +95,56 @@ def _child_env() -> dict:
     env["PYTHONUTF8"] = "1"
     env["AGENTALSEC_TEST_DB"] = str(_scratch_db())
     env["TMPDIR"] = str(_test_tmp())
+    if _COVERAGE:
+        # The hook starts coverage in the test and in every child it starts.
+        env["COV_ROOT"] = str(ROOT)
+        env["COVERAGE_PROCESS_START"] = str(ROOT / ".coveragerc")
+        hook = str(ROOT / "scripts" / "coverage_hook")
+        env["PYTHONPATH"] = os.pathsep.join(
+            [hook] + [x for x in [env.get("PYTHONPATH")] if x])
     return env
+
+
+_COVERAGE = False
+
+
+def _coverage(*args):
+    """Runs the coverage command with the project's settings."""
+    env = dict(os.environ, COV_ROOT=str(ROOT))
+    return subprocess.run(
+        [sys.executable, "-m", "coverage", *args,
+         "--rcfile", str(ROOT / ".coveragerc")],
+        cwd=str(ROOT), env=env, text=True, capture_output=True)
+
+
+def coverage_start():
+    """Clears the data of an earlier run, so the report is this run only."""
+    data = ROOT / "coverage" / "data"
+    shutil.rmtree(data, ignore_errors=True)
+    data.mkdir(parents=True, exist_ok=True)
+
+
+def coverage_finish(fail_under: float):
+    """Combines the per-process data, prints the report, writes the HTML.
+
+    Returns False when the total is below fail_under."""
+    for step in (["combine"], ["html", "-q"], ["json", "-q", "-o",
+                 str(ROOT / "coverage" / "coverage.json")]):
+        r = _coverage(*step)
+        if r.returncode != 0:
+            print(f"coverage {step[0]} failed:\n{r.stdout}{r.stderr}")
+            return False
+    r = _coverage("report", "--sort=cover")
+    print(r.stdout)
+    total = json.loads(
+        (ROOT / "coverage" / "coverage.json").read_text())["totals"]
+    pct = total["percent_covered"]
+    print(f"Total {pct:.1f}% (lines and branches). "
+          f"HTML report: coverage/html/index.html")
+    if fail_under and pct < fail_under:
+        print(f"Below the floor of {fail_under:.1f}%.")
+        return False
+    return True
 
 
 _TEST_TMP = None
@@ -230,6 +281,10 @@ def main():
                     help="a skipped test counts as a failure")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="print the output of passing tests too")
+    ap.add_argument("--coverage", action="store_true",
+                    help="measure line and branch coverage of the run")
+    ap.add_argument("--fail-under", type=float, default=0.0,
+                    help="with --coverage, fail when the total is below this")
     args = ap.parse_args()
 
     if not TESTS.is_dir():
@@ -249,6 +304,11 @@ def main():
             print(f"  {f.name}")
         print(f"\n{len(files)} files")
         return 0
+
+    if args.coverage:
+        global _COVERAGE
+        _COVERAGE = True
+        coverage_start()
 
     print(f"Running {len(files)} test files from {TESTS}")
     print(f"Python {sys.version.split()[0]}, timeout {args.timeout}s each\n")
@@ -300,6 +360,10 @@ def main():
           "not a test: python scripts/check_no_local_details.py --release <copy>")
 
     bad = len(failed) + (len(skipped) if args.strict else 0)
+    if args.coverage:
+        print()
+        if not coverage_finish(args.fail_under):
+            bad += 1
     return 1 if bad else 0
 
 

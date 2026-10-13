@@ -116,8 +116,9 @@ global.L = {
   },
   layerGroup: () => ({ addTo() { return this; }, remove() {} }),
   polyline: (pts) => { MARKERS.push({ kind: 'arc', pts }); return { addTo() { return this; } }; },
-  circleMarker: (ll) => { MARKERS.push({ kind: 'dot', ll }); return { addTo() { return this; }, bindPopup() { return this; } }; },
+  circleMarker: (ll) => { MARKERS.push({ kind: 'dot', ll }); return { addTo() { return this; }, bindPopup() { return this; }, on() { return this; } }; },
   geoJSON: () => ({ addTo() {} }),
+  canvas: () => ({}),
 };
 
 // The page's state, injected: loadThreatMap reads and writes these globals.
@@ -128,7 +129,8 @@ global.L = {
 function loadPage() {
   const src = pageScript();
   const body = [
-    'let map = null; let mapLayer = null; let baseMapDrawn = true;',
+    'let map = null; let mapLayer = null; let baseMapDrawn = true; let mapCanvas = null;',
+    src.slice(src.indexOf('const MAP_ARC_LIMIT'), src.indexOf('let baseMapDrawn = false;')),
     grabDecl(src, 'esc'),
     grabDecl(src, 'drawBaseMap'),
     grabDecl(src, 'loadThreatMap'),
@@ -192,7 +194,7 @@ async function main() {
      els['map-caveats'].innerHTML);
   ok(/1 external endpoint/.test(els['map-stats'].textContent),
      'the stats line counts the endpoints', els['map-stats'].textContent);
-  ok(/conversations this session/.test(els['map-stats'].textContent),
+  ok(/conversations,? this session/.test(els['map-stats'].textContent),
      'and may say "this session" when capture is running',
      els['map-stats'].textContent);
   ok(dotCount() === 3,
@@ -211,7 +213,7 @@ async function main() {
      'and it carries the sensor\'s own reason', caveats);
   ok(/NOT from this session/.test(caveats),
      'and says the endpoints are not from this session', caveats);
-  ok(!/conversations this session/.test(els['map-stats'].textContent),
+  ok(!/conversations,? this session/.test(els['map-stats'].textContent),
      'AND THE STATS LINE STOPS CLAIMING THIS SESSION',
      els['map-stats'].textContent);
 

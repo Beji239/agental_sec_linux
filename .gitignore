@@ -25,3 +25,8 @@ ebpf/*.o
 
 # Launchers written by scripts/install_launchers.sh, they hold this machine's path
 /*.desktop
+
+# Coverage report, written by scripts/run_tests.py --coverage
+coverage/
+.coverage
+.coverage.*

@@ -237,6 +237,10 @@ python3 main.py --check
 python3 scripts/run_tests.py
 ```
 
+For a coverage report, line and branch, run
+`python3 scripts/run_tests.py --coverage`. It needs the `coverage` package
+(`pip install --user coverage`) and writes `coverage/html/index.html`.
+
 ### Security test tools (developers only)
 
 Some tests scan the code with outside tools: Bandit, Semgrep, pip-audit,

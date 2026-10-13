@@ -90,11 +90,14 @@ global.document = {
 function loadRenderers() {
   const src = pageScript();
   const body = [
+    'let RUN_TICKED = new Set();',
     grab(src, 'esc'),
     grab(src, 'parseUtc'),
     grab(src, 'fmtTime'),
     grab(src, 'fmtTokens'),
     grab(src, 'renderDutyState'),
+    src.slice(src.indexOf('const RUN_VERDICT_WORDS'), src.indexOf('function runDetailText(')),
+    grab(src, 'runDetailText'),
     grab(src, 'runRow'),
     'return { esc, fmtTime, fmtTokens, renderDutyState, runRow };',
   ].join('\n');
