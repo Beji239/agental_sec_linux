@@ -36,10 +36,9 @@
 #    Old code wrote a full snapshot event every poll (~720/day). Now only
 #    writes when the hash changes.
 #
-# 8. Host key policy is configurable.
-#    AutoAddPolicy accepts any key, so the monitoring channel itself was
-#    MITM-able. Set strict_host_key=True (or linux_monitor.strict_host_key
-#    in config.json) once you have connected at least once.
+# 8. Host keys are pinned on first use.
+#    The first key a host shows is saved to KNOWN_HOSTS and a changed key is
+#    refused after that. strict_host_key=True refuses an unknown host too.
 
 import hashlib
 import json
@@ -60,6 +59,9 @@ except ImportError:
     logger.warning("paramiko not available, Linux monitor disabled")
 
 from core import memory_engine as me
+
+KNOWN_HOSTS = os.path.join(os.path.expanduser("~"), ".config", "agental_sec",
+                           "linux_monitor_known_hosts")
 
 # Fast checks: auth log, active sessions, process list
 POLL_INTERVAL = 120
@@ -564,11 +566,16 @@ class LinuxMonitor:
             except Exception:
                 pass
 
+            # Our own file: AutoAddPolicy saves the first key here, and a
+            # changed key for a saved host raises BadHostKeyException.
+            os.makedirs(os.path.dirname(KNOWN_HOSTS), mode=0o700, exist_ok=True)
+            if not os.path.exists(KNOWN_HOSTS):
+                os.close(os.open(KNOWN_HOSTS, os.O_CREAT | os.O_WRONLY, 0o600))
+            client.load_host_keys(KNOWN_HOSTS)
+
             if self.strict_host_key:
                 client.set_missing_host_key_policy(paramiko.RejectPolicy())
             else:
-                # Trust-on-first-use. Flip strict_host_key to True in
-                # config.json once the host key is in known_hosts.
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
             client.connect(

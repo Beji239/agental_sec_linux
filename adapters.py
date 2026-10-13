@@ -2748,7 +2748,8 @@ class LinuxPacketSniffer(_BaseAdapter):
         now = time.time()
         row_id = hashlib.sha1(
             f"{now:.6f}|{data['src_ip']}|{data.get('src_port')}|{q['txid']}|"
-            f"{q['domain']}|{q['query_type']}".encode()).hexdigest()[:24]
+            f"{q['domain']}|{q['query_type']}".encode(),
+            usedforsecurity=False).hexdigest()[:24]
         with self._lock:
             self._dns_batch.append({
                 "queried_at": dns_monitor._iso(now),

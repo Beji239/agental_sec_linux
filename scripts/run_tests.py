@@ -226,7 +226,18 @@ def _scratch_db() -> pathlib.Path:
     return _SCRATCH
 
 
+def _own_timeout(path: pathlib.Path, timeout: int) -> int:
+    """A slow test may ask for more: '# runner-timeout: 1800' near its top."""
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:2000]
+    except OSError:
+        return timeout
+    m = re.search(r"runner-timeout:\s*(\d+)", head)
+    return max(timeout, int(m.group(1))) if m else timeout
+
+
 def run_one(path: pathlib.Path, timeout: int):
+    timeout = _own_timeout(path, timeout)
     started = time.time()
     try:
         p = subprocess.run(

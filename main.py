@@ -46,9 +46,9 @@ try:
             return stream
 
     # The log is private to its owner.
-    _LOG_DIR.mkdir(mode=0o750, parents=True, exist_ok=True)
+    _LOG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
-        os.chmod(_LOG_DIR, 0o750)
+        os.chmod(_LOG_DIR, 0o700)
     except OSError:
         pass
     _LOG_FILE = _LOG_DIR / "agental_sec_linux.log"

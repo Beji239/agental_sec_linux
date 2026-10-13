@@ -872,7 +872,7 @@ def _md5_of(path):
         return None, (f"the file is {st.st_size} bytes, over the "
                       f"{MAX_VERIFY_BYTES} byte verification cap")
     try:
-        h = hashlib.md5()
+        h = hashlib.md5(usedforsecurity=False)   # dpkg lists MD5 sums
         with open(path, "rb") as fh:
             for chunk in iter(lambda: fh.read(1024 * 1024), b""):
                 h.update(chunk)

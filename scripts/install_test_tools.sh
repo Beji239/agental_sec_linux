@@ -58,6 +58,11 @@ verify() {
             echo "  $name: missing"; missing=1
         fi
     done
+    if ls "$TOOLS_HOME"/semgrep-rules/*.yml >/dev/null 2>&1; then
+        echo "  semgrep rules: $(ls "$TOOLS_HOME"/semgrep-rules/*.yml | wc -l) pack(s)"
+    else
+        echo "  semgrep rules: missing"; missing=1
+    fi
     if command -v shellcheck >/dev/null 2>&1; then
         echo "  shellcheck: $(shellcheck --version | sed -n 's/^version: //p')"
     else
@@ -119,6 +124,17 @@ fi
     "bandit==$BANDIT_VERSION" "semgrep==$SEMGREP_VERSION" "pip-audit==$PIP_AUDIT_VERSION" </dev/null \
     || die "pip could not install Bandit, Semgrep and pip-audit. Its error is above."
 ok "Bandit $BANDIT_VERSION, Semgrep $SEMGREP_VERSION, pip-audit $PIP_AUDIT_VERSION"
+
+# Semgrep's rule packs, saved so the tests run offline.
+mkdir -p "$TOOLS_HOME/semgrep-rules"
+for pack in python security-audit javascript; do
+    curl -fsSL --proto '=https' -o "$TOOLS_HOME/semgrep-rules/$pack.yml.part" \
+        "https://semgrep.dev/c/p/$pack" \
+        && grep -q '^rules:' "$TOOLS_HOME/semgrep-rules/$pack.yml.part" \
+        && mv "$TOOLS_HOME/semgrep-rules/$pack.yml.part" "$TOOLS_HOME/semgrep-rules/$pack.yml" \
+        || die "could not download the Semgrep rule pack $pack."
+done
+ok "Semgrep rule packs: python, security-audit, javascript"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf -- "$WORK"' EXIT

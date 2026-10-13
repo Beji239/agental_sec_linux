@@ -320,7 +320,7 @@ def parse_client_hello(payload: bytes) -> dict:
     out["ok"] = True
     out["reason"] = "parsed"
     out["ja3"] = ja3
-    out["ja3_md5"] = hashlib.md5(ja3.encode()).hexdigest()
+    out["ja3_md5"] = hashlib.md5(ja3.encode(), usedforsecurity=False).hexdigest()
     out["cipher_count"] = len(ciphers)
     out["ext_count"] = len(exts)
     # THREE ANSWERS. alpn_seen False -> [] (no ALPN extension, a real

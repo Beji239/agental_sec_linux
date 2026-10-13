@@ -109,11 +109,11 @@ _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b[@-Z\\-_]")
 # "cod.exe" on disk.
 _BIDI_ZWSP = re.compile(
     "["
-    "​-‏"   # zero-width space/joiners, LRM, RLM
-    "‪-‮"   # LRE, RLE, PDF, LRO, RLO  , the Trojan Source set
-    "⁠-⁤"   # word joiner, invisible operators
-    "⁦-⁩"   # LRI, RLI, FSI, PDI
-    "﻿"          # zero-width no-break space / BOM
+    "\u200b-\u200f"   # zero-width space/joiners, LRM, RLM
+    "\u202a-\u202e"   # LRE, RLE, PDF, LRO, RLO  , the Trojan Source set
+    "\u2060-\u2064"   # word joiner, invisible operators
+    "\u2066-\u2069"   # LRI, RLI, FSI, PDI
+    "\ufeff"          # zero-width no-break space / BOM
     "]"
 )
 

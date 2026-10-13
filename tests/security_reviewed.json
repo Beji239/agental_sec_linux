@@ -1,0 +1,2375 @@
+[
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "adapters.py",
+  "text": "if candidate and candidate != \"0.0.0.0\":",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "adapters.py",
+  "text": "if candidate and candidate != \"0.0.0.0\":",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "adapters.py",
+  "text": "if mtype in (2, 5) and server and server != \"0.0.0.0\":",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "adapters.py",
+  "text": "if src and src != \"0.0.0.0\":",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "adapters.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "adapters.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "adapters.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "adapters.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "adapters.py",
+  "text": "proc = subprocess.Popen(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "adapters.py",
+  "text": "proc = subprocess.Popen(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "adapters.py",
+  "text": "f\"SELECT name, LENGTH(value_json) AS n \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "api/server.py",
+  "text": "if bind and bind not in {\"0.0.0.0\", \"::\", \"\"}:",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "api/server.py",
+  "text": "if bind in {\"0.0.0.0\", \"::\"} and not (flask_cfg.get(\"allowed_hosts\") or []):",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/actions.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/actions.py",
+  "text": "proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/agent_loop.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B112",
+  "path": "core/capabilities.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/contacts.py",
+  "text": "except Exception: # pragma: no cover",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "\"SELECT id, day, window_start, window_end, created_at, status, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "f\"SELECT 1 FROM {table} WHERE {col} >= ? AND {col} < ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "f\"SELECT id, detection_id, severity, entity_value, title, found_at, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "f\"SELECT id, incident_id, verb, target, state, decided_at, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "f\"SELECT incident_id, verdict, hypothesis, body FROM duty_report \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "f\"UPDATE daily_report SET dismissed = ?, dismissed_at = ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "row = conn.execute(f\"SELECT MAX({col}) FROM {table} WHERE {col} < ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/daily_report.py",
+  "text": "row = conn.execute(f\"SELECT MIN(ran_at) FROM {table} WHERE ran_at >= ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "core/duty.py",
+  "text": "wildcard = row.get(\"local_address\") in (\"0.0.0.0\", \"::\")",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/duty.py",
+  "text": "flows = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/duty.py",
+  "text": "outbound = {r[\"peer\"]: r[\"n\"] for r in conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/enrichment.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/expectations.py",
+  "text": "\"SELECT detection_id, entity_value, title, found_at FROM findings \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/expectations.py",
+  "text": "\"SELECT device_ip, device_mac, dst, dport, MAX(last_seen) AS last \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B112",
+  "path": "core/home_location.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/incident.py",
+  "text": "f\"SELECT {_WATERMARK_COLUMN} FROM watcher_run \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/integrity.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/integrity.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/integrity.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/integrity.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/integrity.py",
+  "text": "f\"SELECT * FROM {table_name} WHERE {spec['key']} = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/integrity.py",
+  "text": "f\"SELECT * FROM {table} WHERE {spec['key']} = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/integrity.py",
+  "text": "f\"SELECT COUNT(*) AS n, MIN(id) AS oldest FROM {table}\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/integrity.py",
+  "text": "f\"SELECT COUNT(*) FROM {table} WHERE CAST({spec['key']} AS \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/integrity.py",
+  "text": "f\"SELECT key, value FROM {CONFIG_TABLE} ORDER BY key\").fetchall()",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/intervals.py",
+  "text": "f\"SELECT captured_at, session_id FROM packets \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/intervals.py",
+  "text": "f\"SELECT dst_ip, COUNT(*) n FROM packets WHERE {where} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "closed = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "conn.execute(f\"UPDATE behavioral_deviation SET {', '.join(sets)} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "conn.execute(f\"UPDATE known_devices SET {', '.join(sets)} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "conn.execute(f\"UPDATE known_devices SET {assign} WHERE id = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "conn.execute(f\"UPDATE known_devices SET {assign} WHERE id = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "count_sql = (f\"SELECT COUNT(*) AS n FROM behavioral_session {base_where}\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "cur = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"\"\"SELECT evidence_untrusted, evidence_sources, written_by,",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"\"\"UPDATE findings",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT * FROM behavioral_session \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT * FROM dns_answer {where} ORDER BY last_seen DESC \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT * FROM tls_hello {where} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT 1 FROM {name} WHERE router_host = ? LIMIT 1\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(*) FROM packets {where_everywhere}\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(*) FROM packets {where_in_scope}\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(*) FROM presence_sweep \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(*) FROM tls_hello {where}\", params).fetchone()[0]",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(*) FROM {table} {where}\", filter_params).fetchone()[0]",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(*) FROM {table} {where}\", filter_params).fetchone()[0]",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT COUNT(DISTINCT session_id) FROM behavioral_session \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"UPDATE behavioral_baseline SET {', '.join(sets)} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"UPDATE behavioral_baseline SET {', '.join(updates)} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "failed_row = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "observations = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "reopened = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "return _rows_to_dicts(conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "row = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "row = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "rows = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "rows = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "rows = conn.execute(f\"SELECT * FROM runbook {where} {order} LIMIT ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "seen = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = (f\"SELECT * FROM behavioral_deviation {where} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = (f\"SELECT * FROM dns_queries {where} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = (f\"SELECT entity_value, severity, title, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = (f\"SELECT entity_value, severity, title, detection_id, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = (f\"SELECT setting, value, previous_value, detail, present, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"SELECT * FROM behavioral_baseline {where} ORDER BY entity_type, entity_value\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"SELECT * FROM behavioral_deviation {where} ORDER BY detected_at DESC LIMIT ?\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"SELECT * FROM behavioral_session {where} ORDER BY observed_at DESC LIMIT ?\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"SELECT * FROM events {where} ORDER BY occurred_at {order_clause} LIMIT ?\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"SELECT * FROM findings {where} ORDER BY found_at {order_clause} LIMIT ?\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sql = f\"SELECT * FROM port_scan_results {where} ORDER BY risk_level, port LIMIT ?\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "summary_sql = f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "sweeps = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "total = conn.execute(f\"SELECT COUNT(*) FROM dns_answer {where}\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/migrations.py",
+  "text": "f\"UPDATE {table} SET sensor_id = ? WHERE sensor_id IS NULL\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/perf.py",
+  "text": "for row in conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/place_map.py",
+  "text": "f\"SELECT value, name FROM dns_answer WHERE value IN \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/place_map.py",
+  "text": "sql = (f\"SELECT src_ip, dst_ip, process_name, COUNT(*) AS packets, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/predictions.py",
+  "text": "answered = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/predictions.py",
+  "text": "count = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/privilege_linux.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/privilege_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/privilege_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "core/privilege_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
+  "text": "conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
+  "text": "cur = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
+  "text": "f\"SELECT entity_value, entity_type, behavior_key, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/retention.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "f\"DELETE FROM {table} WHERE id IN (\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "f\"SELECT (SELECT MIN({time_col}) FROM {table}), \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "f\"SELECT session_id, COUNT(*) AS n, MIN({time_col}) AS first_at, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "f\"WITH RECURSIVE s(x) AS (SELECT MIN(session_id) FROM {table} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "if conn.execute(f\"SELECT EXISTS(SELECT 1 FROM {table} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "sql = (f\"SELECT COUNT(*) FROM {table} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/retention.py",
+  "text": "sql = f\"DELETE FROM {table} WHERE {col} < datetime('now', ?)\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/secret_crypto.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/settings.py",
+  "text": "except Exception: # pragma: no cover",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "core/settings.py",
+  "text": "except Exception: # pragma: no cover",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/timeline.py",
+  "text": "\"event\": (\"SELECT * FROM events WHERE occurred_at >= ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/timeline.py",
+  "text": "\"finding\": (\"SELECT * FROM findings WHERE found_at >= ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/timeline.py",
+  "text": "\"packet\": (f\"SELECT {_PACKET_COLUMNS} FROM packets \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/timeline.py",
+  "text": "f\"SELECT COUNT(*) FROM {table} {where}\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "ebpf/ebpf_monitor.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "ebpf/ebpf_monitor.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "ebpf/ebpf_monitor.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "ebpf/ebpf_monitor.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "main.py",
+  "text": "\"max_hosts_per_pass\": 25,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "main.py",
+  "text": "socks = sorted(p.name for p in Path(\"/tmp/.X11-unix\").glob(\"X*\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "main.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "main.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "main.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "main.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "main.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "main.py",
+  "text": "proc = subprocess.Popen(argv, env=env, close_fds=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "main.py",
+  "text": "res = subprocess.run([\"ss\", \"-H\", \"-ltnp\", f\"sport = :{port}\"],",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "main.py",
+  "text": "res = subprocess.run([\"ss\", \"-H\", \"-ltnp\", f\"sport = :{port}\"],",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/action_broker.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/action_broker.py",
+  "text": "proc = subprocess.Popen(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/action_helper.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/action_helper.py",
+  "text": "res = subprocess.run([\"nft\", \"-f\", \"-\"], input=NFT_SKELETON, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/action_helper.py",
+  "text": "res = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/action_helper.py",
+  "text": "res = subprocess.run([\"nft\", \"-f\", \"-\"], input=NFT_SKELETON, text=True,",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/auditd_monitor.py",
+  "text": "f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/auditd_monitor.py",
+  "text": "f\"SELECT last_offset, {inode_col}, last_record_at, seeded_at, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/autorun_monitor.py",
+  "text": "(\"/dev/shm/\", \"phrase\", \"runs from memory, which survives no forensics\"),",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/autorun_monitor.py",
+  "text": "(\"/tmp/\", \"phrase\", \"runs from a world-writable directory\"),",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/autorun_monitor.py",
+  "text": "(\"/var/tmp/\", \"phrase\", \"runs from a world-writable directory\"),",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/autorun_monitor.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/autorun_monitor.py",
+  "text": "r = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/autorun_monitor.py",
+  "text": "r = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/autorun_monitor.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/autorun_monitor.py",
+  "text": "result = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/autorun_monitor.py",
+  "text": "conn.execute(f\"DELETE FROM {BASELINE_TABLE} WHERE entry_key NOT IN \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/autorun_monitor.py",
+  "text": "f\"INSERT INTO {BASELINE_TABLE}(entry_key, kind, name, path, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/autorun_monitor.py",
+  "text": "f\"SELECT entry_key, kind, name, path, fingerprint, detail, \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/av_scanner.py",
+  "text": "DEFAULTS = {\"enabled\": True, \"max_file_mb\": 100, \"max_files_per_pass\": 200,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/av_scanner.py",
+  "text": "WATCH_DIRS = (\"/tmp\", \"/var/tmp\", \"/dev/shm\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/av_scanner.py",
+  "text": "WATCH_DIRS = (\"/tmp\", \"/var/tmp\", \"/dev/shm\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/av_scanner.py",
+  "text": "WATCH_DIRS = (\"/tmp\", \"/var/tmp\", \"/dev/shm\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/av_scanner.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/av_scanner.py",
+  "text": "proc = subprocess.run(_command(eng, paths), capture_output=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/background_actions_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/background_actions_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/background_actions_linux.py",
+  "text": "p = subprocess.run([\"systemctl\", \"show\", \"-p\", \"IPAddressAllow,IPAddressDeny\",",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/background_actions_linux.py",
+  "text": "p = subprocess.run([\"systemctl\", *args], capture_output=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/background_actions_linux.py",
+  "text": "p = subprocess.run([\"systemctl\", \"show\", \"-p\", \"IPAddressAllow,IPAddressDeny\",",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/background_actions_linux.py",
+  "text": "p = subprocess.run([\"systemctl\", *args], capture_output=True,",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/background_actions_linux.py",
+  "text": "conn.execute(f\"UPDATE background_change SET {cols} WHERE id=?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B112",
+  "path": "tools/background_apps_linux.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/background_apps_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/background_apps_linux.py",
+  "text": "p = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/dns_monitor.py",
+  "text": "if kind == \"config\" and value.strip() in (\"NXDOMAIN\", \"0.0.0.0\", \"::\"):",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_monitor.py",
+  "text": "f\"INSERT INTO {_CURSOR_TABLE} (name, value, identity) \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_monitor.py",
+  "text": "f\"SELECT value, identity FROM {_CURSOR_TABLE} WHERE name = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_monitor.py",
+  "text": "sql = (f\"SELECT {', '.join(wanted)}, {key} AS _rid FROM queries \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/ebpf_events.py",
+  "text": "_IGNORED_DESTINATIONS = (\"127.\", \"0.0.0.0\", \"::1\", \"fe80:\", \"224.0.0.\", \"255.255.255.255\")",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/tmp/\", \"/var/tmp/\", \"/dev/shm/\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/tmp/\", \"/var/tmp/\", \"/dev/shm/\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/tmp/\", \"/var/tmp/\", \"/dev/shm/\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/tmp/systemd-private-\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/tmp/timeshift-\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/var/tmp/.\", \"/tmp/.\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/var/tmp/.\", \"/tmp/.\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/ebpf_events.py",
+  "text": "\"/var/tmp/systemd-private-\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/ebpf_events.py",
+  "text": "f\"INSERT INTO {CURSOR_TABLE} ({', '.join(cols)}) \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/ebpf_events.py",
+  "text": "f\"SELECT {', '.join(cols)} FROM ebpf_event \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/ebpf_events.py",
+  "text": "f\"SELECT {', '.join(wanted)} FROM ebpf_health \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/ebpf_events.py",
+  "text": "f\"SELECT {select} FROM {CURSOR_TABLE} WHERE name = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/event_monitor_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/event_monitor_linux.py",
+  "text": "return subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/event_monitor_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/feed_matcher.py",
+  "text": "_NEVER_MATCH_IPS = frozenset([\"0.0.0.0\", \"127.0.0.1\", \"255.255.255.255\", \"::1\"])",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/feed_matcher.py",
+  "text": "f\"INSERT INTO {_CURSOR_TABLE} (name, value) VALUES (?, ?) \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/feed_matcher.py",
+  "text": "f\"SELECT value FROM {_CURSOR_TABLE} WHERE name = ?\", (key,)",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/gateway.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B601",
+  "path": "tools/gateway.py",
+  "text": "_, stdout, _ = session.client.exec_command(command,",
+  "reason": "a fixed agent verb or a checked path over SSH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/host_info_linux.py",
+  "text": "if s.startswith(\"127.\") or s in (\"::1\", \"0.0.0.0\")]",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/host_info_linux.py",
+  "text": "\"ssh_password_auth\": None,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/host_info_linux.py",
+  "text": "\"sudo_without_password\": None,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/host_info_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/host_info_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/iptables_manager.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/iptables_manager.py",
+  "text": "proc = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/lan_watch.py",
+  "text": "if not ip or ip == \"0.0.0.0\":",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/lan_watch.py",
+  "text": "if not mac or not ip or ip == \"0.0.0.0\":",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/lan_watch.py",
+  "text": "f\"INSERT INTO {BASELINE_TABLE}(name, value_json) VALUES(?, ?) \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/lan_watch.py",
+  "text": "f\"SELECT value_json FROM {BASELINE_TABLE} WHERE name = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/linux_monitor.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/linux_monitor.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/linux_monitor.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B507",
+  "path": "tools/linux_monitor.py",
+  "text": "client.set_missing_host_key_policy(paramiko.AutoAddPolicy())",
+  "reason": "the first key is pinned in KNOWN_HOSTS and a changed key refused; tests/test_linux_monitor_host_keys.py"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B601",
+  "path": "tools/linux_monitor.py",
+  "text": "_, stdout, _ = client.exec_command(cmd, timeout=30)",
+  "reason": "a fixed agent verb or a checked path over SSH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/local_integrity.py",
+  "text": "\"gid\": rec.get(\"gid\"), \"on_seed_pass\": True,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/local_integrity.py",
+  "text": "\"on_seed_pass\": True,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/local_integrity.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/local_integrity.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run([\"sudo\", \"-n\", HELPER_PATH, \"--verbs\"],",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run([\"sudo\", \"-n\", HELPER_PATH, verb],",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run([tool, \"--enabled\"], capture_output=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run([\"sudo\", \"-n\", HELPER_PATH, \"--verbs\"],",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/local_integrity.py",
+  "text": "res = subprocess.run([\"sudo\", \"-n\", HELPER_PATH, verb],",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/local_integrity.py",
+  "text": "f\"INSERT INTO {BASELINE_TABLE}(name, value_json) \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/local_integrity.py",
+  "text": "f\"SELECT name, LENGTH(value_json) AS n \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/local_integrity.py",
+  "text": "f\"SELECT value_json FROM {BASELINE_TABLE} WHERE name = ?\",",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/local_integrity.py",
+  "text": "f\"SELECT value_json, recorded_at FROM {BASELINE_TABLE} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/network_scanner.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/network_scanner.py",
+  "text": "result = subprocess.run([\"arp\", \"-a\"], capture_output=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/network_scanner.py",
+  "text": "result = subprocess.run([\"ip\", \"neigh\"], capture_output=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/network_scanner.py",
+  "text": "result = subprocess.run(cmd, capture_output=True, timeout=5)",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/network_scanner.py",
+  "text": "result = subprocess.run([\"arp\", \"-a\"], capture_output=True,",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/network_scanner.py",
+  "text": "result = subprocess.run([\"ip\", \"neigh\"], capture_output=True,",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/packet_sniffer_linux.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/place_watch.py",
+  "text": "\"max_alerts_per_pass\": 20, \"batch_rows\": 200000,",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/place_watch.py",
+  "text": "first = (conn.execute(f\"SELECT MAX(id) FROM {table}\").fetchone()[0]",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/place_watch.py",
+  "text": "first = conn.execute(f\"SELECT MIN(id) FROM {table} WHERE \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/port_owner.py",
+  "text": "return address in (\"0.0.0.0\", \"::\")",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/port_owner.py",
+  "text": "conn.execute(f\"SELECT 1 FROM {name} LIMIT 1\")",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/port_owner.py",
+  "text": "f\"SELECT * FROM port_owner_socket WHERE {' AND '.join(where)} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/port_scanner.py",
+  "text": "addrs = {\"127.0.0.1\", \"::1\", \"localhost\", \"0.0.0.0\"}",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/port_scanner.py",
+  "text": "if b in (\"0.0.0.0\", \"*\"):",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/port_scanner.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/port_scanner.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/port_scanner.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B112",
+  "path": "tools/port_scanner.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/probe.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor.py",
+  "text": "(\"/dev/shm/\", \"shared memory (it lives in RAM and does not survive a \"",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor.py",
+  "text": "(\"/tmp/\", \"a temp folder\"),",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor.py",
+  "text": "(\"/var/tmp/\", \"the /var/tmp folder (a temp folder whose contents \"",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/process_monitor.py",
+  "text": "import subprocess as _sp",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/process_monitor.py",
+  "text": "run = _sp.run([binary, \"-S\", \"--\"] + chunk,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/process_monitor.py",
+  "text": "run = _sp.run([binary, \"-qf\", \"--qf\", \"%{NAME} %{FILENAMES}\\n\"]",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"find\": [{\"token\": \"-exec\"}, {\"path\": \"| bash\"}, {\"path\": \"| sh\"}],",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"nmap\": [{\"token\": \"--script\"}, {\"token\": \"-sV\"}, {\"token\": \"-sC\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"nmap\": [{\"token\": \"--script\"}, {\"token\": \"-sV\"}, {\"token\": \"-sC\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"nmap\": [{\"token\": \"--script\"}, {\"token\": \"-sV\"}, {\"token\": \"-sC\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"ssh\": [{\"token\": \"-R\"}, {\"token\": \"-D\"}, {\"token\": \"-L\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"ssh\": [{\"token\": \"-R\"}, {\"token\": \"-D\"}, {\"token\": \"-L\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"ssh\": [{\"token\": \"-R\"}, {\"token\": \"-D\"}, {\"token\": \"-L\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"-O\"}, {\"token\": \"-A\"}],",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"-O\"}, {\"token\": \"-A\"}],",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"-c\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"-c\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"-e\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"-i\", \"where\": \"own\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"0<&196-\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"base64 -d\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"curl\"}, # a downloader being driven BY bash",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"nc\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"ncat\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"netcat\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"openssl enc\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "tools/process_monitor_linux.py",
+  "text": "{\"token\": \"wget\"},",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"/var/tmp/\", \"/tmp/\", \"/dev/shm/\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"/var/tmp/\", \"/tmp/\", \"/dev/shm/\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"/var/tmp/\", \"/tmp/\", \"/dev/shm/\",",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"scp\": [{\"path\": \"/tmp/\"}, {\"path\": \"/var/tmp/\"}, {\"path\": \".cache/\"}],",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/process_monitor_linux.py",
+  "text": "\"scp\": [{\"path\": \"/tmp/\"}, {\"path\": \"/var/tmp/\"}, {\"path\": \".cache/\"}],",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/process_monitor_linux.py",
+  "text": "except Exception: # noqa: BLE001",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B305",
+  "path": "tools/quic_initial.py",
+  "text": "enc = Cipher(algorithms.AES(hp), modes.ECB()).encryptor()",
+  "reason": "AES-ECB as RFC 9001 header protection requires"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/read_helper.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/read_helper.py",
+  "text": "res = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/read_helper.py",
+  "text": "res = subprocess.run([\"dpkg\", \"-V\"] + loadable,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/read_helper.py",
+  "text": "res = subprocess.run(",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/remediation_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/runbook.py",
+  "text": "f\"INSERT INTO runbook ({', '.join(feed_cols)}) \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/socket_census.py",
+  "text": "daddr = None if addr in (\"0.0.0.0\", \"::\", \"*\") else addr.replace(\"::ffff:\", \"\")",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "tools/socket_census.py",
+  "text": "if addr in (\"0.0.0.0\",) or (\".\" in addr and \":\" not in addr):",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/socket_census.py",
+  "text": "STAGING_PREFIXES = (\"/tmp/\", \"/var/tmp/\", \"/dev/shm/\", \"/run/user/\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/socket_census.py",
+  "text": "STAGING_PREFIXES = (\"/tmp/\", \"/var/tmp/\", \"/dev/shm/\", \"/run/user/\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B108",
+  "path": "tools/socket_census.py",
+  "text": "STAGING_PREFIXES = (\"/tmp/\", \"/var/tmp/\", \"/dev/shm/\", \"/run/user/\")",
+  "reason": "a temp folder named as a place to watch, not a file written there"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/socket_census.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/socket_census.py",
+  "text": "r = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/software_inventory.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/software_inventory.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/software_inventory.py",
+  "text": "r = subprocess.run([\"system_profiler\", \"SPApplicationsDataType\", \"-json\"],",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/software_inventory.py",
+  "text": "r = subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "tools/software_inventory.py",
+  "text": "r = subprocess.run([\"system_profiler\", \"SPApplicationsDataType\", \"-json\"],",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B112",
+  "path": "tools/software_inventory_linux.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/software_inventory_linux.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/software_inventory_linux.py",
+  "text": "result = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "tools/systemd_units.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "frag = subprocess.run(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "proc = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "proc = subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "proc = subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "proc = subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "proc = subprocess.run(cmd, capture_output=True, text=True,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/systemd_units.py",
+  "text": "proc = subprocess.run(prefix + [\"show\", \"--no-pager\", \"-p\",",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B110",
+  "path": "tools/tls_hello.py",
+  "text": "except Exception:",
+  "reason": "an error ignored on purpose"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "insecure-hash-algorithm-sha1",
+  "path": "adapters.py",
+  "text": "row_id = hashlib.sha1(",
+  "reason": "a row id, marked usedforsecurity=False"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "python-logger-credential-disclosure",
+  "path": "core/agent_loop.py",
+  "text": "logger.info(\"Provider API key %s from the settings panel.\",",
+  "reason": "the message names the key, it never contains it"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "request-with-http",
+  "path": "core/ip_lookup.py",
+  "text": "resp = requests.get(f\"{API_URL}{ip}\", params={\"fields\": FIELDS},",
+  "reason": "ip-api's free tier is HTTP only; its answers are fenced as outside text (open item in the notes)"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "insecure-file-permissions",
+  "path": "main.py",
+  "text": "os.chmod(_LOG_DIR, 0o700)",
+  "reason": "sets 0o700, owner only"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "python-logger-credential-disclosure",
+  "path": "main.py",
+  "text": "logger.error(",
+  "reason": "the message names the key, it never contains it"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "insecure-file-permissions",
+  "path": "tools/action_helper.py",
+  "text": "os.chmod(QUARANTINE_DIR, 0o700)",
+  "reason": "sets 0o700, owner only"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "insecure-file-permissions",
+  "path": "tools/remediation_linux.py",
+  "text": "os.chmod(STAGING_ROOT, 0o700)",
+  "reason": "sets 0o700, owner only"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2024",
+  "path": "scripts/install.sh",
+  "text": "</dev/null >>\"$APT_LOG\" 2>&1",
+  "reason": "the apt log is the user's own temp file, so writing it as the user is intended"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2024",
+  "path": "scripts/install.sh",
+  "text": "sudo apt-get update -q </dev/null >>\"$APT_LOG\" 2>&1 \\",
+  "reason": "the apt log is the user's own temp file, so writing it as the user is intended"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2087",
+  "path": "scripts/install_gateway_agent.sh",
+  "text": "ssh \"${PINNED[@]}\" \"$USER_NAME@$HOST\" 'sh -s' <<EOF",
+  "reason": "every variable meant for the router is escaped, so nothing local reaches the remote shell"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2155",
+  "path": "scripts/install_gateway_agent.sh",
+  "text": "local pub=\"$1\" body=\"$(printf '%s' \"$1\" | cut -d' ' -f2)\" delim=\"AGENTALSEC_GW_$(date +%s)_$$\"",
+  "reason": "local with a command substitution; its exit status is not used"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2155",
+  "path": "scripts/install_gateway_agent.sh",
+  "text": "local pub=\"$1\" body=\"$(printf '%s' \"$1\" | cut -d' ' -f2)\" delim=\"AGENTALSEC_GW_$(date +%s)_$$\"",
+  "reason": "local with a command substitution; its exit status is not used"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2034",
+  "path": "scripts/verify_feeds.sh",
+  "text": "OWNER_HOME=\"$(getent passwd \"$OWNER\" | cut -d: -f6)\"",
+  "reason": "an unused variable in a check script"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2034",
+  "path": "scripts/verify_feeds.sh",
+  "text": "SECTION_C_OK=0",
+  "reason": "an unused variable in a check script"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2034",
+  "path": "scripts/verify_final_boot.sh",
+  "text": "LOG_LINES_BEFORE=0",
+  "reason": "an unused variable in a check script"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2155",
+  "path": "scripts/verify_launchers_live.sh",
+  "text": "export AGENTAL_STUB_USER=\"$(id -un)\"",
+  "reason": "export with a command substitution; its exit status is not used"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2046",
+  "path": "tools/gateway_agent.sh",
+  "text": "err=$(nft add rule inet $NFT_TABLE portal ether saddr @msgmac meta nfproto ipv4 tcp dport 80 $(portal_action \"$a\") comment '\"msg\"' 2>&1) \\",
+  "reason": "portal_action returns several nft words on purpose, built from the router's own address"
+ },
+ {
+  "tool": "shellcheck",
+  "rule": "SC2046",
+  "path": "tools/gateway_agent.sh",
+  "text": "err=$(nft add rule inet $NFT_TABLE portal iifname \"$dev\" ether saddr != @msgdone meta nfproto ipv4 ip daddr != @portalip tcp dport 80 $(portal_action \"$a\") comment '\"msgall\"' 2>&1) \\",
+  "reason": "portal_action returns several nft words on purpose, built from the router's own address"
+ }
+]

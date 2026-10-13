@@ -263,6 +263,10 @@ are checked against their published checksums. It is safe to run again.
 arrives, but only if they were installed before. `--verify` shows what is
 installed, and `--remove` deletes the folder.
 
+When a scan test fails on something new, fix it, or check it and run
+`python3 scripts/security_review.py`, then write why it is fine next to it in
+`tests/security_reviewed.json`. An entry without a reason fails the suite.
+
 ## Updating
 
 ```bash
