@@ -248,7 +248,7 @@ The mood at the top follows from them:
 
 - **Calm:** everything held and the router was watched.
 - **Curious:** something new, nothing broken.
-- **Uneasy:** the app could not see enough to say, for example the router did
+- **Uncertain:** the app could not see enough to say, for example the router did
   not answer or its agent is too old to confirm a block.
 - **Alarmed:** an expectation broke. It stays that way until you press
   "I have seen this" on the card.

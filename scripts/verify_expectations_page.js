@@ -132,7 +132,7 @@ page.renderExpectations({
   router: { ok: false, reasons: ['Could not read the router'] },
   devices: [], watch_24h: [], expectations: [],
 });
-ok(els['exp-mood-word'].textContent === 'Uneasy', 'the mood word is Uneasy');
+ok(els['exp-mood-word'].textContent === 'Uncertain', 'the mood word is Uncertain');
 ok(els['exp-router-note'].textContent.includes('cannot back'), 'the router note says why');
 ok(els['exp-ring-wrap'].innerHTML.includes('no device list'), 'an empty ring says there is no list');
 ok(els['exp-tickets'].innerHTML.includes('No expectation has been set'), 'no cards says so');

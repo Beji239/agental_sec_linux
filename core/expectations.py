@@ -6,7 +6,7 @@
 # says "could not check" rather than "held".
 #
 # States: holding, new (something new, nothing broken), broken, unknown.
-# The network mood follows from them: Calm, Curious, Uneasy, Alarmed.
+# The network mood follows from them: Calm, Curious, Uncertain, Alarmed.
 
 import ipaddress
 import json
