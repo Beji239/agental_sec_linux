@@ -219,7 +219,22 @@ check("and names what went wrong", "no such table" in (raised or ""), True)
 #     operator's evidence store.
 
 LIVE_DB = ROOT / "agental_sec.db"
-have_live = LIVE_DB.exists()
+
+
+def _has_findings(path) -> bool:
+    """An empty file left by a first start is not a live database."""
+    try:
+        c = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return c.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                             "AND name='findings'").fetchone() is not None
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return False
+
+
+have_live = LIVE_DB.exists() and _has_findings(LIVE_DB)
 
 if not have_live:
     print("\n[4] SKIPPED, no agental_sec.db beside main.py. The live sections")

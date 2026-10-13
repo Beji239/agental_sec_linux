@@ -912,6 +912,11 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
         logger.info(f"Place learning: {place_watch.start(config, session_id)}")
     except Exception as e:
         logger.error(f"Place learning did not start: {e}")
+    try:
+        from core import expectations
+        logger.info(f"Expectations: {expectations.start(config)}")
+    except Exception as e:
+        logger.error(f"Expectations did not start: {e}")
 
     modules["runbook"] = try_load("runbook", lambda: (
         _cls("tools.runbook").Runbook(session_id)
@@ -2366,6 +2371,7 @@ def main(argv=None):
 
         def _extra_sensors():
             from tools import lan_live, place_watch, router_monitor
+            from core import expectations
             from core.sensor_watch import LoopTracker
             from tools import dns_monitor as _dm
             dns = _dns_tracker or LoopTracker(
@@ -2378,6 +2384,7 @@ def main(argv=None):
                      "router traffic to read"))
             return {"lan_live": lan,
                     "place_watch": place_watch.get(),
+                    "expectations": expectations.get(),
                     "dns_monitor": dns,
                     "router_monitor": router_monitor.tracker(config),
                     "port_owner": _port_owner_tracker or LoopTracker(
@@ -2416,6 +2423,12 @@ def main(argv=None):
                 place_watch.get().stop()
         except Exception as e:
             logger.warning(f"Place learning did not stop cleanly: {e}")
+        try:
+            from core import expectations
+            if expectations.get() is not None:
+                expectations.get().stop()
+        except Exception as e:
+            logger.warning(f"Expectations did not stop cleanly: {e}")
         threads = []
         for name in _WRITER_MODULES:
             mod = modules.get(name)

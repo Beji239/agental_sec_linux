@@ -1224,6 +1224,42 @@ def set_status(incident_id: int, status: str, by: str = "user",
             "from": row["status"], "to": status, "by": by}
 
 
+def set_verdict(incident_id: int, verdict: str, by: str = "owner",
+                note: str = None) -> dict:
+    """The owner's verdict on an incident: false alarm, real or not sure.
+    by is 'owner' from the page, 'model' only on the owner's word in chat."""
+    if verdict not in ("false_alarm", "real", "not_sure"):
+        return {"success": False,
+                "error": "verdict must be false_alarm, real or not_sure."}
+    if by not in ("owner", "model"):
+        return {"success": False, "error": "by must be owner or model."}
+    if by == "model" and not (note or "").strip():
+        return {"success": False,
+                "error": "Quote the owner's words; the model only records "
+                         "a verdict the owner gave."}
+    with me._get_conn() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(incident)")}
+        if "verdict" not in cols:
+            return {"success": False,
+                    "error": "verdicts arrive with the next start of the app"}
+        row = conn.execute("SELECT id, verdict FROM incident WHERE id = ?",
+                           (int(incident_id),)).fetchone()
+        if row is None:
+            return {"success": False, "error": f"no incident {incident_id}"}
+        conn.execute(
+            "UPDATE incident SET verdict = ?, verdict_by = ?, verdict_at = ?, "
+            "verdict_note = ? WHERE id = ?",
+            (verdict, by, _sql_ts(_now()), (note or "")[:500] or None,
+             int(incident_id)))
+    try:
+        me._journal("incident_verdict", "incident", int(incident_id),
+                    {"from": row["verdict"], "to": verdict, "by": by})
+    except Exception as e:                                  # noqa: BLE001
+        logger.error(f"Could not journal the verdict on {incident_id}: {e}")
+    return {"success": True, "incident_id": int(incident_id),
+            "verdict": verdict, "by": by}
+
+
 def summary() -> dict:
     """
     Counts for the dashboard and for the model, never summed into one number.

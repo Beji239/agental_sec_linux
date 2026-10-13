@@ -148,7 +148,7 @@ logger = logging.getLogger(__name__)
 # daily_tally, per-day counters a sensor keeps only in memory (ClamAV passes).
 # v64: daily_report.dismissed and dismissed_at, the tick box on the Agents tab.
 # v65: duty_run.dismissed_at and dismissed_by, tick boxes on the wake-up list.
-SCHEMA_VERSION = 65
+SCHEMA_VERSION = 66
 
 
 # HELPERS
@@ -4281,6 +4281,12 @@ def _migrate_run_dismissal(conn) -> int:
     return added
 
 
+def _migrate_expectations(conn) -> int:
+    """v66: the expectations the app sets and checks itself. Idempotent."""
+    from core import expectations
+    return expectations.ensure_tables(conn)
+
+
 def _migrate_merge_carried(conn) -> int:
     """v59: known_devices.merge_carried, the flags and labels a merge moved."""
     if "merge_carried" in _columns(conn, "known_devices"):
@@ -4402,6 +4408,7 @@ def run_migrations(db_path: Path = None) -> dict:
         daily_report_added     = _migrate_daily_report(conn)
         daily_dismissal_added  = _migrate_daily_report_dismissal(conn)
         run_dismissal_added    = _migrate_run_dismissal(conn)
+        expectations_added     = _migrate_expectations(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4422,6 +4429,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "daily_report_added":  daily_report_added,
             "daily_dismissal_added": daily_dismissal_added,
             "run_dismissal_added": run_dismissal_added,
+            "expectations_added":  expectations_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,

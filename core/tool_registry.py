@@ -2583,6 +2583,27 @@ TOOL_MANIFEST = [
     },
 
     {
+        "name": "record_incident_verdict",
+        "description": (
+            "Record the owner's verdict on one incident: false_alarm, real "
+            "or not_sure. ONLY when the owner said so in this chat; never "
+            "your own judgement. Quote the owner's words in owner_words. "
+            "The verdict feeds the false alarms per day on the Expectations "
+            "page and shows as 'model, on your word'."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "incident_id": {"type": "integer"},
+                "verdict": {"type": "string",
+                            "enum": ["false_alarm", "real", "not_sure"]},
+                "owner_words": {"type": "string",
+                                "description": "what the owner said"},
+            },
+            "required": ["incident_id", "verdict", "owner_words"]
+        }
+    },
+
+    {
         "name": "ask_operator",
         "description": (
             "Ask the owner something you cannot work out yourself.\n\n"
@@ -7132,6 +7153,11 @@ def _dispatch(name: str, params: dict):
             "closed between two reads. comm is the name the process chose for "
             "itself; exe is the kernel's answer.")
         return out
+
+    if name == "record_incident_verdict":
+        from core import incident
+        return incident.set_verdict(params["incident_id"], params["verdict"],
+                                    by="model", note=params.get("owner_words"))
 
     if name == "ask_operator":
         from core import questions

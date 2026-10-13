@@ -214,11 +214,83 @@ history, or not measured because nothing was watching that hour. Performance
 signals this tool does not collect are listed by name rather than shown as
 zero.
 
-## Predictions
+## Expectations
 
-The analyst's own record. It makes guesses with deadlines and the app grades
-them afterwards: right, wrong, or could not check when the app was closed for
-most of the window. The hit rate counts only right and wrong.
+<p align="center">
+  <img src="../assets/screenshots/expectations.png" alt="Expectations" width="800">
+</p>
+
+*The network mood with every device around the router, the 24 hour watch
+clock, and a card for each expectation. Sample data.*
+
+What the app expects of your network, and whether it held. The app sets these
+itself and checks them every five minutes against the router's records. No AI
+tokens are spent on it.
+
+The expectations:
+
+- **The same devices stay on the network.** A new device is news, not an
+  alarm.
+- **Every device looks up names through the router.** A device that asks its
+  own DNS server or a DNS over HTTPS resolver goes around the router's filter.
+  Devices that already did this when the check started are left alone, a new
+  one breaks it.
+- **The router and the address handout stay the same.** A new gateway
+  hardware address or a second DHCP server breaks it.
+- **Upload stays near its usual level at night.** Between 1 and 6 in the
+  morning, against the usual of the last two weeks. It needs three watched
+  nights before it says anything.
+- **The network keeps talking to the same countries.**
+- **Each block holds.** One per block on the router. If any connection to or
+  from the blocked address gets an answer after the block, the block leaked.
+
+The mood at the top follows from them:
+
+- **Calm:** everything held and the router was watched.
+- **Curious:** something new, nothing broken.
+- **Uneasy:** the app could not see enough to say, for example the router did
+  not answer or its agent is too old to confirm a block.
+- **Alarmed:** an expectation broke. It stays that way until you press
+  "I have seen this" on the card.
+
+Red is only used for a real break, never for a guess. If the router cannot
+back a check, the card says "could not check" instead of "holding".
+
+The ring around each card fills with the share of checks that held in the
+last week. The clock on the right shows who was watching each hour: the outer
+ring is the router, the inner ring is this laptop's own capture.
+
+<p align="center">
+  <img src="../assets/screenshots/expectations_device.png" alt="One device" width="800">
+</p>
+
+*One device: its usual contacts on the inner ring, anything new in the last
+day outside it in amber. Sample data.*
+
+Click a device on the ring to see who it usually talks to this week, what is
+new in the last 24 hours, its countries, and its blocks. For the first day a
+device is watched, nothing is called new.
+
+<p align="center">
+  <img src="../assets/screenshots/false_alarms.png" alt="False alarms per day" width="800">
+</p>
+
+*False alarms per day for two weeks, with one rule picked out. Sample data.*
+
+**False alarms per day.** One dot per incident that fired that day, coloured
+by the rule's family. A filled dot is a false alarm, a red ring is real, a
+dashed ring is not sure, an empty ring has no verdict yet. It counts
+incidents, not alerts, so one big clean up does not make a day look huge.
+Click a rule to pick out its dots. A rule that keeps filling a row with false
+alarms is the one to tune.
+
+Under it, **Needs your verdict** lists incidents that have none yet, with
+three buttons: False alarm, Real, Not sure. You can also tell the analyst in
+chat ("that was my backup job, it is a false alarm") and it records your
+verdict, marked as given on your word. Incidents you dismissed before this
+existed count as false alarms, marked "from a dismissal".
+
+The analyst's old prediction record is still at the bottom, folded away.
 
 ## Detections
 

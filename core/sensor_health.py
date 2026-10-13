@@ -429,6 +429,7 @@ DEPENDS: dict[str, tuple] = {
     # question asked on a blind run looks like it needs a warning. It does
     # not. The blindness is exactly WHY the owner is being asked.
     "ask_operator":               (),
+    "record_incident_verdict":    (),
     "query_operator_answers":     (),
 
     # the performance axis, v32. It is built entirely out of stored

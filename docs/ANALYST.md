@@ -168,7 +168,10 @@ apart from the Chat tab.
   on the Questions tab instead of guessing. Unanswered questions retire, they
   are never treated as yes.
 - **It is graded.** It makes predictions with deadlines, and the app checks
-  them. The hit rate is on the Predictions tab.
+  them. The record is at the bottom of the Expectations tab.
+- **It records your verdicts.** Tell it in chat that an incident was a false
+  alarm, or real, and it writes your verdict down, marked as given on your
+  word. It never gives one on its own.
 - **Case memory.** Before working on an incident it reads what the app
   already knows about the subject and what happened the last times something
   looked like it.

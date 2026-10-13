@@ -2293,6 +2293,51 @@ def register_routes(app):
         from core import predictions
         return jsonify(predictions.check_due())
 
+    # EXPECTATIONS, set and checked by the app itself.
+
+    @app.route("/api/expectations")
+    @require_api_key
+    def expectations_overview():
+        from core import expectations
+        return jsonify(expectations.overview(
+            current_app.config.get("AGENTAL_CONFIG") or {}))
+
+    @app.route("/api/expectations/check", methods=["POST"])
+    @require_api_key
+    def expectations_check():
+        from core import expectations
+        return jsonify(expectations.check_once(
+            current_app.config.get("AGENTAL_CONFIG") or {}))
+
+    @app.route("/api/expectations/device")
+    @require_api_key
+    def expectations_device():
+        from core import expectations
+        out = expectations.device_detail(request.args.get("ip") or "")
+        return jsonify(out), (400 if out.get("error") else 200)
+
+    @app.route("/api/expectations/false_alarms")
+    @require_api_key
+    def expectations_false_alarms():
+        from core import expectations
+        return jsonify(expectations.false_alarms(_int_arg("days", 14, high=60)))
+
+    @app.route("/api/incidents/verdict/<int:incident_id>", methods=["POST"])
+    @require_api_key
+    def incident_verdict(incident_id):
+        from core import incident
+        body = request.get_json(silent=True) or {}
+        out = incident.set_verdict(incident_id, str(body.get("verdict") or ""),
+                                   by="owner")
+        return jsonify(out), (200 if out["success"] else 400)
+
+    @app.route("/api/expectations/acknowledge/<int:exp_id>", methods=["POST"])
+    @require_api_key
+    def expectations_acknowledge(exp_id):
+        from core import expectations
+        out = expectations.acknowledge(exp_id)
+        return jsonify(out), (200 if out["success"] else 404)
+
     # THE ACTION QUEUE. v36, T3.
     #
     # THE APPROVE/DENY ENDPOINTS FOR A QUEUED CARD, and they are deliberately

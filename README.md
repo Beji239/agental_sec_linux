@@ -135,8 +135,12 @@ finding was produced. It has no shell.
   (Ollama, LM Studio, vLLM, SGLang).
 - **It says what it could not see**, and tells "nothing happened" apart from
   "nothing was looking".
-- **It asks you** when it needs something only you know, makes predictions
-  that are graded afterwards, and remembers past cases.
+- **It asks you** when it needs something only you know, and remembers past
+  cases.
+- **It keeps expectations.** Every block holds, the same devices stay, DNS
+  goes through the router, nights stay quiet. The app checks them itself
+  against the router, with no AI tokens, and shows a network mood and the
+  false alarms per day.
 - **It works while you are away.** An incident watcher groups findings as
   they arrive, and a duty loop wakes during the day, or at once in an
   emergency, to investigate and write a report. Each evening it writes a
@@ -244,8 +248,8 @@ your results would be very welcome.
   <img src="assets/screenshots/detections.png" alt="The detection register, every rule that can fire" width="800">
 </p>
 
-The dashboard has 21 tabs, from live LAN traffic to the analyst's prediction
-record. A tour of each: [docs/TOUR.md](docs/TOUR.md).
+The dashboard has 21 tabs, from live LAN traffic to the network's
+expectations. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 
 ## Requirements
 
@@ -372,6 +376,9 @@ python3 scripts/run_tests.py
 ```
 
 Each file in `tests/` also runs on its own with `python3 tests/<name>.py`.
+The security tests need extra tools that the app itself does not use. Without
+them those tests are skipped; to install them, see "Security test tools" in
+[SETUP.md](SETUP.md#security-test-tools-developers-only).
 
 ## License
 
