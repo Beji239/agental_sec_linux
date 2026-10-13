@@ -970,6 +970,32 @@
 
   .data-table tr:hover td { background: var(--bg3); }
 
+  /* Detections page, readable text and real buttons */
+  .det-guide { font-size: 12px; color: var(--text); line-height: 1.55; max-width: 900px; }
+  .det-guide p { margin-top: 8px; }
+  .det-guide p:first-child { margin-top: 0; }
+  .det-guide b, .det-note b { color: var(--text-hi); }
+  .det-note { font-size: 12px; color: var(--text); line-height: 1.5; }
+  .det-table th[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .det-table th { color: var(--text); }
+  .det-table td:nth-child(3), .det-table td:nth-child(7) { font-family: var(--sans); font-size: 12px; }
+  .det-plain { color: var(--text-hi); line-height: 1.45; }
+  .det-tech { margin-top: 4px; font-size: 11px; color: var(--text); }
+  .det-tech summary { cursor: pointer; color: var(--blue); }
+  .det-tech div { margin-top: 4px; line-height: 1.45; }
+  .det-tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px;
+             border: 1px solid var(--border); color: var(--text); margin-left: 6px; }
+  .det-tag.retired { color: var(--text-dim); }
+  .btn-mute { background: var(--bg3); border: 1px solid var(--border); color: var(--text-hi);
+              border-radius: var(--radius); padding: 4px 12px; font-size: 11px; cursor: pointer; }
+  .btn-mute:hover { border-color: var(--amber); color: var(--amber); }
+  .btn-unmute { background: transparent; border: 1px solid var(--amber); color: var(--amber);
+                border-radius: var(--radius); padding: 3px 10px; font-size: 11px; cursor: pointer; margin-top: 4px; }
+  .btn-unmute:hover { background: var(--amber); color: var(--bg); }
+  .det-muted { color: var(--amber); font-size: 12px; line-height: 1.4; }
+  .det-muted + .det-muted { margin-top: 8px; }
+  .det-off { font-size: 11px; color: var(--text); }
+
   /*
      PROCESSES
      Four colours and one of them is grey, on purpose. A process we could
