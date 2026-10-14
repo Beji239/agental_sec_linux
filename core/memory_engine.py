@@ -604,6 +604,13 @@ def _validate_limit(limit: int) -> int:
     return min(limit, MAX_QUERY_LIMIT)
 
 
+def like_contains(value) -> str:
+    """A contains pattern for LIKE ? ESCAPE '\\' where a typed %, _ or \\
+    matches itself, not any text (SEC-1)."""
+    v = str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{v}%"
+
+
 def _all_rows(rows, kind):
     """
     The same three fields for a query that has no LIMIT at all. TODO 94.
@@ -1106,8 +1113,8 @@ def _packet_conditions(since=None, until=None, src_ip=None, dst_ip=None,
         conditions.append("process_pid = ?")
         params.append(int(process_pid))
     if process_name:
-        conditions.append("process_name LIKE ?")
-        params.append(f"%{process_name}%")
+        conditions.append("process_name LIKE ? ESCAPE '\\'")
+        params.append(like_contains(process_name))
 
     return conditions, params
 
@@ -3683,14 +3690,16 @@ def query_runbook(search_term: str = None, limit: int = 20,
     # "not in the runbook" is a confident negative and nobody re-checks one.
     # See the yearless CVE story above for what that costs.
     if search_term:
-        like = f"%{search_term}%"
+        like = like_contains(search_term)
         m = _CVE_NO_YEAR_RE.match(str(search_term))
         # The number on its own, so CVE-59822 reaches CVE-2026-59822.
         # Anchored on the trailing digits rather than loose, so 59822
         # cannot also drag in CVE-2019-598220 style neighbours.
         alt = f"%-{m.group(1)}" if m else like
-        where = ("WHERE cve_id LIKE ? OR cve_id LIKE ? OR vulnerability LIKE ? "
-                 "OR description LIKE ? OR known_ports LIKE ? OR product LIKE ?")
+        where = ("WHERE cve_id LIKE ? ESCAPE '\\' OR cve_id LIKE ? ESCAPE '\\' "
+                 "OR vulnerability LIKE ? ESCAPE '\\' "
+                 "OR description LIKE ? ESCAPE '\\' "
+                 "OR known_ports LIKE ? ESCAPE '\\' OR product LIKE ? ESCAPE '\\'")
         filter_params = [like, alt, like, like, like, like]
         # 2026-09-16, PORTED 2026-09-21. This was ORDER BY severity, which
         # sorts the WORD. That put low ahead of medium, alphabetically, and it
@@ -5546,8 +5555,8 @@ def query_dns(client_ip: str = None, domain: str = None, since: str = None,
         conditions.append("client_ip = ?")
         params.append(client_ip)
     if domain:
-        conditions.append("domain LIKE ?")
-        params.append(f"%{domain}%")
+        conditions.append("domain LIKE ? ESCAPE '\\'")
+        params.append(like_contains(domain))
     if since:
         conditions.append("queried_at >= ?")
         params.append(_sql_datetime(since, SHAPE_ISO_OFFSET))
@@ -5628,8 +5637,8 @@ def query_dns_answers(address: str = None, name: str = None,
         conditions.append("value = ?")
         params.append(address.strip().lower())
     if name:
-        conditions.append("name LIKE ?")
-        params.append(f"%{name.strip().lower()}%")
+        conditions.append("name LIKE ? ESCAPE '\\'")
+        params.append(like_contains(name.strip().lower()))
     if rrtype:
         conditions.append("rrtype = ?")
         params.append(rrtype.strip().upper())
@@ -5750,8 +5759,8 @@ def query_tls(sni: str = None, ja3_md5: str = None, dst_ip: str = None,
     limit = _validate_limit(limit)
     conditions, params = ["sni_state != 'unreadable'"], []
     if sni:
-        conditions.append("sni LIKE ?")
-        params.append(f"%{sni.lower()}%")
+        conditions.append("sni LIKE ? ESCAPE '\\'")
+        params.append(like_contains(sni.lower()))
     if ja3_md5:
         conditions.append("ja3_md5 = ?")
         params.append(ja3_md5.lower())
@@ -5762,8 +5771,8 @@ def query_tls(sni: str = None, ja3_md5: str = None, dst_ip: str = None,
         conditions.append("src_ip = ?")
         params.append(src_ip)
     if process_name:
-        conditions.append("process_name LIKE ?")
-        params.append(f"%{process_name}%")
+        conditions.append("process_name LIKE ? ESCAPE '\\'")
+        params.append(like_contains(process_name))
     if since:
         conditions.append("last_seen >= ?")
         params.append(_sql_datetime(since, SHAPE_ISO_OFFSET))

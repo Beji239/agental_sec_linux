@@ -6681,7 +6681,7 @@ async function loadPorts() {
       <tr class="${flashCls.trim()}">
         <td>${Number(r.port)}<span style="color:var(--text-dim);font-size:10px">/${esc(r.protocol||'tcp')}</span>${tag}</td>
         <td>${esc(r.service_guess||'-')}</td>
-        <td><span class="sev-badge sev-${r.risk_level==='critical'?'critical':r.risk_level==='high'?'high':'low'}">${r.risk_level||'?'}</span></td>
+        <td><span class="sev-badge sev-${r.risk_level==='critical'?'critical':r.risk_level==='high'?'high':'low'}">${esc(r.risk_level||'?')}</span></td>
         <td style="font-size:10px">${scope}</td>
         <td>${esc(r.target_host||'')}</td>
         <td style="color:var(--text-dim);font-size:10px;max-width:420px">${esc(r.service_note||r.banner||'')}</td>
@@ -8421,7 +8421,7 @@ function renderDetections() {
 
     return '<tr>'
       + '<td><code>' + esc(r.detection_id) + '</code></td>'
-      + '<td>v' + r.rev + '</td>'
+      + '<td>v' + Number(r.rev) + '</td>'
       + '<td>' + what + '</td>'
       + '<td>' + esc(SOURCE_NAMES[r.source] || r.source) + '</td>'
       + '<td>' + esc((r.severities || []).join(', ')) + '</td>'
@@ -10645,7 +10645,7 @@ function renderProcesses() {
         (p.exe_refusal ? `, ${esc(p.exe_refusal)}` : '') + `</span>`;
     return `
       <tr id="prow-${p.pid}">
-        <td><span class="p-dot p-${p.trust}" title="${esc(p.trust_reason || '')}"></span>${esc(p.name || '')}</td>
+        <td><span class="p-dot p-${esc(p.trust)}" title="${esc(p.trust_reason || '')}"></span>${esc(p.name || '')}</td>
         <td>${p.pid}</td>
         <td>${esc(p.username || '')}</td>
         <td>${sigText}</td>

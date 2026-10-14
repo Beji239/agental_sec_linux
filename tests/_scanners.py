@@ -88,7 +88,9 @@ def semgrep() -> list:
                           "./scripts/install_test_tools.sh")
     targets = [t for t in PY_TARGETS if (ROOT / t).exists()]
     cmd = [exe, "scan", "--metrics=off", "--disable-version-check", "--quiet",
-           "--json", "--timeout", "120", "--timeout-threshold", "0"]
+           # tool_registry.py alone took 228 s on a loaded laptop; a timeout
+           # makes the whole scan a skip, so each file gets ten minutes.
+           "--json", "--timeout", "600", "--timeout-threshold", "0"]
     for r in rules:
         cmd += ["--config", r]
     for d in SEMGREP_EXCLUDE:

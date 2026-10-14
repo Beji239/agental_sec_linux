@@ -1505,8 +1505,10 @@ def recent_events(config: dict = None, db_path: str = None, kind: str = None,
             # from a model or an operator and the values it is matched against
             # came from a process table, so both ends of this are untrusted
             # text going into SQL.
-            where.append("(comm LIKE ? OR filename LIKE ? OR daddr LIKE ?)")
-            like = f"%{search}%"
+            where.append("(comm LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\' "
+                         "OR daddr LIKE ? ESCAPE '\\')")
+            from core.memory_engine import like_contains
+            like = like_contains(search)
             params.extend([like, like, like])
         sql = ("SELECT id, kind, recorded_at, pid, tgid, ppid, uid, comm, "
                "parent, filename, daddr, dport, family, ts_ns FROM ebpf_event")

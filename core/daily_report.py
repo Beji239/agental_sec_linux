@@ -1065,8 +1065,10 @@ def render(f: dict, a: dict) -> str:
         add(f'<p class="note"><b>AgentalSec was off from {_e(_hm(ob["from"], day))} '
             f'to {_e(_hm(ob["to"], day))}</b> ({_e(_dur((ob["to"] - ob["from"]).total_seconds()))}), '
             f"so there is no report for {_e(days)}.</p>\n")
-    add(f'<div class="status {st["level"]}"><span class="badge b-{st["level"]}">'
-        f'{st["level"].upper()}</span><div>{_e(st["sentence"])}</div></div>\n')
+    # The level names a style; only the three known ones reach the page.
+    level = st["level"] if st["level"] in ("green", "amber", "red") else "amber"
+    add(f'<div class="status {level}"><span class="badge b-{level}">'
+        f'{level.upper()}</span><div>{_e(st["sentence"])}</div></div>\n')
 
     add("<h2>The day in brief</h2>\n<ul>")
     add("".join(f"<li>{_e(line)}</li>" for line in f["brief"]))

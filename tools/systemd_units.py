@@ -311,12 +311,18 @@ def unit_properties(unit: str, manager: str = "", uid=None) -> dict:
     """
     if not unit:
         return {"ok": False, "reason": "no unit name was given"}
+    # Checked here too: callers ask about a unit before they stop it.
+    try:
+        unit = _validated_unit_name(unit)
+    except ValueError as e:
+        return {"ok": False, "reason": str(e)}
 
     cmd = ["systemctl"]
     if manager == "--user":
         cmd.append("--user")
-    cmd += ["show", unit,
-            "-p", "Id,LoadState,ActiveState,SubState,Restart,MainPID,ActiveEnterTimestamp"]
+    cmd += ["show", "-p",
+            "Id,LoadState,ActiveState,SubState,Restart,MainPID,ActiveEnterTimestamp",
+            "--", unit]
 
     env = _manager_env(manager, uid=uid)
     try:
