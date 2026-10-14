@@ -19,6 +19,7 @@ most comfortable direction there is.
 Run it directly: python tests/test_performance_axis.py
 """
 import pathlib
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -336,9 +337,9 @@ check("no bucket lists in the model's view",
 
 print("\n[8] the page paints four states and the blind one is not green")
 UI = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
-check_true("there is a tab", 'data-page="performance"' in UI)
-check_true("and a page", 'id="page-performance"' in UI)
-check_true("something loads it", "if (name === 'performance')" in UI)
+check_true("there is a tab", 'data-page="baselines"' in UI)
+check_true("and a page", 'id="page-baselines"' in UI)
+check_true("something loads it", re.search(r"if \(name === 'baselines'\)[^\n]*loadPerformance\(\)", UI) is not None)
 for cls in ("perf-normal", "perf-high", "perf-low", "perf-unknown", "perf-blind"):
     check_true(f"{cls} has its own appearance", f".{cls}" in UI)
 # The blind state must not borrow the normal colour. If someone ever points

@@ -292,11 +292,11 @@ check_true("and the description tells it not to guess in the question",
 
 print("\n[9] the owner can see and answer it")
 UI = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
-check_true("there is a tab", 'data-page="questions"' in UI)
-check_true("and a page", 'id="page-questions"' in UI)
+check_true("there is a tab", 'data-page="inbox"' in UI)
+check_true("and a page", 'id="page-inbox"' in UI)
 check_true("there is a doorbell", 'id="question-popup"' in UI)
 check_true("it does not carry the question itself",
-           "qp-body" in UI and "Have a look" in UI)
+           "qp-body" in UI and "Open the Inbox" in UI)
 check_true("'I do not know either' is a button, not buried",
            "I do not know either" in UI)
 check_true("the four states are four tiles",

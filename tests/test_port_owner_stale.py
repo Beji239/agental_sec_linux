@@ -79,8 +79,8 @@ check("the sweeper marks itself running",
 check("the sensor check covers it", '"port_owner": _port_owner_tracker' in main,
       True)
 page = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
-check("the Ports tab loads the listener list",
-      "loadPorts(); loadPortSets(); loadListeners();" in page, True)
+check("the This Computer tab loads the listener list",
+      "{ loadProcesses(); loadListeners(); }" in page, True)
 check("from the owners route", "'/api/ports/owners'" in page, True)
 check("and shows a stale or blind sweep", "mod.blind_reason" in page, True)
 

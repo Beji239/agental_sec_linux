@@ -491,7 +491,7 @@ def _check_contacts(conn, exp, ctx):
             conn, "known_devices") else []
     if not devs:
         return ("unknown", "No device is marked as a smart device or printer "
-                "on the Network tab, so there is nothing to hold to.", {})
+                "on the Devices tab, so there is nothing to hold to.", {})
     learned = ctx["now"] - timedelta(hours=ctx["cfg"]["learn_hours"])
     fresh, learning, watched = {}, 0, 0
     for d in devs:
@@ -538,7 +538,7 @@ def _check_block(conn, exp, ctx):
                 + router["reasons"][0], {})
     if addr not in set(router["blocks"] or []):
         return ("broken", "This block is no longer on the router, and the "
-                "app did not lift it. Set it again from the Network tab if "
+                "app did not lift it. Set it again from the Devices tab if "
                 "it is still wanted.", {"missing": True})
     after = max(_parse(exp["since"]) + timedelta(seconds=BLOCK_GRACE_SECONDS),
                 ctx["start"])

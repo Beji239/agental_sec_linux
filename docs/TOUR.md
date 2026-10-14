@@ -3,7 +3,7 @@
 Start AgentalSec from its launcher in your app menu or on your desktop. If
 you have no launcher yet, run `./scripts/install_launchers.sh` once from the
 project folder (step 9 of [SETUP.md](../SETUP.md)). The dashboard opens at
-http://127.0.0.1:5000. It has 21 tabs. This page goes
+http://127.0.0.1:5000. It has 16 tabs. This page goes
 through each one: what it shows, how to read it, and what you would do there.
 
 Two habits run through every tab:
@@ -72,7 +72,10 @@ not shown. Tick "findings and events only" to hide packets.
 
 Each row says who recorded it, which sensor and session, and why it is there.
 
-## Network
+## Devices
+
+What is on your network, what you said belongs there, and what each device
+answers on.
 
 - **Network devices.** Everything this machine can see on the local network:
   address, your label, type, identity, the **basis** for that identity,
@@ -88,10 +91,8 @@ Each row says who recorded it, which sensor and session, and why it is there.
 - **Router settings.** The router's DNS, DHCP and gateway settings as last
   read. CHANGED marks a value that differs from the one recorded before.
 
-## Inventory
-
-Your enrolment list. You are the authority on what belongs on your network,
-and this is where you say so.
+**Enrollment.** You are the authority on what belongs on your network, and
+this is where you say so.
 
 - **Name** a device and the analyst stops guessing what it is.
 - **Mark it permanent** if it should always be present. Its absence then
@@ -103,6 +104,19 @@ laptops that invent a new private address per network are counted in the
 "transient" tile instead, since marking one permanent would not stick. To
 list your own phone, turn off "private Wi-Fi address" for this network on the
 phone and scan again.
+
+**Port scan.** TCP and UDP scans of the hosts you choose. Enter a host, pick a
+set (common, extended or all 65,535 ports) and press Scan Host. Scans of hosts
+outside your own network ask for approval first.
+
+- **UDP has three answers.** A row means the port replied. An ICMP
+  unreachable means nothing listens. Silence means neither, and is never
+  shown as closed.
+- **Scope.** A self-scan proves a service is listening on this machine, not
+  that anyone can reach it. A remote scan across the network does measure
+  reachability.
+- **Repeats** of the same open port are collapsed into one row with a count.
+  Tick "every scan" to see each observation.
 
 ## Live LAN
 
@@ -163,22 +177,7 @@ why. Every action asks for a reason and is recorded.
 alert: a program reached a country it does not usually reach. The analyst
 starts from what the app recorded about this address. Sample data.*
 
-## Ports
-
-TCP and UDP port scan results. Enter a host, pick a set (common, extended or
-all 65,535 ports) and press Scan Host. Scans of hosts outside your own network
-ask for approval first.
-
-- **UDP has three answers.** A row means the port replied. An ICMP
-  unreachable means nothing listens. Silence means neither, and is never
-  shown as closed.
-- **Scope.** A self-scan proves a service is listening on this machine, not
-  that anyone can reach it. A remote scan across the network does measure
-  reachability.
-- **Repeats** of the same open port are collapsed into one row with a count.
-  Tick "every scan" to see each observation.
-
-## Processes
+## This Computer
 
 - **Background apps you can switch off.** Services, timers and login apps
   worth acting on, each with a tier and a reason. "Safe to block" means
@@ -191,6 +190,10 @@ ask for approval first.
   yourself, worth a look in a temporary folder. Faint grey is a kernel thread.
   Press inspect on a row for the full hash, the owning package and whether
   that exact file is known to public malware databases.
+- **What is listening on this computer.** Every open port here and the
+  program holding it, read from the system's own socket list. A port open on
+  all interfaces can be reached from the network, one on 127.0.0.1 only from
+  this computer.
 
 ## PCAP
 
@@ -199,16 +202,14 @@ it came from, in your own words, and that note is stored as your claim about
 the file so it is not read with the same weight as this machine's own
 traffic.
 
-## Behavioral
+## Baselines
 
 The baselines the tool has learned: for every address, process, port and
 user, what it usually does and how confident the tool is (low after 2
 sessions, medium after 4, high after 6). Below them, recent deviations: about
 two steps from usual is a note, three or more is an alert.
 
-## Performance
-
-Traffic per device per hour, for the last day, two days or week, coloured
+**Traffic per device per hour.** For the last day, two days or week, coloured
 against that device's own normal: usual, well above, well below, not enough
 history, or not measured because nothing was watching that hour. Performance
 signals this tool does not collect are listed by name rather than shown as
@@ -242,7 +243,7 @@ The expectations:
   nights before it says anything.
 - **The network keeps talking to the same countries.**
 - **Smart devices and printers keep to their usual contacts.** A device you
-  marked as a smart device or printer on the Network tab that reaches a
+  marked as a smart device or printer on the Devices tab that reaches a
   service it never used is news. It needs three days of watching first. TVs
   are left out, because they reach new streaming services every day; add
   `"tv"` to `simple_types` in the `expectations` block of config.json to hold
@@ -381,18 +382,27 @@ only you can mute. Rows marked Record are a trail of what the app did, such as
 blocking a device, and cannot be muted. Hover any column heading for its
 meaning.
 
-## Questions
+**Runbook.** The CISA catalogue of known exploited vulnerabilities, with a
+CVSS severity for each, searchable and filterable. Sync CISA KEV fetches the latest list,
+Fetch CVSS fills in scores. A row here is a vulnerability that exists in the
+world, not a finding about your machines.
 
-What the analyst wants to ask you, such as whether a device is yours. Answer
-here and the answer is used from then on. Questions nobody answers retire
-after a while and are listed as such, never quietly treated as yes.
+## Inbox
 
-## Actions
+Everything waiting on your answer, in one place. The badge counts what is
+waiting and clears when you answer.
 
-Approval cards waiting on you, and the record of everything already decided:
-ran, did not run, you denied, nobody answered. An approved action is carried
-out once by the executor, outside any chat. The executor's own state is shown
-here, because if it is not running an approved card would never run.
+- **Actions.** Approval cards waiting on you, and the record of everything
+  already decided: ran, did not run, you denied, nobody answered. An approved
+  action is carried out once by the executor, outside any chat. The
+  executor's own state is shown at the bottom, because if it is not running
+  an approved card would never run.
+- **Questions.** What the analyst wants to ask you, such as whether a device
+  is yours. Answer here and the answer is used from then on. Questions nobody
+  answers retire after a while and are listed as such, never quietly treated
+  as yes.
+- **Unanswered alerts.** Serious alerts nobody looked at before the silence
+  timer closed them. Mark each one normal or a threat.
 
 ## Agents
 
@@ -416,13 +426,6 @@ Everything silenced, in one place.
 
 If the chat and this tab disagree about what is silenced, this tab is right.
 
-## Runbook
-
-The CISA catalogue of known exploited vulnerabilities, with a CVSS severity
-for each, searchable and filterable. Sync CISA KEV fetches the latest list,
-Fetch CVSS fills in scores. A row here is a vulnerability that exists in the
-world, not a finding about your machines.
-
 ## Settings
 
 - **Model provider.** Endpoint, model and key, with a check that the
@@ -430,5 +433,7 @@ world, not a finding about your machines.
 - **What is on, what is off, and why.** Every collector: green running, amber
   switched off or not configured, red supposed to work and not working, each
   with its reason.
+- **Database size.** How big the database is against its budget. The oldest
+  capture runs go first, at a clean shutdown.
 - **Stop AgentalSec.** The same clean stop as Ctrl+C in the terminal, for
   when the terminal is out of reach.

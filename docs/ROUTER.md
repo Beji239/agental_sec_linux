@@ -11,7 +11,7 @@ changing `config.json`.
 
 The most useful addition. A small shell script on your router answers
 AgentalSec's questions over SSH and, with your approval, carries out blocks
-there. It fills the Live LAN tab and the router view on the Network tab.
+there. It fills the Live LAN tab and the router view on the Devices tab.
 
 ### Which routers work
 
@@ -124,7 +124,7 @@ restart for this.
 
 - **Live LAN tab.** Every device's upload and download right now, its
   destinations, DNS lookups and finished connections.
-- **Router view** on the Network tab: what the router says is on the network,
+- **Router view** on the Devices tab: what the router says is on the network,
   including devices this machine never sees, marked NOT SEEN HERE.
 - **Router settings:** DNS, DHCP and gateway settings, with changes flagged.
 - **Actions on the router**, each needing your approval: block or unblock a

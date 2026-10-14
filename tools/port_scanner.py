@@ -2899,7 +2899,7 @@ class PortScanner:
                 logger.info(
                     f"{target_host}:{port} open, {risk} risk, recorded but NOT "
                     f"raised as a finding: this was an active scan, see TODO "
-                    f"38.5. It is in port_scan_results and on the Ports tab.")
+                    f"38.5. It is in port_scan_results and on the Devices tab.")
                 entry["finding_raised"] = False
             # Was wrapped in `try: ... except Exception: pass` around a
             # function-level import of a function that did not exist. Every

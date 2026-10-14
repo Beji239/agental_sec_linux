@@ -499,7 +499,7 @@ def apply(action, owner_kind, owner_name, reason=None, requested_by="agent",
     ba.invalidate_cache()
     return {"ok": True, "change_id": cid, "effect": p["effect"],
             "note": (" ".join(notes) + " " if notes else "")
-                    + "Done. It shows in the undo list on the Processes tab."}
+                    + "Done. It shows in the undo list on the This Computer tab."}
 
 
 def undo(change_id, reason=None, executor=None) -> dict:

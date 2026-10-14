@@ -170,7 +170,7 @@ A typical case, from start to finish:
    wakes at once. It reads the evidence through its tools: the program and its
    file, where it connects, the threat feeds, what that device normally does.
    Then it writes a report with its verdict on the Agents tab.
-4. **It proposes the response.** The request appears on the Actions tab,
+4. **It proposes the response.** The request appears in the Inbox,
    saying what it would do and why. Nothing has run yet.
 5. **You decide.** Approve, and a separate worker carries it out once and
    records it, even if the dashboard is closed. Deny, and nothing happens.
@@ -189,7 +189,7 @@ The responses it can propose, from the narrowest to the widest:
 A block on this computer's firewall protects this computer only. A block on
 the router protects every device on your network, which is why a router with
 the agent is the recommended setup ([Best setup](#best-setup)). Blocks,
-quarantines and background app changes can be undone from the Actions tab.
+quarantines and background app changes can be undone from the Inbox.
 
 Alerts that turn out to be harmless can be silenced for one rule on one
 device or file, without hiding anything else about it, so the next real
@@ -248,7 +248,7 @@ your results would be very welcome.
   <img src="assets/screenshots/detections.png" alt="The detection register, every rule that can fire" width="800">
 </p>
 
-The dashboard has 21 tabs, from live LAN traffic to the network's
+The dashboard has 16 tabs, from live LAN traffic to the network's
 expectations. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 
 ## Requirements
@@ -366,7 +366,7 @@ extends its view.
   built to hide below those can stay out of view, which is why the app shows
   exactly which sensors were watching at any moment.
 - **It answers best to neutral questions.** Like any analyst it can be led by
-  a confident claim. Ask neutrally, or name your devices on the Inventory
+  a confident claim. Ask neutrally, or name your devices on the Devices
   tab, and it works from facts.
 
 ## Tests

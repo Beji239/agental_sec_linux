@@ -148,7 +148,7 @@
      until 2026-09-14, and the shape is kept: it reads as a switch because it
      is one. Both it and the line above answer "is this source of truth
      switched on", so looking alike is
-     the point rather than laziness. It lives on the Network page beside the
+     the point rather than laziness. It lives on the Devices page beside the
      table it changes rather than in the topbar: which model is running
      changes how every answer should be read, this one changes one table. */
   #router-toggle {
@@ -761,7 +761,7 @@
 
   /*
      SCAN RESULT FLASH
-     A scan appends to a table that already had rows in it. The Ports tab makes
+     A scan appends to a table that already had rows in it. The Devices tab makes
      this obvious: scan twice and 135, 445 and 5000 each appear twice, four
      minutes apart, identical apart from a timestamp nobody reads at a glance.
      The result of the scan you just ran is not visually distinguishable from
@@ -1457,7 +1457,7 @@
   }
 
   /*
-     PORT SET PICKER (the Ports tab)
+     PORT SET PICKER (the Devices tab)
   */
 
   .pset {
@@ -1525,7 +1525,7 @@
     font-family: var(--mono);
   }
 
-  /* always on? yes/no switch on the Inventory page.
+  /* always on? yes/no switch on the Devices page.
      Two buttons, one question, the current answer lit up and disabled. It
      used to be a state word plus a button labelled with the opposite action,
      so the cell read "yes not always", which means nothing. */
@@ -1739,9 +1739,7 @@
        up. The page ignored claimed.actions_waiting entirely. -->
   <div class="qp-body" id="qp-actions" style="display:none;"></div>
   <div class="qp-row">
-    <button class="btn" onclick="goToQuestions()">Have a look</button>
-    <button class="btn" id="qp-agent-btn" style="display:none;"
-            onclick="goToActions()">See the action</button>
+    <button class="btn" onclick="goToInbox()">Open the Inbox</button>
     <button class="btn" onclick="dismissQuestionPopup()">Not now</button>
   </div>
 </div>
@@ -1752,32 +1750,19 @@
   <div class="nav-tab"        onclick="showPage('dashboard')"data-page="dashboard">Dashboard</div>
   <div class="nav-tab"        onclick="showPage('alerts')"   data-page="alerts">Alerts <span class="badge" id="alert-badge" style="display:none">0</span></div>
   <div class="nav-tab"        onclick="showPage('timeline')" data-page="timeline">Timeline</div>
-  <div class="nav-tab"        onclick="showPage('network')"  data-page="network">Network</div>
-  <div class="nav-tab"        onclick="showPage('inventory')"data-page="inventory">Inventory <span class="badge" id="inventory-badge" style="display:none">0</span></div>
+  <div class="nav-tab"        onclick="showPage('devices')"  data-page="devices">Devices <span class="badge" id="inventory-badge" style="display:none">0</span></div>
   <div class="nav-tab"        onclick="showPage('lan')"      data-page="lan">Live LAN</div>
   <div class="nav-tab"        onclick="showPage('map')"      data-page="map">Threat Map</div>
-  <div class="nav-tab"        onclick="showPage('ports')"    data-page="ports">Ports</div>
-  <div class="nav-tab"        onclick="showPage('processes')" data-page="processes">Processes</div>
+  <div class="nav-tab"        onclick="showPage('computer')" data-page="computer">This Computer</div>
   <div class="nav-tab"        onclick="showPage('pcap')"     data-page="pcap">PCAP</div>
-  <div class="nav-tab"        onclick="showPage('behavioral')"data-page="behavioral">Behavioral</div>
-  <div class="nav-tab"        onclick="showPage('performance')" data-page="performance">Performance</div>
+  <div class="nav-tab"        onclick="showPage('baselines')" data-page="baselines">Baselines</div>
   <div class="nav-tab"        onclick="showPage('predictions')" data-page="predictions">Expectations</div>
   <div class="nav-tab"        onclick="showPage('detections')" data-page="detections">Detections</div>
-  <!-- The badge here counts questions WAITING FOR THE OWNER, which is the one kind
-       of number that earns a permanent badge: it goes away when the owner answers. -->
-  <div class="nav-tab"        onclick="showPage('questions')" data-page="questions">Questions <span class="badge" id="questions-badge" style="display:none">0</span></div>
-  <!-- The Action Queue. The badge counts ONLY things waiting on a decision,
-       which is the same discipline the Questions badge uses: it goes away
-       when the owner decides. Approved-but-not-yet-run is deliberately NOT in the
-       badge, it is not asking the owner for anything, and a number that never
-       clears while the executor works is a number the owner learns to ignore. -->
-  <div class="nav-tab"        onclick="showPage('actions')"  data-page="actions">Actions <span class="badge" id="actions-badge" style="display:none">0</span></div>
+  <!-- The badge counts only what waits on your answer, so it clears when you answer. -->
+  <div class="nav-tab"        onclick="showPage('inbox')"    data-page="inbox">Inbox <span class="badge" id="inbox-badge" style="display:none">0</span></div>
   <div class="nav-tab"        onclick="showPage('agents')"   data-page="agents">Agents <span class="badge" id="agents-badge" style="display:none">0</span></div>
-  <div class="nav-tab"        onclick="showPage('review')"   data-page="review">Review <span class="badge" id="review-badge" style="display:none">0</span></div>
-  <div class="nav-tab"        onclick="showPage('runbook')"  data-page="runbook">Runbook</div>
-  <!-- The badge counts PROBLEMS only, never things that are simply off. A tab
-       that wears a number because six optional collectors are unconfigured is
-       a tab you stop reading in a week. -->
+  <div class="nav-tab"        onclick="showPage('review')"   data-page="review">Review</div>
+  <!-- The badge counts PROBLEMS only, never things that are simply off. -->
   <div class="nav-tab"        onclick="showPage('settings')" data-page="settings">Settings <span class="badge" id="settings-badge" style="display:none">0</span></div>
 </div>
 
@@ -1965,8 +1950,8 @@
     </div>
   </div>
 
-  <!-- NETWORK -->
-  <div class="page" id="page-network">
+  <!-- DEVICES. What is on the network, what you said belongs there, and what each device answers on. -->
+  <div class="page" id="page-devices">
     <div class="card">
       <div class="card-title">Network Devices</div>
       <div class="card-note">
@@ -2054,61 +2039,6 @@
       </table>
     </div>
 
-    <!-- ENCRYPTED DESTINATIONS, TODO 113.2.
-         Deliberately a card on this page rather than a twentieth tab. The
-         question it answers, "what is this machine actually talking to", is
-         the same question the two cards above answer from different vantage
-         points, and the owner has already said there are too many tabs whose
-         purpose is not obvious.
-
-         PORTED TO LINUX 2026-09-21, with the /api/tls route it reads. The
-         capture half was already here: adapters.LinuxPacketSniffer parses
-         every ClientHello the sniffer sees and tools/tls_hello.py writes the
-         row. This is the reading end of it. -->
-    <div class="card">
-      <div class="card-title">Encrypted Destinations</div>
-      <div class="card-note">
-        The <b>domain names</b> behind encrypted connections. Every TLS client says
-        which hostname it wants before encryption starts, in the clear, so this is
-        read from the handshake and <b>nothing is decrypted</b>. Until now this app
-        only ever had the IP address.
-        <br><br>
-        <b>Rows are combinations, not connections.</b> One row per device,
-        destination, name, fingerprint and process, with <b>Seen</b> counting the
-        repeats. <b>JA3</b> is a fingerprint of how the client said hello: the same
-        one under a second process name, or a new one from a process that has always
-        used one, is worth a look. On its own it is <b>not</b> a verdict.
-        <br><br>
-        <b>Read the coverage line before reading the list as complete.</b> A
-        handshake split across two packets cannot be parsed, and those destinations
-        are not here at all. The line says how many. This one needs the packet
-        capture running: unelevated, the card fills with nothing and the coverage
-        line is where that shows.
-      </div>
-      <div class="row" style="margin-bottom:12px;">
-        <input class="input" id="tls-filter" placeholder="filter by domain"
-               style="width:240px;" onkeyup="if(event.key==='Enter')loadTls()">
-        <button class="btn" onclick="loadTls()">Search</button>
-        <span id="tls-coverage" style="font-family:var(--mono);font-size:11px;"></span>
-      </div>
-      <table class="data-table" id="tls-table">
-        <thead><tr><th>Domain</th><th>Process</th><th>From</th><th>To</th>
-        <th>Port</th><th>ALPN</th><th>JA3</th><th>Seen</th><th>Last</th></tr></thead>
-        <tbody id="tls-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- THREAT MAP -->
-  <!-- INVENTORY
-       What is SUPPOSED to be here, as opposed to what happens to be here.
-
-       Kept as its own page rather than folded into Network, because the two
-       answer different questions and are wrong in different ways. Network is
-       what this host could reach at a moment in time. This is what the user
-       has declared about their own network, and how the declaration is
-       holding up. -->
-  <div class="page" id="page-inventory">
 
     <div class="card">
       <div class="card-title">Enrollment</div>
@@ -2123,7 +2053,7 @@
         Only the first is a number of devices you should act on.
         <br><br>
         <b>Only devices with a stable MAC address get listed here.</b> That's why
-        this tab can show fewer devices than the Network tab. The MAC address is
+        this card can show fewer devices than the device list above. The MAC address is
         what ties a row to one physical device over time, and some devices don't
         give us one we can trust:
         <ul style="margin:6px 0 0 18px;padding:0;">
@@ -2250,6 +2180,113 @@
       <div id="probe-status" style="font-family:var(--mono);font-size:12px;"></div>
     </div>
 
+    <div class="card">
+      <div class="card-title">Port Scan Results</div>
+      <div class="card-note">
+        <b>This scanner now does TCP and UDP.</b> Every host gets a TCP connect
+        pass over the port set you chose, and a UDP pass over a fixed list of
+        real UDP services with a proper request for each one: DNS, NTP, SNMP,
+        NetBIOS name service, SSDP, mDNS and LLMNR. Rows are tagged
+        <span class="k-amber">port/tcp</span> or
+        <span class="k-amber">port/udp</span> so a result always says which
+        question was asked.
+        <br><br>
+        <b>UDP has three answers and only one of them is "open".</b> A row here
+        means the port <b>replied</b>. An ICMP unreachable means nothing is
+        listening. <b>Silence means neither</b>: the service may be listening
+        and quiet, or filtered, or it wanted a payload we did not send. Silent
+        UDP ports are listed under the scan result as
+        <code>udp_no_answer</code> and are never shown as closed. A port
+        outside the UDP list was not asked about over UDP at all, and a full
+        UDP sweep is deliberately not offered: it is hours per host for answers
+        that would almost all be silence.
+        Open TCP ports found on the hosts you scan. Every scan is recorded, so a port
+        that stays open is observed many times; those repeats are <b>collapsed into one
+        row</b> here, with the sighting count beside the timestamp. Nothing is
+        deleted, tick <b>every scan</b> to see each observation on its own line.
+        Ports touched by the scan you just ran flash <span class="k-amber">amber</span>
+        for ten seconds, tagged <span class="k-amber">NEW</span> if this host has never
+        shown that port before, or <b>CONFIRMED</b> if it was already known.
+        <b>Scope</b> decides what a result means:
+        <span class="k-amber">self-scan</span> ran from this machine on itself, which
+        proves a service is listening but says nothing about who can reach it;
+        <span class="k-green">remote</span> ran across the network and does measure
+        reachability. Scanning a host outside your own network asks for approval first.
+      </div>
+      <div class="row" style="margin-bottom:14px;">
+        <!-- RFC 5737 documentation address, not a real one. A 10.x placeholder
+             presumes the user's LAN looks like the developer's. -->
+        <input class="input" id="scan-host" placeholder="192.0.2.10" style="width:160px;">
+        <!-- THE PORT SET IS HALF THE DECISION, so it is a control rather than
+             a sentence in a tool description. It used to be settable only by
+             the model, through the run_port_scan tool, which meant a person
+             pressing Scan Host always got whatever port_scan.default_set said
+             and could not see which one that was. The names and the cost of
+             each are read from the server, see loadPortSets. -->
+        <div class="pset" id="port-set-picker" title="Which ports this scan will probe. The cost of each is on its label.">
+          <div class="pset-opt" data-set="common"   onclick="setPortSet(this,'common')">common</div>
+          <div class="pset-opt" data-set="extended" onclick="setPortSet(this,'extended')">extended</div>
+          <div class="pset-opt" data-set="all"      onclick="setPortSet(this,'all')">all</div>
+          <span class="pset-count" id="port-set-count"></span>
+        </div>
+        <button class="btn primary" id="port-scan-btn" onclick="triggerPortScan()">Scan Host</button>
+        <span id="port-scan-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+        <label style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="ports-show-all" onchange="togglePortHistory()"
+                 style="accent-color:var(--green);cursor:pointer;">
+          every scan
+        </label>
+      </div>
+      <div id="ports-collapse-note" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
+      <table class="data-table">
+        <thead><tr><th>Port</th><th>Service</th><th>Risk</th><th>Scope</th><th>Host</th><th>Why</th><th>Scanned</th></tr></thead>
+        <tbody id="ports-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- ENCRYPTED DESTINATIONS, TODO 113.2.
+         Deliberately a card on this page rather than a twentieth tab. The
+         question it answers, "what is this machine actually talking to", is
+         the same question the two cards above answer from different vantage
+         points, and the owner has already said there are too many tabs whose
+         purpose is not obvious.
+
+         PORTED TO LINUX 2026-09-21, with the /api/tls route it reads. The
+         capture half was already here: adapters.LinuxPacketSniffer parses
+         every ClientHello the sniffer sees and tools/tls_hello.py writes the
+         row. This is the reading end of it. -->
+    <div class="card">
+      <div class="card-title">Encrypted Destinations</div>
+      <div class="card-note">
+        The <b>domain names</b> behind encrypted connections. Every TLS client says
+        which hostname it wants before encryption starts, in the clear, so this is
+        read from the handshake and <b>nothing is decrypted</b>. Until now this app
+        only ever had the IP address.
+        <br><br>
+        <b>Rows are combinations, not connections.</b> One row per device,
+        destination, name, fingerprint and process, with <b>Seen</b> counting the
+        repeats. <b>JA3</b> is a fingerprint of how the client said hello: the same
+        one under a second process name, or a new one from a process that has always
+        used one, is worth a look. On its own it is <b>not</b> a verdict.
+        <br><br>
+        <b>Read the coverage line before reading the list as complete.</b> A
+        handshake split across two packets cannot be parsed, and those destinations
+        are not here at all. The line says how many. This one needs the packet
+        capture running: unelevated, the card fills with nothing and the coverage
+        line is where that shows.
+      </div>
+      <div class="row" style="margin-bottom:12px;">
+        <input class="input" id="tls-filter" placeholder="filter by domain"
+               style="width:240px;" onkeyup="if(event.key==='Enter')loadTls()">
+        <button class="btn" onclick="loadTls()">Search</button>
+        <span id="tls-coverage" style="font-family:var(--mono);font-size:11px;"></span>
+      </div>
+      <table class="data-table" id="tls-table">
+        <thead><tr><th>Domain</th><th>Process</th><th>From</th><th>To</th>
+        <th>Port</th><th>ALPN</th><th>JA3</th><th>Seen</th><th>Last</th></tr></thead>
+        <tbody id="tls-tbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="page" id="page-map">
@@ -2288,8 +2325,8 @@
     </div>
   </div>
 
-  <!-- PORTS -->
-  <div class="page" id="page-processes">
+  <!-- THIS COMPUTER. Background apps, running processes, and listening ports. -->
+  <div class="page" id="page-computer">
     <details class="card" id="bg-apps-card" ontoggle="if (this.open) loadBgApps()">
       <summary style="cursor:pointer" class="card-title">Background apps you can switch off</summary>
       <div class="card-note">
@@ -2378,72 +2415,6 @@
         <tbody id="proc-rows"><tr><td colspan="6">Loading...</td></tr></tbody>
       </table>
     </div>
-  </div>
-
-  <div class="page" id="page-ports">
-    <div class="card">
-      <div class="card-title">Port Scan Results</div>
-      <div class="card-note">
-        <b>This scanner now does TCP and UDP.</b> Every host gets a TCP connect
-        pass over the port set you chose, and a UDP pass over a fixed list of
-        real UDP services with a proper request for each one: DNS, NTP, SNMP,
-        NetBIOS name service, SSDP, mDNS and LLMNR. Rows are tagged
-        <span class="k-amber">port/tcp</span> or
-        <span class="k-amber">port/udp</span> so a result always says which
-        question was asked.
-        <br><br>
-        <b>UDP has three answers and only one of them is "open".</b> A row here
-        means the port <b>replied</b>. An ICMP unreachable means nothing is
-        listening. <b>Silence means neither</b>: the service may be listening
-        and quiet, or filtered, or it wanted a payload we did not send. Silent
-        UDP ports are listed under the scan result as
-        <code>udp_no_answer</code> and are never shown as closed. A port
-        outside the UDP list was not asked about over UDP at all, and a full
-        UDP sweep is deliberately not offered: it is hours per host for answers
-        that would almost all be silence.
-        Open TCP ports found on the hosts you scan. Every scan is recorded, so a port
-        that stays open is observed many times; those repeats are <b>collapsed into one
-        row</b> here, with the sighting count beside the timestamp. Nothing is
-        deleted, tick <b>every scan</b> to see each observation on its own line.
-        Ports touched by the scan you just ran flash <span class="k-amber">amber</span>
-        for ten seconds, tagged <span class="k-amber">NEW</span> if this host has never
-        shown that port before, or <b>CONFIRMED</b> if it was already known.
-        <b>Scope</b> decides what a result means:
-        <span class="k-amber">self-scan</span> ran from this machine on itself, which
-        proves a service is listening but says nothing about who can reach it;
-        <span class="k-green">remote</span> ran across the network and does measure
-        reachability. Scanning a host outside your own network asks for approval first.
-      </div>
-      <div class="row" style="margin-bottom:14px;">
-        <!-- RFC 5737 documentation address, not a real one. A 10.x placeholder
-             presumes the user's LAN looks like the developer's. -->
-        <input class="input" id="scan-host" placeholder="192.0.2.10" style="width:160px;">
-        <!-- THE PORT SET IS HALF THE DECISION, so it is a control rather than
-             a sentence in a tool description. It used to be settable only by
-             the model, through the run_port_scan tool, which meant a person
-             pressing Scan Host always got whatever port_scan.default_set said
-             and could not see which one that was. The names and the cost of
-             each are read from the server, see loadPortSets. -->
-        <div class="pset" id="port-set-picker" title="Which ports this scan will probe. The cost of each is on its label.">
-          <div class="pset-opt" data-set="common"   onclick="setPortSet(this,'common')">common</div>
-          <div class="pset-opt" data-set="extended" onclick="setPortSet(this,'extended')">extended</div>
-          <div class="pset-opt" data-set="all"      onclick="setPortSet(this,'all')">all</div>
-          <span class="pset-count" id="port-set-count"></span>
-        </div>
-        <button class="btn primary" id="port-scan-btn" onclick="triggerPortScan()">Scan Host</button>
-        <span id="port-scan-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
-        <label style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="ports-show-all" onchange="togglePortHistory()"
-                 style="accent-color:var(--green);cursor:pointer;">
-          every scan
-        </label>
-      </div>
-      <div id="ports-collapse-note" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
-      <table class="data-table">
-        <thead><tr><th>Port</th><th>Service</th><th>Risk</th><th>Scope</th><th>Host</th><th>Why</th><th>Scanned</th></tr></thead>
-        <tbody id="ports-tbody"></tbody>
-      </table>
-    </div>
     <div class="card">
       <div class="card-title">What Is Listening On This Computer</div>
       <div class="card-note">
@@ -2489,8 +2460,8 @@
     </div>
   </div>
 
-  <!-- BEHAVIORAL -->
-  <div class="page" id="page-behavioral">
+  <!-- BASELINES. What is normal for each device, and how far it strays. -->
+  <div class="page" id="page-baselines">
     <div class="card">
       <div class="card-title">Behavioral Baselines</div>
       <div class="card-note" style="margin-bottom:12px;">
@@ -2516,6 +2487,40 @@
     <div class="card" style="margin-top:0;">
       <div class="card-title">Recent Deviations</div>
       <div id="deviations-list"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <span class="card-title" style="margin:0;">Traffic per device, per hour</span>
+        <select class="input" id="perf-hours" style="width:150px;" onchange="loadPerformance()">
+          <option value="24">Last 24 hours</option>
+          <option value="48">Last 2 days</option>
+          <option value="168">Last week</option>
+        </select>
+      </div>
+      <div class="perf-legend" id="perf-legend">
+        <span><i class="perf-key perf-normal"></i>usual for this device</span>
+        <span><i class="perf-key perf-high"></i>well above its normal</span>
+        <span><i class="perf-key perf-low"></i>well below its normal</span>
+        <span><i class="perf-key perf-unknown"></i>not enough history yet</span>
+        <!-- "the capture was down" was only half of what grey means, updated
+             on the Windows tree 2026-09-18 and ported here 2026-09-21: an hour
+             with no bucket written for it at all is grey too, and that is the
+             common case after a run that was killed rather than closed. The
+             same sentence is served in coverage_note. -->
+        <span><i class="perf-key perf-blind"></i>not measured, nobody was watching that hour</span>
+      </div>
+      <div id="perf-reading" class="finding-desc" style="margin:10px 0 16px;"></div>
+      <div class="perf-axis" id="perf-axis"></div>
+      <div id="perf-devices"></div>
+    </div>
+    <div class="card" style="margin-top:0;">
+      <div class="card-title">Not measured at all</div>
+      <div class="finding-desc" style="margin-bottom:10px;">
+        These are real performance signals this tool does not collect. They are
+        listed here rather than shown as zero, because a zero would read as a
+        perfect network.
+      </div>
+      <div id="perf-gaps"></div>
     </div>
   </div>
 
@@ -2588,6 +2593,47 @@
           <th style="width:230px;" title="Whether you switched this rule off. Muted rules raise no alerts for the address shown, or for every address.">Muted</th>
         </tr></thead>
         <tbody id="detection-rows"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Runbook / CISA KEV</div>
+      <!-- Two lines, because the table names three outside sources and a
+           reader who does not know them cannot tell what a row is claiming.
+           The second line is the important one: nothing here has looked at
+           this network. -->
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
+        CISA KEV is the US government's catalogue of CVEs known to have been exploited somewhere in the world. It publishes no severity, so the CVSS score on each row is fetched per CVE from NVD and CIRCL.<br>
+        None of those three has seen this network. A row here is a vulnerability that exists in the world, not a finding about your hosts.
+      </div>
+      <div class="row" style="margin-bottom:14px;">
+        <input class="input" id="runbook-search" placeholder="CVE ID, port, keyword..." style="width:240px;">
+        <select class="input" id="runbook-severity" style="width:130px;" onchange="searchRunbook()"
+                title="Show one severity. The rating is the fetched CVSS score when there is one, else the feed's own word.">
+          <option value="">Every severity</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="unrated">Unrated</option>
+        </select>
+        <button class="btn" onclick="searchRunbook()">Search</button>
+        <!-- The KEV sync used to run at boot and nowhere else, so refreshing
+             the mirror meant restarting the app. PORTED 2026-09-21 with the
+             /api/runbook/sync route, which had been landed with no way to
+             press it. -->
+        <button class="btn" id="runbook-sync-btn" onclick="syncRunbook()">Sync CISA KEV</button>
+        <!-- The feed carries no severity. The sync fetches CVSS for new rows
+             itself; this button runs the full pass, retries and rechecks. -->
+        <button class="btn" id="cvss-btn" onclick="startCvssBackfill()">Fetch CVSS</button>
+        <button class="btn" id="cvss-stop-btn" onclick="stopCvssBackfill()" style="display:none;">Stop</button>
+        <span id="runbook-sync-status" style="font-size:11px;color:var(--text-dim);"></span>
+      </div>
+      <div id="cvss-status" style="font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
+      <div id="runbook-count" class="card-note" style="margin:8px 0;"></div>
+      <table class="data-table">
+        <thead><tr><th>CVE</th><th>Product</th><th>Vulnerability</th><th>Severity</th><th>Ransomware</th><th>Due</th><th>Ports</th><th>Remediation</th></tr></thead>
+        <tbody id="runbook-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -2840,48 +2886,18 @@
     </div>
   </div>
 
-  <div class="page" id="page-performance">
+  <!-- INBOX. Everything waiting on your answer: actions first, then questions, then alerts nobody answered. -->
+  <div class="page" id="page-inbox">
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
-        <span class="card-title" style="margin:0;">Traffic per device, per hour</span>
-        <select class="input" id="perf-hours" style="width:150px;" onchange="loadPerformance()">
-          <option value="24">Last 24 hours</option>
-          <option value="48">Last 2 days</option>
-          <option value="168">Last week</option>
-        </select>
+        <span class="card-title" style="margin:0;">Actions waiting on your decision</span>
+        <button class="btn" onclick="loadActions()" title="Re-read the queue.">refresh</button>
       </div>
-      <div class="perf-legend" id="perf-legend">
-        <span><i class="perf-key perf-normal"></i>usual for this device</span>
-        <span><i class="perf-key perf-high"></i>well above its normal</span>
-        <span><i class="perf-key perf-low"></i>well below its normal</span>
-        <span><i class="perf-key perf-unknown"></i>not enough history yet</span>
-        <!-- "the capture was down" was only half of what grey means, updated
-             on the Windows tree 2026-09-18 and ported here 2026-09-21: an hour
-             with no bucket written for it at all is grey too, and that is the
-             common case after a run that was killed rather than closed. The
-             same sentence is served in coverage_note. -->
-        <span><i class="perf-key perf-blind"></i>not measured, nobody was watching that hour</span>
-      </div>
-      <div id="perf-reading" class="finding-desc" style="margin:10px 0 16px;"></div>
-      <div class="perf-axis" id="perf-axis"></div>
-      <div id="perf-devices"></div>
+      <div id="actions-pending"></div>
     </div>
-    <div class="card" style="margin-top:0;">
-      <div class="card-title">Not measured at all</div>
-      <div class="finding-desc" style="margin-bottom:10px;">
-        These are real performance signals this tool does not collect. They are
-        listed here rather than shown as zero, because a zero would read as a
-        perfect network.
-      </div>
-      <div id="perf-gaps"></div>
-    </div>
-  </div>
-
-  <!-- QUESTIONS. The one place the tool starts the conversation. -->
-  <div class="page" id="page-questions">
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
-        <span class="card-title" style="margin:0;">What it wants to ask you</span>
+        <span class="card-title" style="margin:0;">Questions it wants to ask you</span>
         <select class="input" id="question-filter" style="width:190px;" onchange="loadQuestions()">
           <option value="open">Waiting for you</option>
           <option value="">Everything</option>
@@ -2896,34 +2912,22 @@
     <div class="card" style="margin-top:0;">
       <div id="questions-list"></div>
     </div>
-  </div>
-
-  <!--
-       THE ACTION QUEUE, v36, T3.
-
-       This exists because of a specific thing the owner asked for: the agent
-       decides at 3am to block an IP and asks permission. Until T3 that was
-       impossible, because an approval card lived inside the chat stream that
-       produced it and died with the connection. Now the request is a row, the
-       card is rendered from the row, and a worker outside any chat turn runs
-       what the owner approves.
-
-       THE PAGE IS ORDERED BY WHAT ASKS SOMETHING OF THE OWNER. Pending first, then
-       the things that already ran or did not, and the executor's own health
-       at the bottom, a stopped worker is worth knowing and is not a
-       decision.
-  -->
-  <div class="page" id="page-actions">
-    <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:center;">
-        <span class="card-title" style="margin:0;">Waiting on your decision</span>
-        <button class="btn" onclick="loadActions()" title="Re-read the queue.">refresh</button>
+    <div class="card" style="margin-top:0;">
+      <div class="card-title">Unanswered Alerts</div>
+      <div style="color:var(--text-dim);font-size:12px;margin-bottom:14px;line-height:1.5;">
+        Deviations the silence timer closed as <code>unreviewed</code>. Nobody answered these.
+        Critical and high severity are never auto-baselined, they wait here.
       </div>
-      <div id="actions-pending"></div>
+      <div class="row" style="margin-bottom:10px;">
+        <label style="font-size:12px;color:var(--text-dim);">
+          <input type="checkbox" id="review-include-all" onchange="loadReviewQueue()"> Include low/medium severity
+        </label>
+      </div>
+      <div id="review-list"></div>
     </div>
 
     <div class="card" style="margin-top:0;">
-      <div class="card-title">Already run, or already refused</div>
+      <div class="card-title">Actions already run, or already refused</div>
       <div class="stat-grid" id="action-tiles" style="margin-top:12px;"></div>
       <div id="action-reading" class="finding-desc" style="margin-top:10px;"></div>
       <div class="row" style="margin:12px 0;">
@@ -3174,19 +3178,6 @@
       </table>
     </div>
 
-    <div class="card" style="margin-top:0;">
-      <div class="card-title">Unanswered Alerts</div>
-      <div style="color:var(--text-dim);font-size:12px;margin-bottom:14px;line-height:1.5;">
-        Deviations the silence timer closed as <code>unreviewed</code>. Nobody answered these.
-        Critical and high severity are never auto-baselined, they wait here.
-      </div>
-      <div class="row" style="margin-bottom:10px;">
-        <label style="font-size:12px;color:var(--text-dim);">
-          <input type="checkbox" id="review-include-all" onchange="loadReviewQueue()"> Include low/medium severity
-        </label>
-      </div>
-      <div id="review-list"></div>
-    </div>
 
     <!-- INTEGRITY. Section 17 built the chain and nothing surfaced it. -->
     <div class="card" style="margin-top:0;">
@@ -3214,28 +3205,6 @@
       <div id="integrity-detail" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.6;"></div>
     </div>
 
-    <!-- RETENTION. Section 32. Read-only on purpose, see the note. -->
-    <div class="card" style="margin-top:0;">
-      <div class="card-title">Database Size</div>
-      <div style="color:var(--text-dim);font-size:12px;margin-bottom:14px;line-height:1.5;">
-        The packet record is nearly all of this file and it grows for as long
-        as the app runs. When it passes the budget, the oldest
-        <b>whole capture runs</b> are deleted at the next clean shutdown,
-        oldest first, never part of a run.
-        <br><br>
-        The behavioural baselines are <b>never</b> pruned. What a prune costs
-        you is the raw evidence behind a measurement, not the measurement.
-        <br><br>
-        <b>There is no prune button here, deliberately.</b> Deletion is the
-        only thing in this application that cannot be undone, so it does not
-        get a one-click home on the same page as everything else. To prune
-        now, stop the app and run <code>python scripts/prune_db.py</code>,
-        which shows you the plan before it touches anything.
-      </div>
-      <div id="retention-summary" style="font-family:var(--mono);font-size:12px;line-height:1.7;margin-bottom:12px;"></div>
-      <div class="row" id="retention-buttons" style="flex-wrap:wrap;"></div>
-      <div id="retention-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:10px;"></div>
-    </div>
 
     <!-- EXPECTED PORTS. TODO 39.5. The button 39 said it owed. -->
     <div class="card" style="margin-top:0;">
@@ -3270,50 +3239,6 @@
     </div>
   </div>
 
-  <!-- RUNBOOK -->
-  <div class="page" id="page-runbook">
-    <div class="card">
-      <div class="card-title">Runbook / CISA KEV</div>
-      <!-- Two lines, because the table names three outside sources and a
-           reader who does not know them cannot tell what a row is claiming.
-           The second line is the important one: nothing here has looked at
-           this network. -->
-      <div style="font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
-        CISA KEV is the US government's catalogue of CVEs known to have been exploited somewhere in the world. It publishes no severity, so the CVSS score on each row is fetched per CVE from NVD and CIRCL.<br>
-        None of those three has seen this network. A row here is a vulnerability that exists in the world, not a finding about your hosts.
-      </div>
-      <div class="row" style="margin-bottom:14px;">
-        <input class="input" id="runbook-search" placeholder="CVE ID, port, keyword..." style="width:240px;">
-        <select class="input" id="runbook-severity" style="width:130px;" onchange="searchRunbook()"
-                title="Show one severity. The rating is the fetched CVSS score when there is one, else the feed's own word.">
-          <option value="">Every severity</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-          <option value="unrated">Unrated</option>
-        </select>
-        <button class="btn" onclick="searchRunbook()">Search</button>
-        <!-- The KEV sync used to run at boot and nowhere else, so refreshing
-             the mirror meant restarting the app. PORTED 2026-09-21 with the
-             /api/runbook/sync route, which had been landed with no way to
-             press it. -->
-        <button class="btn" id="runbook-sync-btn" onclick="syncRunbook()">Sync CISA KEV</button>
-        <!-- The feed carries no severity. The sync fetches CVSS for new rows
-             itself; this button runs the full pass, retries and rechecks. -->
-        <button class="btn" id="cvss-btn" onclick="startCvssBackfill()">Fetch CVSS</button>
-        <button class="btn" id="cvss-stop-btn" onclick="stopCvssBackfill()" style="display:none;">Stop</button>
-        <span id="runbook-sync-status" style="font-size:11px;color:var(--text-dim);"></span>
-      </div>
-      <div id="cvss-status" style="font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
-      <div id="runbook-count" class="card-note" style="margin:8px 0;"></div>
-      <table class="data-table">
-        <thead><tr><th>CVE</th><th>Product</th><th>Vulnerability</th><th>Severity</th><th>Ransomware</th><th>Due</th><th>Ports</th><th>Remediation</th></tr></thead>
-        <tbody id="runbook-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- SETTINGS. TODO 2.3 + 8.5.
        A PANEL, NOT A WIZARD, and the argument is worth keeping: a wizard is a
        screen somebody sees once, while they know least about the tool, and
@@ -3340,6 +3265,29 @@
         <button class="btn" onclick="stopApp()">Stop AgentalSec</button>
         <span id="shutdown-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
+    </div>
+
+    <!-- RETENTION. Section 32. Read-only on purpose, see the note. -->
+    <div class="card" style="margin-top:0;">
+      <div class="card-title">Database Size</div>
+      <div style="color:var(--text-dim);font-size:12px;margin-bottom:14px;line-height:1.5;">
+        The packet record is nearly all of this file and it grows for as long
+        as the app runs. When it passes the budget, the oldest
+        <b>whole capture runs</b> are deleted at the next clean shutdown,
+        oldest first, never part of a run.
+        <br><br>
+        The behavioural baselines are <b>never</b> pruned. What a prune costs
+        you is the raw evidence behind a measurement, not the measurement.
+        <br><br>
+        <b>There is no prune button here, deliberately.</b> Deletion is the
+        only thing in this application that cannot be undone, so it does not
+        get a one-click home on the same page as everything else. To prune
+        now, stop the app and run <code>python scripts/prune_db.py</code>,
+        which shows you the plan before it touches anything.
+      </div>
+      <div id="retention-summary" style="font-family:var(--mono);font-size:12px;line-height:1.7;margin-bottom:12px;"></div>
+      <div class="row" id="retention-buttons" style="flex-wrap:wrap;"></div>
+      <div id="retention-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:10px;"></div>
     </div>
 
     <div class="card" style="margin-top:0;">
@@ -3569,24 +3517,19 @@ function loadPage(name) {
   if (name === 'dashboard')  { _srcCatalog = null; loadDashboard(); }
   if (name === 'alerts')     { loadFindings(); loadImportant(); }
   if (name === 'timeline')   loadTimeline();
-  if (name === 'network')    { loadDevices(); refreshRouter(); loadTls(); }
-  if (name === 'inventory')  loadInventory();
+  if (name === 'devices')    { loadDevices(); refreshRouter(); loadInventory();
+                               loadPorts(); loadPortSets(); loadTls(); }
   if (name === 'map')        loadThreatMap();
   if (name === 'lan')        startLanLive(); else stopLanLive();
-  if (name === 'ports')      { loadPorts(); loadPortSets(); loadListeners(); }
-  if (name === 'processes')  loadProcesses();
-  if (name === 'behavioral') { loadBaselines(); loadDeviations(); }
+  if (name === 'computer')   { loadProcesses(); loadListeners(); }
+  if (name === 'baselines')  { loadBaselines(); loadDeviations(); loadPerformance(); }
   if (name === 'predictions') { loadExpectations(); loadFalseAlarms(); loadTrials(); loadPredictionScore(); loadPredictions(); }
-  if (name === 'detections') loadDetections();
-  if (name === 'performance') loadPerformance();
-  if (name === 'questions')   loadQuestions();
-  if (name === 'actions')     loadActions();
+  if (name === 'detections') { loadDetections(); searchRunbook(); refreshCvssStatus(false); }
+  if (name === 'inbox')      { loadActions(); loadQuestions(); loadReviewQueue(); }
   if (name === 'agents')      { loadAgents(); loadDailyReports(); }
   if (name === 'review')     { loadBlindingBudget(); loadDismissed(); loadSuppressions();
-                               loadReviewQueue(); loadIntegrity(); loadRetention();
-                               loadExpectedPorts(); }
-  if (name === 'runbook')  { searchRunbook(); refreshCvssStatus(false); }
-  if (name === 'settings')   return loadSettings();
+                               loadIntegrity(); loadExpectedPorts(); }
+  if (name === 'settings')   { loadRetention(); return loadSettings(); }
 }
 
 // POLLING
@@ -3596,14 +3539,16 @@ function startPolling() {
     await updateStatusPills();
     if (currentPage === 'alerts')    { loadFindings(); loadImportant(); }
     if (currentPage === 'dashboard') loadDashboard();
-    if (currentPage === 'actions')   loadActions();
+    if (currentPage === 'inbox')     loadActions();
     checkQuestionPopup();
     refreshActionBadge();
+    refreshAlertBadge();
   }, 8000);
   updateStatusPills();
   refreshModelInfo();
   refreshQuestionBadge();
   refreshActionBadge();
+  refreshAlertBadge();
 }
 
 async function updateStatusPills() {
@@ -4890,7 +4835,7 @@ const DEVICE_TYPES = ['', 'router', 'laptop', 'desktop', 'phone', 'tablet',
 let _flashDevicesOnNextRender = false;
 let _newDeviceIps = new Set();
 
-// Identity column: which group a row's MAC puts it in (see the Inventory tab).
+// Identity column: which group a row's MAC puts it in (see Enrollment on the Devices tab).
 const IDENTITY_LABELS = {
   stable_host:         ['stable MAC',     'k-green'],
   transient_client:    ['randomized MAC', 'k-amber'],
@@ -4932,7 +4877,7 @@ async function loadDevices() {
     const rows = showRetired ? current : current.filter(d => !d.retired_at);
 
     const byClass = cls => current.filter(d => !d.retired_at && d.identity_class === cls).length;
-    const parts = [`${byClass('stable_host')} stable MAC (on the Inventory tab)`,
+    const parts = [`${byClass('stable_host')} stable MAC (in Enrollment below)`,
                    `${byClass('transient_client')} randomized MAC`,
                    `${byClass('no_hardware_address')} no MAC`];
     if (byClass('unreadable_mac')) parts.push(`${byClass('unreadable_mac')} unreadable MAC`);
@@ -5388,7 +5333,7 @@ const SEV_COLOR = {
   // says when the findings query FAILED, and it has to be visible rather than
   // dropped: a dot drawn in a severity colour that is missing from the legend
   // is a dot the reader will assign a meaning to themselves. Grey, because grey
-  // is already this app's word for "nothing could be read" on the Processes
+  // is already this app's word for "nothing could be read" on the This Computer
   // page, and the legend prints the reason as words beside it.
   unknown:  '#6b7683',
 };
@@ -5704,7 +5649,7 @@ async function nameDevice(ip) {
   if (!known_as) return;
   const r = await fetch('/api/devices/label', {
     method: 'POST', headers: authHeaders(),
-    body: JSON.stringify({ ip, known_as, evidence: 'Named by the user from the Inventory tab.' })
+    body: JSON.stringify({ ip, known_as, evidence: 'Named by the user from the Devices tab.' })
   }).then(r => r.json());
   document.getElementById('enrollment-status').textContent =
     r.success === false ? ('Refused: ' + (r.error || '')) : `${ip} named.`;
@@ -7144,7 +7089,7 @@ async function checkQuestionPopup() {
       appendSystemNote((qs.length === 1 ? 'It has a question for you: '
                         : 'It has ' + qs.length + ' questions for you: ')
         + qs.slice(0, 3).map(q => q.question).join(' ')
-        + ' Answer on the Questions tab, or tell it here.');
+        + ' Answer in the Inbox, or tell it here.');
       fetch('/api/questions/shown-in-chat', {
         method: 'POST',
         headers: Object.assign({'Content-Type':'application/json'}, authHeaders()),
@@ -7180,45 +7125,45 @@ async function checkQuestionPopup() {
       + (n > 3 ? ' and more' : '');
 
     const actLine = document.getElementById('qp-actions');
-    const actBtn  = document.getElementById('qp-agent-btn');
     if (actLine) {
       actLine.textContent = acts
         ? (acts + ' action' + (acts === 1 ? '' : 's') + ' waiting for your '
-           + 'decision on the Actions tab. Nothing has been done.')
+           + 'decision in the Inbox. Nothing has been done.')
         : '';
       actLine.style.display = acts ? '' : 'none';
     }
-    if (actBtn) actBtn.style.display = acts ? '' : 'none';
 
     document.getElementById('question-popup').style.display = 'block';
     questionPopupOpen = true;
   } catch(e) {}
 }
 
-function goToQuestions() {
+function goToInbox() {
   dismissQuestionPopup();
-  showPage('questions');
-}
-
-function goToActions() {
-  dismissQuestionPopup();
-  showPage('actions');
+  showPage('inbox');
 }
 
 // Closing it does NOT re-queue the question. The owner was shown it, the clock is
-// running, and it waits on the Questions tab. Putting it back in the popup
+// running, and it waits in the Inbox. Putting it back in the popup
 // queue is how a doorbell becomes a nag.
 function dismissQuestionPopup() {
   document.getElementById('question-popup').style.display = 'none';
   questionPopupOpen = false;
 }
 
-function setQuestionBadge(n) {
-  const badge = document.getElementById('questions-badge');
+// The Inbox badge adds up questions, actions and serious unanswered alerts.
+const inboxCounts = { questions: 0, actions: 0, alerts: 0 };
+
+function setInboxCount(kind, n) {
+  inboxCounts[kind] = n || 0;
+  const total = inboxCounts.questions + inboxCounts.actions + inboxCounts.alerts;
+  const badge = document.getElementById('inbox-badge');
   if (!badge) return;
-  badge.textContent = n;
-  badge.style.display = n > 0 ? '' : 'none';
+  badge.textContent = total;
+  badge.style.display = total > 0 ? '' : 'none';
 }
+
+function setQuestionBadge(n) { setInboxCount('questions', n); }
 
 async function refreshQuestionBadge() {
   try {
@@ -7500,12 +7445,7 @@ function renderExecutorState(st) {
   el.innerHTML = lines.join('<br>');
 }
 
-function setActionBadge(n) {
-  const badge = document.getElementById('actions-badge');
-  if (!badge) return;
-  badge.textContent = n;
-  badge.style.display = n > 0 ? '' : 'none';
-}
+function setActionBadge(n) { setInboxCount('actions', n); }
 
 async function refreshActionBadge() {
   try {
@@ -9944,18 +9884,24 @@ async function saveConfigField(path, type) {
   } catch (e) { st.textContent = 'Could not save: ' + e; }
 }
 
+function countSeriousAlerts(rows) {
+  return rows.filter(r => r.severity === 'critical' || r.severity === 'high').length;
+}
+
+async function refreshAlertBadge() {
+  try {
+    const rows = await fetch('/api/review-queue?include_all=false',
+      { headers: authHeaders() }).then(r => r.json());
+    if (Array.isArray(rows)) setInboxCount('alerts', countSeriousAlerts(rows));
+  } catch (e) {}
+}
+
 async function loadReviewQueue() {
   const includeAll = document.getElementById('review-include-all').checked;
   try {
     const rows = await fetch(`/api/review-queue?include_all=${includeAll}`, { headers: authHeaders() }).then(r=>r.json());
     const el   = document.getElementById('review-list');
-    const badge = document.getElementById('review-badge');
-
-    if (badge) {
-      const critical = rows.filter(r => r.severity === 'critical' || r.severity === 'high').length;
-      badge.style.display = critical ? 'inline-block' : 'none';
-      badge.textContent   = critical;
-    }
+    setInboxCount('alerts', countSeriousAlerts(rows));
 
     if (!rows.length) {
       el.innerHTML = '<div class="empty-state">Nothing unanswered. Every alert has been resolved.</div>';

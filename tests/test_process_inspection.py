@@ -207,7 +207,7 @@ check("and the deep look is its own call, on demand",
       "/api/processes/inspect" in routes_src, True)
 
 ui_src = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
-check("there is a Processes tab", 'data-page="processes"' in ui_src, True)
+check("there is a This Computer tab", 'data-page="computer"' in ui_src, True)
 check("with a coloured bar", "trust-bar" in ui_src, True)
 check("green does not claim the behaviour is fine",
       "signed software gets abused" in ui_src, True)

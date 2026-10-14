@@ -257,7 +257,7 @@ class Runbook:
         it needs saying out loud rather than a colour.
 
         THE NOTE USED TO ASSERT AN EMPTY TABLE IT HAD NOT LOOKED AT.
-        "the Runbook tab is showing the static entries only" is about the
+        "the Detections tab is showing the static entries only" is about the
         TABLE, and _synced is about THIS RUN: MEASURED 2026-09-27 against the
         operator's own store, _synced False -- a boot that could not sync, or a
         status() answered before any sync -- printed that sentence over 1,726
@@ -279,7 +279,7 @@ class Runbook:
                     f"on that tab refreshes them.")
         else:
             note = ("The CISA KEV mirror has NOT synced this run and the table "
-                    "holds no KEV entries, so the Runbook tab is showing the "
+                    "holds no KEV entries, so the Detections tab is showing the "
                     "static entries only. Sync CISA KEV on that tab fills it.")
         return {"ready": True, "cisa_kev_synced": self._synced,
                 "kev_rows": kept, "note": note}

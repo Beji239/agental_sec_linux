@@ -98,11 +98,11 @@ of hosts outside your own network need approval; scans of your own network do
 not.
 
 **How approval works.** The analyst files a request. It appears as a card in
-the chat and on the Actions tab, and as a desktop notification
+the chat and in the Inbox, and as a desktop notification
 (`action_queue.notify`). You approve or deny. An approved request is carried
 out once by the executor, a worker outside any chat, so an approval still
 holds if you close the tab. A card nobody answers expires after ten days
-(`action_queue.expiry_days`). The Actions tab keeps the full record.
+(`action_queue.expiry_days`). The Inbox keeps the full record.
 
 Firewall changes and ending processes need root. Run the privileged launcher,
 or install the root action helper (see [SETUP.md](../SETUP.md)) so the app
@@ -139,7 +139,7 @@ records why once, and waits until the budget allows work again instead of
 retrying every minute. In an investigation, long tool results are capped and
 results from earlier rounds are shortened, because every call resends the
 whole conversation. It works with a smaller set of mostly read-only tools, and
-anything that would change your system becomes a request on the Actions tab,
+anything that would change your system becomes a request in the Inbox,
 exactly as in the chat. Every change still goes through you. Its reports,
 and every wake-up including the ones that found nothing to do, are on the
 Agents tab. Reports and wake-up lines are deleted after one week; tick any of
@@ -165,7 +165,7 @@ apart from the Chat tab.
 - **Three kinds of knowledge.** Measured, looked up and worked out are kept
   apart in answers and in the dashboard's colours.
 - **It asks you.** When it needs something only you know, it files a question
-  on the Questions tab instead of guessing. Unanswered questions retire, they
+  in the Inbox instead of guessing. Unanswered questions retire, they
   are never treated as yes.
 - **It no longer guesses on its own.** It used to make predictions with
   deadlines for the app to grade. The app now sets and checks its own
@@ -185,7 +185,7 @@ apart from the Chat tab.
 
 - **Ask neutrally.** "What is 192.0.2.10?" gets a better answer than "that is
   my printer, right?". The analyst tends to agree with what you assert.
-- **Name devices you own** on the Inventory tab instead of telling the chat.
+- **Name devices you own** on the Devices tab instead of telling the chat.
   A label there is the strongest evidence the app holds, and it stops the
   analyst re-guessing every session.
 - **Ask about one thing at a time** when a wide question hits the context

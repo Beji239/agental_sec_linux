@@ -230,7 +230,7 @@ remote Linux hosts over SSH are described in [ROUTER.md](ROUTER.md).
   NVD rate limit (`AGENTAL_NVD_API_KEY`). A blank key turns that source off,
   and it is listed as off.
 - **CISA KEV.** The known exploited vulnerabilities catalogue, with CVSS
-  scores from NVD and CIRCL, on the Runbook tab.
+  scores from NVD and CIRCL, on the Detections tab.
 
 ## When a sensor goes quiet
 

@@ -335,7 +335,7 @@ class CvssBackfill:
         c = snap.get("waiting") or {}
         if not c:
             return (f"Not running. {remaining} KEV row(s) are due a lookup. "
-                    f"Fetch CVSS on the Runbook tab starts it.")
+                    f"Fetch CVSS on the Detections tab starts it.")
         parts = []
         if c.get("never_checked"):
             parts.append(f"{c['never_checked']} KEV row(s) have never been "
@@ -346,7 +346,7 @@ class CvssBackfill:
             parts.append(f"{c['recheck']} checked row(s) are due a recheck "
                          f"and keep their current answer until then")
         return ("Not running. " + "; ".join(parts)
-                + ". Fetch CVSS on the Runbook tab starts it.")
+                + ". Fetch CVSS on the Detections tab starts it.")
 
     def _rate_note(self, remaining: int = None) -> str:
         """

@@ -802,7 +802,7 @@ def register_routes(app):
         from tools import background_actions_linux as bx
         out = bx.apply(body.get("action"), body.get("owner_kind"),
                        body.get("owner_name"),
-                       reason=(body.get("reason") or "pressed on the Processes tab"),
+                       reason=(body.get("reason") or "pressed on the This Computer tab"),
                        requested_by="user")
         return jsonify(out), (200 if out.get("ok") else 409)
 
@@ -812,7 +812,7 @@ def register_routes(app):
         body = request.get_json(silent=True) or {}
         from tools import background_actions_linux as bx
         out = bx.undo(body.get("change_id"),
-                      reason=(body.get("reason") or "pressed Undo on the Processes tab"))
+                      reason=(body.get("reason") or "pressed Undo on the This Computer tab"))
         return jsonify(out), (200 if out.get("ok") else 409)
 
     @app.route("/api/background_apps/changes")

@@ -1079,7 +1079,7 @@ def render(f: dict, a: dict) -> str:
         for d in st["decide"]:
             if "title" in d:
                 p = d.get("pending")
-                options = (f"Approve or deny the waiting card on the Actions tab: "
+                options = (f"Approve or deny the waiting card in the Inbox: "
                            f"{p['verb'].replace('_', ' ')} {p['target']}."
                            if p else "Dismiss it on the Incidents tab if it is "
                            "expected, or ask the agent about it.")
@@ -1096,7 +1096,7 @@ def render(f: dict, a: dict) -> str:
                 add(f'<div class="card amber"><h3>Waiting card: {_e(d["verb"])} '
                     f'{_e(d["target"])}</h3><div class="kv"><div>Filed</div>'
                     f"<div>{_e(_hm(d['at'], day))}</div><div>Your options</div>"
-                    f"<div>Approve or deny it on the Actions tab.</div></div></div>\n")
+                    f"<div>Approve or deny it in the Inbox.</div></div></div>\n")
 
     add("<h2>Coverage: how much of the day was watched</h2>\n")
     add(_bar(f))

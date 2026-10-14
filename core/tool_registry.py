@@ -299,7 +299,7 @@ TOOL_MANIFEST = [
             "all_sessions=true to search every scan this app has ever "
             "recorded, which is where a port found before the last restart "
             "lives. Every row carries when it was scanned, so read that "
-            "before saying when a port was seen. The Ports tab on the "
+            "before saying when a port was seen. The Devices tab on the "
             "dashboard always shows the whole stored record.\n\n"
             "EVERY ROW IS TCP OR UDP, read from the row's own protocol column. "
             "Rows recorded before 2026-09-15 read 'tcp' because the connect "
@@ -3180,7 +3180,7 @@ TOOL_MANIFEST = [
         "name": "undo_background_change",
         "description": (
             "Put back one block or disable, by the change id shown on the "
-            "Processes tab. ALWAYS goes through the approval card. Every "
+            "This Computer tab. ALWAYS goes through the approval card. Every "
             "setting goes back to what it was before the change."
         ),
         "input_schema": {

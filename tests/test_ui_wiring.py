@@ -195,7 +195,9 @@ print("\n[9] the new panels are actually loaded when the tab opens")
 review_hook = re.search(r"if \(name === 'review'\)\s*\{([^}]*)\}", UI)
 body = review_hook.group(1) if review_hook else ""
 check("review tab loads integrity", "loadIntegrity()" in body, True)
-check("review tab loads retention", "loadRetention()" in body, True)
+settings_hook = re.search(r"if \(name === 'settings'\)\s*\{([^}]*)\}", UI)
+check("settings tab loads retention",
+      "loadRetention()" in (settings_hook.group(1) if settings_hook else ""), True)
 
 
 print("\n[10] the page is still valid enough to parse")
