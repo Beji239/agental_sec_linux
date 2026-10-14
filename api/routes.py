@@ -225,6 +225,15 @@ def _int_arg(name: str, default: int, low: int = 1, high: int = 1000) -> int:
 MAX_CHAT_CHARS = 16000
 
 
+def _operator_name() -> str:
+    """The name set under Settings, What to call you. Blank when unset."""
+    try:
+        from core import settings as st
+        return st.display_name()
+    except Exception:
+        return ""
+
+
 def register_routes(app):
 
     # A bad value in a query string is the caller's mistake, so say so with a
@@ -542,6 +551,8 @@ def register_routes(app):
                 agent_loop.api_style()),
             "modules":       module_status,
             "module_settings": module_settings,
+            # What the operator asked to be called, for the chat avatar.
+            "operator_name": _operator_name(),
         })
 
     @app.route("/api/chat", methods=["POST"])

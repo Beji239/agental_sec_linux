@@ -3640,6 +3640,9 @@ async function updateStatusPills() {
     }
 
     updateModuleGrid(d.modules || {}, d.module_settings || {});
+    if (typeof d.operator_name === 'string' && d.operator_name !== operatorName) {
+      setOperatorName(d.operator_name);
+    }
   } catch(e) {}
   refreshSensorWatch();
 }
@@ -9773,6 +9776,7 @@ async function saveDisplayName() {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ name: val })
     }).then(r => r.json());
+    if (d.ok) setOperatorName(d.value);
     st.textContent = d.ok
       ? (d.value ? `The analyst will call you ${d.value}.` : 'Cleared.')
       : ('Refused: ' + (d.reason || ''));
@@ -10327,12 +10331,29 @@ async function sendMessage() {
   scrollChat();
 }
 
+// What the operator asked to be called (Settings), shown on their chat bubbles.
+let operatorName = '';
+
+function operatorInitials() {
+  const words = operatorName.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return 'You';
+  return words.slice(0, 2).map(w => Array.from(w)[0]).join('').toUpperCase();
+}
+
+function setOperatorName(name) {
+  operatorName = name || '';
+  document.querySelectorAll('.msg.user .msg-avatar').forEach(a => {
+    a.textContent = operatorInitials();
+    a.title = operatorName || 'You';
+  });
+}
+
 function appendMsg(role, text) {
   const wrap = document.getElementById('chat-messages');
   const div  = document.createElement('div');
   div.className = 'msg ' + role;
   div.innerHTML = `
-    <div class="msg-avatar">${role === 'user' ? 'B' : 'AS'}</div>
+    <div class="msg-avatar" title="${role === 'user' ? esc(operatorName || 'You') : 'AgentalSec'}">${role === 'user' ? esc(operatorInitials()) : 'AS'}</div>
     <div class="msg-body">${esc(text)}</div>`;
   wrap.appendChild(div);
   scrollChat();

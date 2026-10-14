@@ -677,5 +677,12 @@ check("process_table returns findings_read", '"findings_read": findings_read' in
 check("and a note to go with it", '"findings_note"' in PROC, True)
 
 
+print("\n[23] the chat avatar uses the name from Settings, not a fixed letter")
+check("the avatar is not a fixed letter", "role === 'user' ? 'B'" in UI, False)
+check("it is drawn from the saved name", "esc(operatorInitials())" in UI, True)
+check("the status route carries the name", '"operator_name": _operator_name()' in ROUTES, True)
+check("and the page reads it", "d.operator_name" in UI, True)
+
+
 print("\n" + ("ALL PASS" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)
