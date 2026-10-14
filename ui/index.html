@@ -8609,6 +8609,12 @@ function renderExpTickets(list) {
     const seen = e.broken_at && !(e.acknowledged_at && e.acknowledged_at >= e.broken_at);
     const ack = seen
       ? `<button class="btn" style="margin-top:8px;" onclick="ackExpectation(${Number(e.id)})">I have seen this</button>` : '';
+    // A second DHCP server after a router swap: the owner can trust the new one.
+    const dhcp = e.kind === 'same_gateway' && e.state === 'broken'
+      ? [...new Set(((e.evidence || {}).findings || [])
+          .filter(f => f.detection_id === 'LAN-1003').map(f => String(f.entity_value)))]
+        .map(ip => `<button class="btn" style="margin-top:8px;" data-dhcp="${esc(ip)}">This is my router, trust ${esc(ip)}</button>`).join(' ')
+      : '';
     const held = (e.history || []).length
       ? Math.round(f * 100) + '% of checks held in the last week. ' : '';
     return `<div class="exp-ticket st-${esc(e.state)}">`
@@ -8617,8 +8623,26 @@ function renderExpTickets(list) {
       + `<div class="exp-ticket-state" style="color:${c}">${esc(EXP_WORD[e.state] || e.state)}</div>`
       + `<div class="exp-ticket-detail">${esc(e.detail || '')}</div>`
       + `<div class="exp-ticket-meta">${held}Watched since ${esc(fmtTime(e.since))}.`
-      + `${e.broken_at ? ' Broke at ' + esc(fmtTime(e.broken_at)) + '.' : ''}</div>${ack}</div></div>`;
+      + `${e.broken_at ? ' Broke at ' + esc(fmtTime(e.broken_at)) + '.' : ''}</div>${ack}${dhcp}</div></div>`;
   }).join('');
+  box.onclick = ev => {
+    const ip = ev.target.getAttribute && ev.target.getAttribute('data-dhcp');
+    if (ip) acceptDhcpServer(ip);
+  };
+}
+
+async function acceptDhcpServer(ip) {
+  if (!confirm(`Trust ${ip} as the only DHCP server on this network? Do this only if `
+      + `${ip} is your own router, for example after you replaced the old one. Any `
+      + `other DHCP server will raise an alarm again.`)) return;
+  try {
+    const r = await fetch('/api/lan/dhcp-server/accept/' + encodeURIComponent(ip),
+                          { method: 'POST', headers: authHeaders() }).then(x => x.json());
+    if (!r.accepted) alert('Not changed: ' + (r.reason || r.error || 'no answer'));
+  } catch (e) {
+    alert('That did not reach the app, so nothing changed.');
+  }
+  loadExpectations();
 }
 
 

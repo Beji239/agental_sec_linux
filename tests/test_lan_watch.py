@@ -680,6 +680,24 @@ def test_accepting_a_dhcp_server_silences_it(monkeypatch):
     assert w.observe_dhcp_server("192.0.2.18", "ack", now=20) == []
 
 
+def test_a_swapped_router_replaces_the_old_dhcp_server(monkeypatch):
+    """After a router swap the new one is the only known server; the old one
+    answering again would be a second server."""
+    w = _w()
+    monkeypatch.setattr(w, "_save_dhcp_servers", lambda: None)
+    w.observe_dhcp_server("198.51.100.1", "offer", now=0)
+    assert w.observe_dhcp_server("192.0.2.1", "ack", now=10)
+    res = w.accept_dhcp_server("192.0.2.1", replace=True)
+    assert res["accepted"] is True and res["forgotten"] == ["198.51.100.1"]
+    assert w.status()["dhcp_servers"] == ["192.0.2.1"]
+    assert w.observe_dhcp_server("192.0.2.1", "ack", now=20) == []
+    assert w.observe_dhcp_server("198.51.100.1", "offer", now=30)
+
+
+def test_accepting_a_dhcp_server_that_is_not_an_address_is_refused():
+    assert _w().accept_dhcp_server("192.0.2.1; id")["accepted"] is False
+
+
 def test_a_first_dhcp_server_that_is_not_the_gateway_is_flagged(monkeypatch):
     """
     The first-run hole. If the app starts while a rogue is answering, that

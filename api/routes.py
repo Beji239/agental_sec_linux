@@ -2338,6 +2338,21 @@ def register_routes(app):
         out = expectations.acknowledge(exp_id)
         return jsonify(out), (200 if out["success"] else 404)
 
+    # A router swap: the owner trusts the new DHCP server, from the page only.
+    # The model gets no tool for this, same as the gateway MAC.
+
+    @app.route("/api/lan/dhcp-server/accept/<server_ip>", methods=["POST"])
+    @require_api_key
+    def lan_dhcp_server_accept(server_ip):
+        from core import expectations
+        from tools import lan_watch
+        watcher = lan_watch.active() or lan_watch.LanWatch(load_baselines=True)
+        out = watcher.accept_dhcp_server(str(server_ip), replace=True)
+        if out.get("accepted"):
+            out["expectation_seen"] = expectations.acknowledge_kind(
+                "same_gateway").get("success", False)
+        return jsonify(out), (200 if out.get("accepted") else 400)
+
     # Rule trials: a written fix for a noisy rule, tried for two weeks.
 
     @app.route("/api/expectations/trials")

@@ -51,7 +51,20 @@ except ImportError:
     logger.warning("cryptography not available, .env values will be plain text")
 
 
-def _get_machine_key() -> bytes:
+def _account() -> str:
+    """The person the key belongs to. Under sudo that is whoever ran sudo
+    (SUDO_UID), not root, so a key saved from the privileged launcher still
+    opens in a normal run."""
+    import pwd
+    uid = os.getuid()
+    if uid == 0:
+        raw = os.environ.get("SUDO_UID") or os.environ.get("PKEXEC_UID") or ""
+        if raw.isdigit():
+            uid = int(raw)
+    return pwd.getpwuid(uid).pw_name
+
+
+def _get_machine_key(username: str = None) -> bytes:
     """
     Derive a stable key from machine-specific information.
 
@@ -93,11 +106,11 @@ def _get_machine_key() -> bytes:
 
     # THE ACCOUNT, from the kernel. pwd.getpwuid(os.getuid()) answers
     # identically with $USER set or unset, which is the whole point.
-    try:
-        import pwd
-        username = pwd.getpwuid(os.getuid()).pw_name
-    except Exception:
-        username = os.environ.get("USER", os.environ.get("USERNAME", "default"))
+    if username is None:
+        try:
+            username = _account()
+        except Exception:
+            username = os.environ.get("USER", os.environ.get("USERNAME", "default"))
 
     # Combine and hash
     combined = f"{machine_id}:{username}:{salt.decode()}".encode('utf-8')
@@ -107,13 +120,13 @@ def _get_machine_key() -> bytes:
     return base64.urlsafe_b64encode(key_material)
 
 
-def _get_fernet() -> Fernet | None:
+def _get_fernet(username: str = None) -> Fernet | None:
     """Get a Fernet instance or None if cryptography unavailable."""
     if not CRYPTO_AVAILABLE:
         return None
     
     try:
-        key = _get_machine_key()
+        key = _get_machine_key(username)
         return Fernet(key)
     except Exception as e:
         logger.debug(f"Could not initialize Fernet: {e}")
@@ -187,7 +200,14 @@ def unprotect(value: str) -> str:
     
     try:
         encrypted_data = base64.b64decode(value[len(MARKER):], validate=True)
-        decrypted = fernet.decrypt(encrypted_data)
+        try:
+            decrypted = fernet.decrypt(encrypted_data)
+        except Exception:
+            # Saved by a privileged run before 2026-10-13, sealed for root.
+            older = _get_fernet("root")
+            if older is None or _account() == "root":
+                raise
+            decrypted = older.decrypt(encrypted_data)
         return decrypted.decode('utf-8')
     except base64.binascii.Error:
         raise SecretCryptoError(

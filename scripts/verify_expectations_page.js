@@ -133,6 +133,22 @@ ok((c2.match(/I have seen this/g) || []).length === 1,
 ok(c2.includes('ackExpectation(7)'), 'and acts on that expectation');
 ok(!c2.includes('<img'), 'a title from outside is escaped in the card');
 
+console.log('\nA second DHCP server after a router swap');
+page.renderExpectations({
+  mood: 'alarmed', sentence: 'x', checked_at: iso(now), coverage: 1,
+  router: { ok: true, blocks: [] }, devices: [], watch_24h: hours,
+  expectations: [exp({ id: 9, kind: 'same_gateway', state: 'broken', broken_at: iso(now),
+    evidence: { findings: [{ detection_id: 'LAN-1003', entity_value: '192.0.2.1' },
+                           { detection_id: 'LAN-1003', entity_value: '192.0.2.1' },
+                           { detection_id: 'LAN-1003', entity_value: HOSTILE },
+                           { detection_id: 'LAN-1002', entity_value: '192.0.2.9' }] } })],
+});
+const gw = els['exp-tickets'].innerHTML;
+ok((gw.match(/data-dhcp="192.0.2.1"/g) || []).length === 1, 'one trust button per DHCP server', gw);
+ok(!gw.includes('data-dhcp="192.0.2.9"'), 'a gateway MAC change gets no DHCP button');
+ok(!gw.includes('<img'), 'a server address from outside is escaped');
+ok(typeof els['exp-tickets'].onclick === 'function', 'the trust button listens for clicks');
+
 console.log('\nA router that cannot back the checks');
 page.renderExpectations({
   mood: 'uneasy', sentence: 'Not everything could be checked.', checked_at: null,

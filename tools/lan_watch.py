@@ -43,6 +43,7 @@
 # SENSOR_PLACEMENT.md: a sensor on a SPAN port sees the unicast frames too.
 # Nothing here changes on that vantage, it just sees more.
 
+import ipaddress
 import json
 import logging
 
@@ -742,21 +743,27 @@ class LanWatch:
                          "known_servers": others, "recorded": False},
         }]
 
-    def accept_dhcp_server(self, server_ip: str) -> dict:
+    def accept_dhcp_server(self, server_ip: str, replace: bool = False) -> dict:
         """
         Add a DHCP server to the known-good set DELIBERATELY.
 
         Same reasoning as accept_gateway_mac: the trusted set only grows when
-        a person says so, never because a packet arrived.
+        a person says so, never because a packet arrived. replace=True is for
+        a router that was swapped: the new one becomes the only known server.
         """
-        ip = (server_ip or "").strip()
-        if not ip:
-            return {"accepted": False, "reason": "no address given"}
+        try:
+            ip = str(ipaddress.ip_address((server_ip or "").strip()))
+        except ValueError:
+            return {"accepted": False, "reason": f"{server_ip!r} is not an address"}
+        forgotten = sorted(self._dhcp_servers - {ip}) if replace else []
+        if replace:
+            self._dhcp_servers = set()
         self._dhcp_servers.add(ip)
         self._dhcp_reported.discard(ip)
         persisted = save_baseline(_BASELINE_DHCP, sorted(self._dhcp_servers))
-        logger.info(f"DHCP server {ip} accepted as known good.")
-        return {"accepted": True, "server_ip": ip,
+        logger.info(f"DHCP server {ip} accepted as known good"
+                    + (f", replacing {', '.join(forgotten)}." if forgotten else "."))
+        return {"accepted": True, "server_ip": ip, "forgotten": forgotten,
                 "known_servers": sorted(self._dhcp_servers),
                 "persisted": persisted}
 

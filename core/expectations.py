@@ -1064,6 +1064,16 @@ def false_alarms(days: int = 14, now: datetime = None) -> dict:
     return out
 
 
+def acknowledge_kind(kind: str, now: datetime = None) -> dict:
+    """Mark the active expectation of one kind as seen, if it broke."""
+    with me._get_readonly_conn() as conn:
+        row = conn.execute("SELECT id FROM expectation WHERE kind = ? AND "
+                           "subject = '' AND ended_at IS NULL", (kind,)
+                           ).fetchone() if me._table_exists_ro(
+                               conn, "expectation") else None
+    return acknowledge(row["id"], now) if row else {"success": False}
+
+
 def acknowledge(expectation_id: int, now: datetime = None) -> dict:
     """The owner has seen a break; the mood stops counting it."""
     with me._get_conn() as conn:

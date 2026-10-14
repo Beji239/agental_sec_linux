@@ -244,6 +244,11 @@ sql(("INSERT INTO findings (session_id, found_at, source, severity, "
 ov = ex.check_once({}, live=FakeLive(), now=NOW + timedelta(hours=1, minutes=10))
 check("a gateway change breaks same gateway",
       by_kind(ov)[("same_gateway", "")]["state"] == "broken")
+check("marking the gateway break seen by kind",
+      ex.acknowledge_kind("same_gateway",
+                          now=NOW + timedelta(hours=1, minutes=11))["success"])
+check("an unknown kind is not acknowledged",
+      not ex.acknowledge_kind("no_such_kind")["success"])
 
 # Quiet nights
 
