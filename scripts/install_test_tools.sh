@@ -22,6 +22,7 @@ TOOLS_HOME="${AGENTAL_TEST_TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/agentalse
 BANDIT_VERSION=1.9.4
 SEMGREP_VERSION=1.177.0
 PIP_AUDIT_VERSION=2.10.1
+HYPOTHESIS_VERSION=6.165.11
 GITLEAKS_VERSION=8.30.1
 TRIVY_VERSION=0.74.0
 
@@ -121,9 +122,10 @@ if [[ ! -x "$TOOLS_HOME/venv/bin/python" ]]; then
     python3 -m venv "$TOOLS_HOME/venv" || die "could not create the virtual environment."
 fi
 "$TOOLS_HOME/venv/bin/python" -m pip install --quiet --disable-pip-version-check \
-    "bandit==$BANDIT_VERSION" "semgrep==$SEMGREP_VERSION" "pip-audit==$PIP_AUDIT_VERSION" </dev/null \
+    "bandit==$BANDIT_VERSION" "semgrep==$SEMGREP_VERSION" "pip-audit==$PIP_AUDIT_VERSION" \
+    "hypothesis==$HYPOTHESIS_VERSION" </dev/null \
     || die "pip could not install Bandit, Semgrep and pip-audit. Its error is above."
-ok "Bandit $BANDIT_VERSION, Semgrep $SEMGREP_VERSION, pip-audit $PIP_AUDIT_VERSION"
+ok "Bandit $BANDIT_VERSION, Semgrep $SEMGREP_VERSION, pip-audit $PIP_AUDIT_VERSION, Hypothesis $HYPOTHESIS_VERSION"
 
 # Semgrep's rule packs, saved so the tests run offline.
 mkdir -p "$TOOLS_HOME/semgrep-rules"
