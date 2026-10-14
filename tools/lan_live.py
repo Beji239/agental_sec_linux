@@ -220,15 +220,19 @@ class LanLive:
 
     def _refresh_inventory(self):
         # Neighbours count only on the interface the leased devices sit on,
-        # so the router's upstream side is not listed as a device.
+        # so the router's upstream side is not listed as a device. They must
+        # also sit in a leased subnet: Linux answers ARP for its Docker bridge
+        # address on Wi-Fi, which gave the laptop a second, empty dot.
         inv = {}
         leases = [r for r in (self.g.leases() if self.g.has("leases") else [])
                   if _private(r["ip"])]
         neigh = self.g.neighbors() if self.g.has("neighbors") else []
         leased = {r["ip"] for r in leases}
         lan_ifaces = {r.get("interface") for r in neigh if r["ip"] in leased}
+        lan_nets = {ip.rsplit(".", 1)[0] for ip in leased if "." in ip}
         for r in neigh:
-            if _private(r["ip"]) and (not lan_ifaces or r.get("interface") in lan_ifaces):
+            if (_private(r["ip"]) and (not lan_ifaces or r.get("interface") in lan_ifaces)
+                    and (not lan_nets or r["ip"].rsplit(".", 1)[0] in lan_nets)):
                 inv.setdefault(r["ip"], {})["mac"] = r["mac"]
         for r in leases:
             inv[r["ip"]] = {"mac": r["mac"], "hostname": r["hostname"]}

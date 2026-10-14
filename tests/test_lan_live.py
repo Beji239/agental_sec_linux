@@ -65,7 +65,8 @@ class FakeRouter:
 
     def neighbors(self):
         return [{"ip": "172.21.0.10", "mac": "aa:bb:cc:00:00:10", "interface": "br-lan"},
-                {"ip": "172.20.0.1", "mac": "00:00:5e:00:53:22", "interface": "eth1"}]
+                {"ip": "172.20.0.1", "mac": "00:00:5e:00:53:22", "interface": "eth1"},
+                {"ip": "172.17.0.1", "mac": "02:00:5e:00:53:01", "interface": "br-lan"}]
 
     def blocks(self):
         return sorted(self.blocked)
@@ -107,7 +108,7 @@ r.fl = [flow("172.21.0.10", 40000, "203.0.113.7", 443, 300, 9000)]
 m.tick(1002.0)
 snap = m.snapshot(now=1002.0)
 dev = {d["ip"]: d for d in snap["devices"]}
-check("upstream neighbour is not a device", sorted(dev), ["172.21.0.10", "172.21.0.11"])
+check("upstream neighbour and Docker bridge are not devices", sorted(dev), ["172.21.0.10", "172.21.0.11"])
 check("upload rate from the counters", dev["172.21.0.10"]["up_bps"], 1000)
 check("download rate from the counters", dev["172.21.0.10"]["down_bps"], 10000)
 check("totals since start", (dev["172.21.0.10"]["up_total"], dev["172.21.0.10"]["down_total"]), (2000, 20000))
