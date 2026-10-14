@@ -2276,13 +2276,6 @@
  },
  {
   "tool": "semgrep",
-  "rule": "request-with-http",
-  "path": "core/ip_lookup.py",
-  "text": "resp = requests.get(f\"{API_URL}{ip}\", params={\"fields\": FIELDS},",
-  "reason": "ip-api's free tier is HTTP only; its answers are fenced as outside text (open item in the notes)"
- },
- {
-  "tool": "semgrep",
   "rule": "insecure-file-permissions",
   "path": "main.py",
   "text": "os.chmod(_LOG_DIR, 0o700)",

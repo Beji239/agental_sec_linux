@@ -66,7 +66,7 @@ def seed_enrichment(indicator, status, kind="ip", gap=None, tried=None):
             VALUES (?,?,?,?,?,?,?,?,?)
         """, (indicator, kind, status, json.dumps({"organisation": "Example"}),
               json.dumps(["https://rdap.example/x"]),
-              json.dumps(tried or ["rdap", "ip_api"]), gap,
+              json.dumps(tried or ["rdap", "dbip"]), gap,
               "2026-09-14T00:00:00+00:00", "2099-01-01T00:00:00+00:00"))
 
 

@@ -198,9 +198,8 @@ def main():
 
     # A purpose-built lookup, for comparison. Most of what the model asks
     # this tool is "what is this address", which is not really a web search.
-    show(6, "ip-api.com (an actual IP lookup, no key needed)",
-         lambda: requests.get("http://ip-api.com/json/77.111.246.27"
-                              "?fields=status,country,city,isp,org,as,proxy,hosting",
+    show(6, "RDAP (an actual IP lookup over HTTPS, no key needed)",
+         lambda: requests.get("https://rdap.org/ip/8.8.8.8",
                               timeout=ws.TIMEOUT))
 
     print()

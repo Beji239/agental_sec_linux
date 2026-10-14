@@ -222,10 +222,11 @@ remote Linux hosts over SSH are described in [ROUTER.md](ROUTER.md).
   traffic every five minutes. Config: `threat_feeds` (`feeds`,
   `refresh_hours`). Keys, where needed, go in `.env`: `AGENTAL_ABUSECH_KEY`
   for URLhaus and Feodo, `AGENTAL_OTX_KEY` for OTX.
-- **Enrichment.** RDAP, CIRCL, NVD, ip-api, the IEEE vendor registry and
-  LOLBAS without a key. With keys in `.env`: AbuseIPDB
+- **Enrichment.** RDAP, CIRCL, NVD, the offline DB-IP database, the IEEE
+  vendor registry and LOLBAS without a key. With keys in `.env`: AbuseIPDB
   (`AGENTAL_ABUSEIPDB_KEY`), MalwareBazaar and URLhaus
-  (`AGENTAL_ABUSECH_KEY`), GreyNoise (`AGENTAL_GREYNOISE_KEY`), and a higher
+  (`AGENTAL_ABUSECH_KEY`), GreyNoise (`AGENTAL_GREYNOISE_KEY`), ipapi.is for
+  VPN and proxy (`AGENTAL_IPAPI_KEY`), and a higher
   NVD rate limit (`AGENTAL_NVD_API_KEY`). A blank key turns that source off,
   and it is listed as off.
 - **CISA KEV.** The known exploited vulnerabilities catalogue, with CVSS

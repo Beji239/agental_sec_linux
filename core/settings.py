@@ -770,7 +770,7 @@ MODULE_SETTINGS = {
     "probe":           ["probe.enabled", "probe.interval_days"],
     "linux_monitor":   ["linux_monitor.enabled"],
     "enrichment":      ["AGENTAL_ABUSEIPDB_KEY", "AGENTAL_ABUSECH_KEY",
-                        "AGENTAL_GREYNOISE_KEY"],
+                        "AGENTAL_GREYNOISE_KEY", "AGENTAL_IPAPI_KEY"],
     "feed_matcher":    ["AGENTAL_ABUSECH_KEY", "AGENTAL_OTX_KEY"],
     "web_search":      ["AGENTAL_TAVILY_KEY", "AGENTAL_SERPAPI_KEY",
                         "AGENTAL_GOOGLE_CSE_KEY", "AGENTAL_GOOGLE_CSE_CX"],

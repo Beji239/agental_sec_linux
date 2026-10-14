@@ -2777,9 +2777,12 @@ TOOL_MANIFEST = [
     {
         "name": "lookup_ip",
         "description": (
-            "Who owns a public IP address. Registration data straight from a "
-            "registry: organisation, ASN, reverse DNS, and whether the address "
-            "is a known VPN/proxy exit or a datacentre.\n\n"
+            "Who owns a public IP address: organisation and network from RDAP, "
+            "ASN, country and city from the offline DB-IP database, reverse "
+            "DNS, and, when the AbuseIPDB key is set, whether it is a "
+            "datacentre or a mobile network. VPN/proxy is not checked; a field "
+            "in not_checked is unknown, not false. `sources` says who "
+            "answered.\n\n"
             "USE THIS INSTEAD OF web_search FOR 'WHAT IS THIS ADDRESS'. It is "
             "one call and it answers in fields rather than prose you have to "
             "read and believe. web_search is for open questions, a CVE, an "
@@ -2788,10 +2791,9 @@ TOOL_MANIFEST = [
             "  * The city is the registry's CLAIM, not a measurement. Anycast, "
             "VPN exits and cloud regions are routinely thousands of miles from "
             "where a database places them. Trust the ASN, not the city.\n"
-            "  * is_proxy_or_vpn and is_datacentre are NOT threat flags. The "
-            "operator's own VPN sets the first; most of the legitimate "
-            "internet sets the second. They narrow what a thing IS. They never "
-            "decide whether it is a problem.\n\n"
+            "  * is_datacentre is NOT a threat flag. Most of the legitimate "
+            "internet sets it. It narrows what a thing IS. It never decides "
+            "whether it is a problem.\n\n"
             "Private and LAN addresses are refused rather than sent to a "
             "public registry, which knows nothing about them. Identify those "
             "with query_known_devices."),
@@ -2809,7 +2811,7 @@ TOOL_MANIFEST = [
         "name": "enqueue_enrichment",
         "description": (
             "Ask for an indicator to be researched against structured sources: "
-            "RDAP and ip-api for ownership, AbuseIPDB for reputation, URLhaus "
+            "RDAP and DB-IP for ownership, AbuseIPDB for reputation, URLhaus "
             "and MalwareBazaar for known malware samples by exact hash (not a "
             "virus scan: scan_with_antivirus reads the file itself), CIRCL "
             "and NVD for CVEs, the local "
@@ -2857,7 +2859,7 @@ TOOL_MANIFEST = [
             "missing or which sources disagreed. Do not present a partial "
             "answer as settled.\n"
             "  unresolved  nothing was found. `tried` lists what was asked. "
-            "This is honest data, say 'unknown, I checked RDAP and ip-api', "
+            "This is honest data, say 'unknown, I checked RDAP and DB-IP', "
             "not 'nothing found' and not a guess from recall.\n\n"
             "found:false means NOBODY HAS LOOKED YET. That is not a clean "
             "result. Call enqueue_enrichment.\n\n"

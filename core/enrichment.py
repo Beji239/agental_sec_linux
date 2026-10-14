@@ -68,7 +68,7 @@ SOURCES
   NO KEY NEEDED
     RDAP via rdap.org       who owns an address or a domain, redirects to the
                             authoritative RIR
-    ip-api.com              the second opinion, plus proxy/hosting/mobile
+    DB-IP Lite, offline     the second opinion, files in geoip/, nothing sent
     CIRCL Vulnerability-Lookup   CVE detail
     NVD                     CVE detail, slower without a key
     the local IEEE file     vendor prefix, no network at all
@@ -218,12 +218,10 @@ USER_AGENT = "AgentalSec/2 (+homelab security agent; contact via operator)"
 
 # Politeness floors, measured against each source's published limits:
 #   rdap.org        10 requests in 10 seconds behind Cloudflare
-#   ip-api.com      about 45 a minute on the free tier
 #   NVD             5 requests per 30 seconds without a key
 #   CIRCL           no published number, so a conservative floor
 _MIN_INTERVAL = {
     "rdap":      1.2,
-    "ip_api":    1.5,
     "nvd":       6.5,
     "circl":     1.0,
     "abuseipdb": 1.0,   # ~1000 a day is the real limit, not a per-second one
@@ -234,6 +232,7 @@ _MIN_INTERVAL = {
     # allowance runs out this will still get a 429, and _greynoise_get says so
     # in words rather than pretending the address came back quiet.
     "greynoise": 1.0,
+    "ipapi_is":  1.0,   # 1000 a day on the free plan
 }
 _last_call: dict[str, float] = {}
 _throttle_lock = threading.Lock()
@@ -533,41 +532,32 @@ def src_rdap_domain(domain: str) -> tuple[dict | None, str, str | None]:
     return fields, url, None
 
 
-def src_ip_api(ip: str) -> tuple[dict | None, str, str | None]:
+def src_dbip_ip(ip: str) -> tuple[dict | None, str, str | None]:
     """
-    ip-api.com, the same source core/ip_lookup.py already uses.
+    DB-IP Lite, the files in geoip/ on this computer. Nothing is sent.
 
-    HOW INDEPENDENT IS THIS, really. Its ownership fields ultimately derive
-    from the same RIR data RDAP serves, so agreement between the two is
-    weaker evidence than two genuinely independent sources would be. It is
-    still worth having as the second opinion, because it catches a parsing
-    failure on either side and because proxy, hosting and mobile come from
-    ip-api's own classification rather than from the registry. The docstring
-    says so rather than the confidence field overclaiming.
+    The second opinion on ownership since 2026-10-13, in place of ip-api,
+    whose free tier answers only over plain HTTP. The AS number and name come
+    from the registries' routing data, so agreement with RDAP is weaker
+    evidence than two unrelated sources would be; it still catches a parsing
+    failure on either side, and it needs no network at all.
     """
-    url = f"http://ip-api.com/json/{ip}"
-    payload, err = _get_json(
-        url, "ip_api",
-        params={"fields": "status,message,country,regionName,city,isp,org,as,"
-                          "asname,reverse,proxy,hosting,mobile"},
-    )
-    if payload is None:
-        return None, url, err
-    if payload.get("status") != "success":
-        return None, url, None
+    from core import geoip
+    where = "geoip/dbip-asn-lite.mmdb"
+    if not geoip.asn_status().get("ready"):
+        return None, where, "the offline AS database is not loaded"
+    asn = geoip.asn_lookup(ip) or {}
+    geo = geoip.lookup(ip) or {}
+    if not asn and not geo:
+        return None, where, None
     fields = _fields_only({
-        "organisation":       payload.get("org") or payload.get("isp"),
-        "isp":                payload.get("isp"),
-        "asn":                payload.get("as"),
-        "asn_name":           payload.get("asname"),
-        "reverse_dns":        payload.get("reverse") or None,
-        "registered_country": payload.get("country"),
-        "registered_city":    payload.get("city"),
-        "is_proxy_or_vpn":    bool(payload.get("proxy")),
-        "is_datacentre":      bool(payload.get("hosting")),
-        "is_mobile_network":  bool(payload.get("mobile")),
+        "organisation":       asn.get("org") or None,
+        "asn":                asn.get("asn"),
+        "asn_name":           asn.get("org") or None,
+        "registered_country": geo.get("country") or None,
+        "registered_city":    geo.get("city") or None,
     })
-    return fields, url, None
+    return fields, where, None
 
 
 def src_circl_cve(cve: str) -> tuple[dict | None, str, str | None]:
@@ -913,6 +903,13 @@ KEYED_SOURCES = {
                  "is used up, lookups are reported as rate limited, never as "
                  "a quiet address.",
     },
+    "ipapi_is": {
+        "env":   "AGENTAL_IPAPI_KEY",
+        "kinds": ("ip",),
+        "gives": "whether an address is a VPN, a proxy, Tor, a datacentre or a mobile network",
+        "note":  "free key from ipapi.is, 1000 checks a day. Without it "
+                 "nothing here can say whether an address is a VPN or a proxy.",
+    },
 }
 
 
@@ -929,7 +926,7 @@ def _key_for(name: str) -> str:
 # THE TRAP THIS AVOIDS, and I nearly walked into it. The obvious thing is to
 # append AbuseIPDB to the IP source list and let the ladder handle it. That
 # would be wrong, and quietly so: the ladder stops the moment two sources
-# agree on ownership, and RDAP and ip-api usually do. So the reputation lookup
+# agree on ownership, and RDAP and DB-IP usually do. So the reputation lookup
 # would be skipped EXACTLY WHEN EVERYTHING IS WORKING, and only run on the
 # addresses whose ownership was already murky.
 #
@@ -1050,7 +1047,7 @@ def src_abuseipdb(ip: str) -> tuple[dict | None, str, str | None]:
     AbuseIPDB. Has anybody complained about this address recently.
 
     THE ONLY REPUTATION SOURCE HERE, and the reason the keyless build had a
-    hole in it. RDAP and ip-api both answer "who owns this" and neither has an
+    hole in it. RDAP and DB-IP both answer "who owns this" and neither has an
     opinion about behaviour.
 
     WHAT THE FIELDS ARE NOT.
@@ -1284,7 +1281,7 @@ def _merge(results: list[tuple[str, dict]]) -> dict:
 #
 # Added 2026-09-18. The question nothing else in this file could answer.
 #
-# RDAP and ip-api say who owns an address. AbuseIPDB says whether strangers
+# RDAP and DB-IP say who owns an address. AbuseIPDB says whether strangers
 # have complained about it. URLhaus says whether it is handing out malware.
 # None of them can tell you the one thing that decides whether a hit on your
 # firewall is worth your evening: is this address knocking on every door on
@@ -1376,6 +1373,55 @@ def _tag_names(tags) -> str | None:
         if name:
             out.append(str(name))
     return ", ".join(out[:12]) or None
+
+
+def src_ipapi_is(ip: str) -> tuple[dict | None, str, str | None]:
+    """
+    ipapi.is over HTTPS: VPN, proxy, Tor, datacentre and mobile flags.
+
+    The key goes in the request body, not the address, so it stays out of
+    logs. These flags say WHAT an address is, never whether it is a problem:
+    the owner's own VPN exit is a VPN.
+    """
+    key = _key_for("ipapi_is")
+    url = "https://api.ipapi.is"
+    if not key:
+        return None, url, ("no key set. Put AGENTAL_IPAPI_KEY in .env and "
+                           "restart. Without it VPN and proxy are not checked.")
+    _throttle("ipapi_is")
+    try:
+        resp = requests.post(url, json={"q": ip, "key": key},
+                             headers={"Accept": "application/json",
+                                      "User-Agent": USER_AGENT},
+                             timeout=HTTP_TIMEOUT,
+                             allow_redirects=False)  # the key stays on this host
+    except requests.RequestException as e:
+        return None, url, f"{type(e).__name__}"
+    if resp.status_code in (401, 403):
+        return None, url, ("key refused (HTTP %d). Check AGENTAL_IPAPI_KEY."
+                           % resp.status_code)
+    if resp.status_code == 429:
+        return None, url, "rate limited, the daily allowance may be spent"
+    if resp.status_code != 200:
+        return None, url, f"HTTP {resp.status_code}"
+    try:
+        data = resp.json()
+    except ValueError:
+        return None, url, "unreadable answer"
+    if not isinstance(data, dict) or data.get("error"):
+        return None, url, str((data or {}).get("error") or "no answer")[:200]
+
+    def flag(k):
+        return data.get(k) if isinstance(data.get(k), bool) else None
+
+    return _fields_only({
+        "is_vpn":            flag("is_vpn"),
+        "is_proxy":          flag("is_proxy"),
+        "is_tor":            flag("is_tor"),
+        "is_datacentre":     flag("is_datacenter"),
+        "is_mobile_network": flag("is_mobile"),
+        "is_known_abuser":   flag("is_abuser"),
+    }), url, None
 
 
 def src_greynoise_ip(ip: str) -> tuple[dict | None, str, str | None]:
@@ -1632,7 +1678,7 @@ def _agreement(kind: str, results: list[tuple[str, dict]]) -> tuple[bool | None,
 # THE LADDER. Sources that answer "what is this", most authoritative first,
 # stopping as soon as two of them agree.
 SOURCES_BY_KIND = {
-    "ip":     [("rdap", src_rdap_ip), ("ip_api", src_ip_api)],
+    "ip":     [("rdap", src_rdap_ip), ("dbip", src_dbip_ip)],
     "domain": [("rdap", src_rdap_domain)],
     "cve":    [("circl", src_circl_cve), ("nvd", src_nvd_cve)],
     "mac":    [("oui", src_oui_mac)],
@@ -1653,7 +1699,8 @@ SOURCES_BY_KIND = {
 ENRICHERS_BY_KIND.update({
     "ip":     [("abuseipdb", src_abuseipdb, "abuseipdb"),
                ("urlhaus",   src_urlhaus_host, "abuse_ch"),
-               ("greynoise", src_greynoise_ip, "greynoise")],
+               ("greynoise", src_greynoise_ip, "greynoise"),
+               ("ipapi_is",  src_ipapi_is, "ipapi_is")],
     "domain": [("urlhaus",   src_urlhaus_host, "abuse_ch")],
     # CVE gets one too. PORTED 2026-09-21. CIRCL and NVD describe the
     # vulnerability and corroborate each other doing it. GreyNoise says how
@@ -1680,15 +1727,14 @@ SOURCE_CATALOG = {
                    "The registry it passes the question to sees it too.",
         "keyed":   None,
     },
-    "ip_api": {
-        "name":    "ip-api",
-        "host":    "ip-api.com",
-        "sends":   "an outside internet address",
-        "answers": "who owns it, roughly where it is, and whether it is a VPN, "
-                   "a proxy, a hosting company or a mobile network",
-        "why":     "a second, independent opinion on ownership. An answer "
-                   "counts as confirmed only when two sources agree. Also "
-                   "used when the analyst looks up an address itself.",
+    "dbip": {
+        "name":    "DB-IP Lite, offline",
+        "host":    None,
+        "also":    "files on this computer, in the geoip folder",
+        "sends":   "nothing, the database is read from disk",
+        "answers": "which network announces an address, and roughly where it is",
+        "why":     "a second opinion on ownership with no request at all. An "
+                   "answer counts as confirmed only when two sources agree.",
         "keyed":   None,
     },
     "circl": {
@@ -1773,6 +1819,16 @@ SOURCE_CATALOG = {
         "why":     "tells background noise that hits everyone apart from "
                    "something aimed at you.",
         "keyed":   "greynoise",
+    },
+    "ipapi_is": {
+        "name":    "ipapi.is",
+        "host":    "api.ipapi.is",
+        "sends":   "an outside internet address",
+        "answers": "whether it is a VPN, a proxy, Tor, a hosting company or a "
+                   "mobile network",
+        "why":     "says what kind of address it is, such as your own VPN "
+                   "exit, which ownership alone cannot.",
+        "keyed":   "ipapi_is",
     },
 }
 
@@ -1944,7 +2000,7 @@ def research(indicator: str, kind: str = None) -> dict:
 
     Never raises and never returns empty. The three statuses are the contract
     with the model, and the `tried` list is what makes `unresolved` usable:
-    "nothing found" and "nothing found, having asked RDAP and ip-api, both of
+    "nothing found" and "nothing found, having asked RDAP and DB-IP, both of
     which timed out" are different things to tell a user.
     """
     indicator = (indicator or "").strip()

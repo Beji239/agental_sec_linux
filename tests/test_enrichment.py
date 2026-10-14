@@ -130,13 +130,13 @@ check("multi-label domains survive", en.classify("google.co.uk"), "domain")
 print("\n[2] two sources that agree -> resolved, and the second is the LAST call")
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Google LLC", "network_name": "GOOGLE"})),
-    ("ip_api", fake({"organisation": "Google Inc.", "asn": "AS15169 Google LLC"})),
+    ("dbip", fake({"organisation": "Google Inc.", "asn": "AS15169 Google LLC"})),
 ]
 r = en.research("8.8.8.8")
 check("status", r["status"], "resolved")
 check("confidence", r["confidence"], "two_sources_agree")
 check("no gap is claimed", r["gap"], None)
-check("both were tried", r["tried"], ["rdap", "ip_api"])
+check("both were tried", r["tried"], ["rdap", "dbip"])
 # "Google LLC" and "Google Inc." are the same allocation with two house
 # styles. If the suffix stripping ever regresses, this goes to partial and
 # every ordinary lookup starts hedging.
@@ -206,7 +206,7 @@ print("\n[2e] when the org names miss, the ASN decides before calling it a confl
 # the organisation strings share no token at all.
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "EXAMPLENET-MNT", "network_name": "EXAMPLENET"})),
-    ("ip_api", fake({"organisation": "Example Software LLC",
+    ("dbip", fake({"organisation": "Example Software LLC",
                      "asn": "AS64500 Example Net AB", "asn_name": "EXAMPLENET"})),
 ]
 r = en.research("185.199.108.1")
@@ -219,7 +219,7 @@ check("stored with the row", r["fields"]["_agreed_on"], "network name / ASN")
 # generic words are filtered out on purpose.
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Hetzner Online", "network_name": "HETZNER-NET"})),
-    ("ip_api", fake({"organisation": "Digital Ocean",
+    ("dbip", fake({"organisation": "Digital Ocean",
                      "asn": "AS14061 DigitalOcean", "asn_name": "DIGITALOCEAN"})),
 ]
 r = en.research("185.199.108.2")
@@ -229,7 +229,7 @@ check("confidence", r["confidence"], "sources_disagree")
 # And the plain case still reports the plain reason.
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Google LLC"})),
-    ("ip_api", fake({"organisation": "Google Inc"})),
+    ("dbip", fake({"organisation": "Google Inc"})),
 ]
 check("a normal match still says organisation name",
       en.research("185.199.108.3")["agreed_on"], "organisation name")
@@ -307,18 +307,18 @@ def counting(name, fields):
 
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   counting("rdap",   {"organisation": "Cloudflare"})),
-    ("ip_api", counting("ip_api", {"organisation": "Cloudflare Inc"})),
+    ("dbip", counting("dbip", {"organisation": "Cloudflare Inc"})),
     ("third",  counting("third",  {"organisation": "Cloudflare"})),
 ]
 r = en.research("1.1.1.1")
-check("stopped after two", calls, ["rdap", "ip_api"])
+check("stopped after two", calls, ["rdap", "dbip"])
 check("and still resolved", r["status"], "resolved")
 
 
 print("\n[4] two sources that DISAGREE -> partial, both values kept, and named")
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Hetzner Online"})),
-    ("ip_api", fake({"organisation": "Digital Ocean"})),
+    ("dbip", fake({"organisation": "Digital Ocean"})),
 ]
 r = en.research("5.5.5.5")
 check("status", r["status"], "partial")
@@ -334,7 +334,7 @@ check_true("and it says not to present either as settled",
 print("\n[5] one source alone -> partial, never resolved")
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Example Software"})),
-    ("ip_api", fake(None, err="Timeout")),
+    ("dbip", fake(None, err="Timeout")),
 ]
 r = en.research("185.199.108.4")
 check("status", r["status"], "partial")
@@ -349,7 +349,7 @@ print("\n[6] 'they have no record' and 'they did not answer' stay different")
 # only checks whether fields came back.
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake(None)),          # answered, 404, no allocation
-    ("ip_api", fake(None)),
+    ("dbip", fake(None)),
 ]
 r = en.research("185.199.108.153")
 check("status", r["status"], "unresolved")
@@ -359,14 +359,14 @@ check_true("and it says this is a real negative",
 
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake(None, err="ConnectionError")),
-    ("ip_api", fake(None, err="Timeout")),
+    ("dbip", fake(None, err="Timeout")),
 ]
 r = en.research("185.199.108.153")
 check("status", r["status"], "unresolved")
 check("confidence", r["confidence"], "none")
 check_true("and it says UNKNOWN, not 'nothing is there'",
            "UNKNOWN" in r["gap"] and "nothing is there" in r["gap"])
-check("what was tried is on the row", r["tried"], ["rdap", "ip_api"])
+check("what was tried is on the row", r["tried"], ["rdap", "dbip"])
 
 
 print("\n[7] a source that RAISES does not take the job down")
@@ -376,7 +376,7 @@ def exploding(indicator):
 
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   exploding),
-    ("ip_api", fake({"organisation": "Amazon"})),
+    ("dbip", fake({"organisation": "Amazon"})),
 ]
 r = en.research("52.1.1.1")
 check("the other source still answered", r["status"], "partial")
@@ -551,7 +551,7 @@ def fake_rep(name, fields):
 
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Google LLC"})),
-    ("ip_api", fake({"organisation": "Google Inc"})),
+    ("dbip", fake({"organisation": "Google Inc"})),
 ]
 en.ENRICHERS_BY_KIND["ip"] = [
     ("abuseipdb", fake_rep("abuseipdb", {"abuse_confidence_score": 0,
@@ -584,7 +584,7 @@ print("\n[10d] reputation alone is partial, not unresolved")
 # the wrong way round.
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake(None, err="Timeout")),
-    ("ip_api", fake(None, err="Timeout")),
+    ("dbip", fake(None, err="Timeout")),
 ]
 r = en.research("8.8.4.6")
 check("status", r["status"], "partial")
@@ -678,7 +678,7 @@ en.ENRICHERS_BY_KIND["ip"] = []
 print("\n[11] storage: the row survives a round trip and is marked second-hand")
 en.SOURCES_BY_KIND["ip"] = [
     ("rdap",   fake({"organisation": "Google LLC"}, url="https://rdap.org/ip/8.8.8.8")),
-    ("ip_api", fake({"organisation": "Google Inc"}, url="http://ip-api.com/json/8.8.8.8")),
+    ("dbip", fake({"organisation": "Google Inc"}, url="geoip/dbip-asn-lite.mmdb")),
 ]
 en.store(en.research("8.8.8.8"), session_id="test-session")
 row = en.read("8.8.8.8")
