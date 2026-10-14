@@ -35,9 +35,14 @@ def check(label, ok, detail=""):
 
 
 class FakeGateway:
-    def __init__(self, version=9, caps=("block", "conntrack", "counters")):
+    def __init__(self, version=9, caps=("block", "conntrack", "counters"),
+                 hits=None, counted=True):
         self.probe_result = {"capabilities": list(caps),
                              "agent_version": str(version), "firewall": "nft"}
+        self.hits, self.counted = hits or {}, counted
+
+    def block_hits(self):
+        return {"counted": self.counted, "reason": None, "hits": self.hits}
 
 
 class FakeLive:
@@ -107,7 +112,8 @@ check("an answered connection after the block breaks it",
 check("all blocks hold is broken too", k[("blocks_hold", "")]["state"]
       == "broken")
 check("the mood is alarmed", ov["mood"] == "alarmed", ov["sentence"])
-check("acknowledging the break", ex.acknowledge(b["id"])["success"])
+check("acknowledging the break",
+      ex.acknowledge(b["id"], now=NOW + timedelta(minutes=10))["success"])
 sql(("DELETE FROM lan_flow", ()))
 ov = ex.check_once({}, live=FakeLive(blocked=["198.51.100.7"]),
                    now=NOW + timedelta(minutes=20))
@@ -131,8 +137,80 @@ check("and the mood says why", ov["mood"] == "uneasy" and "no answer"
       in ov["sentence"], ov["sentence"])
 ov = ex.check_once({}, live=FakeLive(blocked=[]),
                    now=NOW + timedelta(minutes=50))
-check("an unblock read from the router ends the expectation",
+b = by_kind(ov).get(("block_holds", "198.51.100.7"))
+check("a block gone from the router that the app did not lift is broken",
+      b and b["state"] == "broken" and "no longer on the router" in b["detail"],
+      b)
+check("and the mood says so", ov["mood"] == "alarmed", ov["sentence"])
+sql(("INSERT INTO findings (session_id, found_at, source, severity, "
+     "entity_type, entity_value, title, detection_id, raw_data) VALUES "
+     "('t', ?, 'remediation', 'info', 'ip', '198.51.100.7', 'Unblocked', "
+     "'REM-1010', ?)", (ex._sql(NOW + timedelta(minutes=55)),
+                        json.dumps({"argument": "198.51.100.7"}))))
+ov = ex.check_once({}, live=FakeLive(blocked=[]),
+                   now=NOW + timedelta(minutes=58))
+check("an unblock the app made ends the expectation",
       ("block_holds", "198.51.100.7") not in by_kind(ov))
+ov = ex.check_once({}, live=FakeLive(blocked=["aa:aa:aa:aa:aa:77"]),
+                   now=NOW + timedelta(minutes=59))
+ov = ex.check_once({}, live=FakeLive(blocked=[]),
+                   now=NOW + timedelta(minutes=59, seconds=30))
+gone = by_kind(ov)[("block_holds", "aa:aa:aa:aa:aa:77")]
+ex.acknowledge(gone["id"], now=NOW + timedelta(minutes=59, seconds=35))
+ov = ex.check_once({}, live=FakeLive(blocked=[]),
+                   now=NOW + timedelta(minutes=59, seconds=40))
+check("a missing block the owner has seen ends",
+      ("block_holds", "aa:aa:aa:aa:aa:77") not in by_kind(ov))
+
+# The block wall
+
+print("\nThe block wall")
+W = NOW + timedelta(minutes=59, seconds=50)
+WALL = dict(version=10, caps=("block", "conntrack", "counters", "blockhits"))
+ov = ex.check_once({}, live=FakeLive(blocked=["198.51.100.8"]), now=W)
+check("agent 9: no wall, and it says why",
+      ov["walls"] == [] and "version 10" in ov["router"]["wall_reason"],
+      ov["router"])
+check("an old agent does not turn the mood uncertain", ov["mood"] != "uneasy",
+      ov["sentence"])
+w0 = W + timedelta(minutes=5)
+for i, n in enumerate((0, 4, 4, 30)):
+    ov = ex.check_once({}, live=FakeLive(blocked=["198.51.100.8"], hits={
+        "198.51.100.8": {"packets": n, "bytes": n * 60}}, **WALL),
+        now=w0 + timedelta(minutes=20 * i))
+walls = ov["walls"]
+check("one wall per block", [x["subject"] for x in walls] == ["198.51.100.8"],
+      walls)
+check("the caught packets are counted from the readings",
+      walls[0]["caught_24h"] == 30, walls[0])
+check("by hour, 24 of them", len(walls[0]["hours"]) == 24
+      and sum(walls[0]["hours"]) == 30, walls[0]["hours"])
+check("a public address is the far side", walls[0]["side"] == "address")
+b = by_kind(ov)[("block_holds", "198.51.100.8")]
+check("the ticket says what the router caught",
+      "caught 30 packets" in b["detail"], b["detail"])
+ov = ex.check_once({}, live=FakeLive(blocked=["198.51.100.8"], hits={
+    "198.51.100.8": {"packets": 5, "bytes": 300}}, **WALL),
+    now=w0 + timedelta(minutes=80))
+check("a router restart counts on from zero",
+      ov["walls"][0]["caught_24h"] == 35, ov["walls"][0])
+ov = ex.check_once({}, live=FakeLive(blocked=["198.51.100.8"], counted=False,
+                                     **WALL), now=w0 + timedelta(minutes=85))
+check("a router that cannot count draws no wall and says so",
+      ov["walls"] == [] and "no count per block" in ov["router"]["wall_reason"],
+      ov["router"])
+check("and the overview remembers it", ex.overview(
+    now=w0 + timedelta(minutes=86))["router"]["wall_reason"]
+    is not None)
+cam = "192.0.2.41"
+live = FakeLive(blocked=["198.51.100.8", cam],
+                hits={cam: {"packets": 2, "bytes": 80}}, **WALL)
+live.inventory[cam] = {}
+ov = ex.check_once({}, live=live, now=w0 + timedelta(minutes=90))
+dev = [x for x in ov["walls"] if x["subject"] == cam]
+check("a blocked device is the near side, its first reading counts",
+      dev and dev[0]["side"] == "device" and dev[0]["caught_24h"] == 2, dev)
+sql(("DELETE FROM block_hit", ()))
 
 # New device, DNS around the router, gateway change
 
@@ -266,6 +344,52 @@ check("under a day of watching, nothing is called new",
       d["learning"] and not d["new"], d)
 check("a value that is not an address is refused",
       "error" in ex.device_detail("1.2.3.4' OR 1=1", live=live))
+
+# Smart devices keep to their usual contacts
+
+print("\nUsual contacts")
+U = datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)
+sql(("UPDATE sensor_gaps SET ended_at = ? WHERE ended_at IS NULL",
+     (ex._sql(fresh),)))
+sql(("INSERT INTO known_devices (ip, mac, known_as, device_type, last_seen) "
+     "VALUES ('192.0.2.60', '00:00:5e:00:53:60', 'Doorbell', 'iot', ?)",
+     (ex._iso(U),)),
+    ("INSERT INTO known_devices (ip, device_type, last_seen) VALUES "
+     "('192.0.2.61', 'printer', ?)", (ex._iso(U),)),
+    ("INSERT INTO known_devices (ip, device_type, last_seen) VALUES "
+     "('192.0.2.62', 'tv', ?)", (ex._iso(U),)))
+for ip, name, first in (
+        ("192.0.2.60", "api.doorbell.example", U - timedelta(days=5)),
+        ("192.0.2.60", "eu.api.doorbell.example", U - timedelta(hours=2)),
+        ("192.0.2.61", "ink.example", U - timedelta(hours=30)),
+        ("192.0.2.62", "stream.example", U - timedelta(hours=1))):
+    sql(("INSERT INTO lan_flow (device_ip, proto, dst, dport, dst_name, "
+         "first_seen, last_seen) VALUES (?, 'tcp', '198.51.100.30', 443, ?, ?, ?)",
+         (ip, name, ex._iso(first), ex._iso(first + timedelta(minutes=5)))),)
+live = FakeLive()
+live.inventory["192.0.2.60"] = {}
+ov = ex.check_once({}, live=live, now=U)
+u = by_kind(ov)[("usual_contacts", "")]
+check("a new name under a known service is not new", u["state"] == "holding"
+      and "1 device(s) kept" in u["detail"] and "1 still learning" in u["detail"],
+      u)
+check("a TV is left out by default", "192.0.2.62" not in json.dumps(u))
+sql(("INSERT INTO lan_flow (device_ip, proto, dst, dport, dst_name, "
+     "first_seen, last_seen) VALUES ('192.0.2.60', 'tcp', '203.0.113.80', 443, "
+     "'odd-relay.example.net', ?, ?)",
+     (ex._iso(U + timedelta(minutes=2)), ex._iso(U + timedelta(minutes=3)))))
+ov = ex.check_once({}, live=live, now=U + timedelta(minutes=5))
+u = by_kind(ov)[("usual_contacts", "")]
+check("a service the doorbell never used is new, not broken",
+      u["state"] == "new" and "Doorbell to example.net" in u["detail"], u)
+check("the doorbell turns amber on the ring",
+      {d["ip"]: d["state"] for d in ov["devices"]}.get("192.0.2.60") == "new",
+      ov["devices"])
+ov = ex.check_once({"expectations": {"simple_types": ["tv"]}}, live=live,
+                   now=U + timedelta(minutes=10))
+u = by_kind(ov)[("usual_contacts", "")]
+check("TVs can be added in config", "1 still learning" in u["detail"]
+      or "192.0.2.62" in json.dumps(u), u)
 
 # False alarms per day
 

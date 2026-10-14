@@ -55,12 +55,13 @@ TIMEOUT = 30
 REUSE_SECONDS = 1.0
 CAPABILITIES = ("block", "sinkhole", "leases", "neighbors", "conntrack",
                 "log", "dnslog", "blockmac", "counters", "persist",
-                "appblock", "message")
+                "appblock", "message", "blockhits")
 VERBS = {"probe", "version", "leases", "neighbors", "conntrack", "log",
          "dnslog", "blocks", "block", "unblock", "sinkholes", "sinkhole",
          "unsinkhole", "blockmac", "unblockmac", "counters", "restore",
          "apps", "blockapp", "unblockapp", "apprefresh", "messages",
-         "message", "messagekeep", "unmessage", "replies", "clearreply"}
+         "message", "messagekeep", "unmessage", "replies", "clearreply",
+         "blockhits"}
 # What the dashboard calls each app the agent knows. An app the agent
 # reports and this table lacks is shown by its agent name.
 APP_LABELS = {
@@ -392,6 +393,15 @@ class Gateway:
         self._need("persist")
         return self._run("restore")["fields"]
 
+    def block_hits(self) -> dict:
+        """Packets each block caught, from agent version 10. counted is False
+        when this router's nft keeps no counter on a set element."""
+        self._need("blockhits")
+        r = self._run("blockhits")
+        return {"counted": r["fields"].get("counted") == "yes",
+                "reason": r["fields"].get("reason"),
+                "hits": parse_block_hits(r["body"])}
+
     def sinkholes(self) -> list:
         self._need("sinkhole")
         return [s for s in self._run("sinkholes")["body"] if s.strip()]
@@ -521,6 +531,19 @@ def parse_counters(lines: list) -> dict:
         up_p, up_b, dn_p, dn_b = (int(p) for p in parts[1:])
         out[_clean(parts[0], 45)] = {"up_packets": up_p, "up_bytes": up_b,
                                      "down_packets": dn_p, "down_bytes": dn_b}
+    return out
+
+
+def parse_block_hits(lines: list) -> dict:
+    """'address packets bytes' lines, keyed by address."""
+    out = {}
+    for line in lines[:5000]:
+        parts = line.split()
+        if len(parts) != 3 or not all(p.isdigit() for p in parts[1:]):
+            continue
+        key = _clean(parts[0], 45).lower()
+        if key:
+            out[key] = {"packets": int(parts[1]), "bytes": int(parts[2])}
     return out
 
 
@@ -673,6 +696,8 @@ def describe_capabilities(caps: list) -> dict:
                     "internet and from other subnets"
                     + (", kept across a router reboot" if "persist" in caps
                        else ", until the router reboots"))
+    if "blockhits" in caps:
+        sees.append("how many packets each block caught at the router")
     if "blockmac" in caps:
         does.append("block a device by its hardware address, so a new IP "
                     "address does not get it back online")

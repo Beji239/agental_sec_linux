@@ -2338,6 +2338,29 @@ def register_routes(app):
         out = expectations.acknowledge(exp_id)
         return jsonify(out), (200 if out["success"] else 404)
 
+    # Rule trials: a written fix for a noisy rule, tried for two weeks.
+
+    @app.route("/api/expectations/trials")
+    @require_api_key
+    def rule_trials_overview():
+        from core import rule_trials
+        return jsonify(rule_trials.overview())
+
+    @app.route("/api/expectations/trials/start/<tuning>", methods=["POST"])
+    @require_api_key
+    def rule_trial_start(tuning):
+        from core import rule_trials
+        out = rule_trials.start(str(tuning))
+        return jsonify(out), (200 if out["success"] else 400)
+
+    @app.route("/api/expectations/trials/end/<tuning>", methods=["POST"])
+    @require_api_key
+    def rule_trial_end(tuning):
+        from core import rule_trials
+        body = request.get_json(silent=True) or {}
+        out = rule_trials.end(str(tuning), keep=body.get("keep") is True)
+        return jsonify(out), (200 if out["success"] else 400)
+
     # THE ACTION QUEUE. v36, T3.
     #
     # THE APPROVE/DENY ENDPOINTS FOR A QUEUED CARD, and they are deliberately

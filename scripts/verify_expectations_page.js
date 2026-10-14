@@ -1,8 +1,9 @@
 // scripts/verify_expectations_page.js, the Expectations page's own rendering.
 // Runs the page's functions against made-up payloads and reads what they drew:
 // the mood word, one dot per device, the 24 hour clock, one card per
-// expectation, the "I have seen this" button only on an unseen break, and
-// names from outside escaped. Needs node and no running app.
+// expectation, the "I have seen this" button only on an unseen break, the
+// block wall, rule trials, and names from outside escaped. Needs node and no
+// running app.
 //
 //   node scripts/verify_expectations_page.js
 
@@ -62,8 +63,14 @@ function load() {
     grab(src, '_expBytes'), grab(src, 'drawDeviceOrbit'), grab(src, 'renderExpDevice'),
     src.slice(src.indexOf('const FA_FAMILY'), src.indexOf('function _faColour(')),
     grab(src, '_faColour'), grab(src, '_faDot'), grab(src, 'renderFalseAlarms'), grab(src, 'resetFalseAlarms'),
+    grab(src, '_n'), grab(src, 'drawBlockWall'), grab(src, 'renderBlockWalls'),
+    src.slice(src.indexOf('const TRIAL_WORD'), src.indexOf('async function loadTrials(')),
+    grab(src, '_trialDot'), grab(src, '_trialCol'), grab(src, 'renderTrials'),
     'function _setFA(d) { FA_DATA = d; }',
-    'return { renderExpectations, renderExpDevice, renderFalseAlarms, resetFalseAlarms, _setFA };',
+    'function _setTrials(t) { TRIALS = t; }',
+    'function _fix() { return FA_FIX; }',
+    'return { renderExpectations, renderExpDevice, renderFalseAlarms, resetFalseAlarms, _setFA,',
+    '         renderTrials, _setTrials, _fix };',
   ].join('\n');
   return new Function(body)();
 }
@@ -199,6 +206,79 @@ ok((picked.match(/class="fa-dim"/g) || []).length === 3, 'picking a rule fades t
 ok(els['fa-showing'].textContent.includes('FED-1002 only') && !els['fa-reset'].disabled, 'a pick says which rule, and Show all is on');
 page.resetFalseAlarms();
 ok(!els['fa-days'].innerHTML.includes('fa-dim') && els['fa-reset'].disabled, 'Show all brings every dot back');
+
+console.log('\nThe block wall');
+const calm = { mood: 'calm', sentence: '', checked_at: null, devices: [], watch_24h: [], expectations: [] };
+page.renderExpectations(Object.assign({}, calm, {
+  router: { ok: true, blocks: ['198.51.100.7'], wall: false,
+            wall_reason: 'The router agent is version 9; version 10 counts what each block caught.' },
+  walls: [] }));
+const noWall = els['exp-walls'].innerHTML;
+ok(noWall.includes('version 10') && noWall.includes('No wall is drawn') && !noWall.includes('<svg'),
+   'an agent that cannot count draws no wall and says why', noWall);
+page.renderExpectations(Object.assign({}, calm, { router: { ok: false, reasons: ['x'], wall: false }, walls: [] }));
+ok(els['exp-walls'].innerHTML.includes('confirm the blocks'), 'an unreadable router says it cannot confirm the blocks');
+const hrs = Array.from({ length: 24 }, (_, i) => (i % 6 === 0 ? 5 : 0));
+page.renderExpectations(Object.assign({}, calm, {
+  router: { ok: true, blocks: ['198.51.100.7'], wall: true },
+  walls: [{ id: 3, subject: '198.51.100.7', side: 'address', name: HOSTILE, state: 'holding',
+            hours: hrs, caught_24h: 20, hours_start: iso(now), leaks: 0 },
+          { id: 4, subject: '172.21.0.40', side: 'device', name: 'cam', state: 'broken',
+            hours: Array(24).fill(0), caught_24h: 0, hours_start: iso(now), leaks: 2 },
+          { id: 5, subject: '172.21.0.41', side: 'device', name: 'tv', state: 'broken',
+            hours: null, caught_24h: null, leaks: 0, missing: true }] }));
+const wall = els['exp-walls'].innerHTML;
+ok((wall.match(/class="exp-wall /g) || []).length === 3, 'one wall per block');
+ok((wall.match(/class="wall-dot"/g) || []).length === 4, 'one moving dot per hour that caught something');
+ok((wall.match(/<rect x="[^"]*" y="98"/g) || []).length === 48, 'a 24 hour strip under each counted wall');
+ok(wall.includes('Caught 20 packets in the last 24 hours. Nothing got through.'), 'the caught count is said');
+ok((wall.match(/class="exp-dot-broken"/g) || []).length === 2 && wall.includes('2 connections got through'),
+   'a leak is red on the far side');
+ok(wall.includes('no longer on the router'), 'a missing block is said plainly');
+ok(wall.includes('the internet') && wall.includes('your network'), 'each side is named');
+ok(!wall.includes('<img'), 'a name from outside is escaped on the wall', wall);
+
+console.log('\nRule trials');
+const day = (d, dots, extra) => Object.assign({ day: d, dots: dots || [] }, extra || {});
+const tdot = (verdict, held) => ({ incident: 1, rule: 'FED-1002', entity: '192.0.2.20', verdict, held,
+                                   names: [HOSTILE] });
+const before = Array.from({ length: 14 }, (_, i) => day('2026-10-' + String(i + 1).padStart(2, '0'),
+  i === 3 ? [tdot('false_alarm', true), tdot('real', false)] : []));
+const trial = (over) => Object.assign({
+  tuning: 'fed_file_hosts', title: 'Threat lists: leave out shared file hosts', rules: ['FED-1002', 'FED-1003'],
+  problem: 'Feeds list one file.', change: 'Held back.', status: 'off', proposed: true,
+  sentence: 'Worth a trial.', before }, over);
+page._setTrials([trial({})]);
+page.renderTrials();
+let tr = els['trials'].innerHTML;
+ok(tr.includes('class="trial st-off proposed"'), 'a proposed fix stands out');
+ok((tr.match(/class="trial-day[ "]/g) || []).length === 14, 'two weeks of days before');
+ok(tr.includes('data-trial="start"') && !tr.includes('data-trial="keep"'), 'only Start is offered before a trial');
+ok(tr.includes('<line x1="2" y1="12"'), 'an alarm the fix would hold back is struck through');
+ok(tr.includes('fill="var(--green)"'), 'a real hit is green');
+ok(!tr.includes('<img'), 'names from outside are escaped in the trial', tr);
+ok(typeof els['trials'].onclick === 'function', 'the trial buttons listen for clicks');
+const after = Array.from({ length: 15 }, (_, i) => day('2026-10-' + String(15 + i).padStart(2, '0'),
+  i === 0 ? [tdot('real', false)] : [], { held: i === 0 ? 3 : 0, future: i > 2 }));
+page._setTrials([trial({ status: 'trial', proposed: false, after, over: false })]);
+page.renderTrials();
+tr = els['trials'].innerHTML;
+ok(tr.includes('data-trial="undo"') && !tr.includes('data-trial="keep"'), 'during the trial only Undo is offered');
+ok(tr.includes('3 hits held back'), 'held back hits are drawn');
+ok((tr.match(/still to come/g) || []).length === 12, 'days to come are empty dashed rings');
+page._setTrials([trial({ status: 'trial', proposed: false, after, over: true })]);
+page.renderTrials();
+ok(els['trials'].innerHTML.includes('data-trial="keep"') && els['trials'].innerHTML.includes('data-trial="undo"'),
+   'at the end both Keep and Undo are offered');
+els['fa-rules'].onclick({ target: chip });
+ok(els['fa-trial'].style.display === '' && page._fix() === 'fed_file_hosts'
+   && els['fa-showing'].textContent.includes('A fix is written'), 'a rule with a fix links to its trial');
+const other = { closest: () => ({ getAttribute: () => 'LNX-2007' }) };
+page._setFA(Object.assign({}, { days: [], rules: [{ rule: 'LNX-2007', false_alarm: 1, real: 0, not_sure: 0, unlabelled: 0, days: 1 }], unlabelled: [] }));
+page.renderFalseAlarms();
+els['fa-rules'].onclick({ target: other });
+ok(els['fa-trial'].style.display === 'none' && els['fa-showing'].textContent.includes('No fix is written'),
+   'a rule without a fix says so');
 
 console.log(`\n${passed} passed, ${FAIL.length} failed`);
 if (FAIL.length) { console.log('FAILURES:', JSON.stringify(FAIL, null, 2)); process.exit(1); }

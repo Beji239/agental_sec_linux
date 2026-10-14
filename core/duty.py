@@ -919,10 +919,8 @@ def budget_state(urgent: bool = False) -> dict:
 #    writes here change only the app's own records (an action request, a
 #    prediction).
 #
-# write_prediction is included deliberately: it is the one thing in this app
-# that can tell the model it was wrong, and a loop that investigates without
-# ever predicting learns nothing it can be graded on. It is also on the wall --
-# predictions feed nothing that decides alerting.
+# write_prediction is left out since 2026-10-13: the app sets and checks its
+# own expectations, and the loop's predictions were about the app itself.
 
 DUTY_TOOL_ALLOWLIST = (
     # the ledger and its neighbours
@@ -1009,8 +1007,8 @@ DUTY_TOOL_ALLOWLIST = (
     "lookup_ip", "query_enrichment", "geolocate_ip", "query_threat_map",
     "query_map_summary",
     "query_runbook", "query_performance",
-    # the two writes the loop is allowed, both of which only touch our records
-    "file_action_request", "write_prediction",
+    # the one write the loop is allowed, which only touches our records
+    "file_action_request",
     # Questions for the owner. Filing one changes nothing on the machine and
     # waits for the popup budget; before 2026-10-11 the prompt named the tool
     # and the loop could not call it, so it never asked anything.

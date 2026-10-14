@@ -241,8 +241,16 @@ The expectations:
   morning, against the usual of the last two weeks. It needs three watched
   nights before it says anything.
 - **The network keeps talking to the same countries.**
+- **Smart devices and printers keep to their usual contacts.** A device you
+  marked as a smart device or printer on the Network tab that reaches a
+  service it never used is news. It needs three days of watching first. TVs
+  are left out, because they reach new streaming services every day; add
+  `"tv"` to `simple_types` in the `expectations` block of config.json to hold
+  them too.
 - **Each block holds.** One per block on the router. If any connection to or
   from the blocked address gets an answer after the block, the block leaked.
+  A block that disappears from the router without the app lifting it breaks
+  too, until you mark it seen.
 
 The mood at the top follows from them:
 
@@ -272,6 +280,22 @@ new in the last 24 hours, its countries, and its blocks. For the first day a
 device is watched, nothing is called new.
 
 <p align="center">
+  <img src="../assets/screenshots/expectations_wall.png" alt="The block wall" width="800">
+</p>
+
+*Three blocks: one holding, one leaking, one gone from the router. Sample
+data.*
+
+**The block wall.** One wall for each block on the router. The amber dots
+running into the wall are packets the router caught and turned away, and the
+strip under it shows the last 24 hours, one cell per hour. A red dot on the far
+side is a connection that got through. The router counts what each block
+caught only with agent version 10 or newer; with an older agent, or when the
+router cannot be read, no wall is drawn and the page says why. Run
+`./scripts/install_gateway_agent.sh --enroll ROUTER_ADDRESS` again to update
+the agent.
+
+<p align="center">
   <img src="../assets/screenshots/false_alarms.png" alt="False alarms per day" width="800">
 </p>
 
@@ -291,7 +315,31 @@ chat ("that was my backup job, it is a false alarm") and it records your
 verdict, marked as given on your word. Incidents you dismissed before this
 existed count as false alarms, marked "from a dismissal".
 
-The analyst's old prediction record is still at the bottom, folded away.
+<p align="center">
+  <img src="../assets/screenshots/rule_trials.png" alt="Rule trials" width="800">
+</p>
+
+*A fix for the threat list rules, nine days into its trial. Sample data.*
+
+**Rule trials.** A rule that keeps crying wolf gets a written fix, and you can
+try it for two weeks before you decide. The first one is for the threat list
+rules FED-1002 and FED-1003: feeds list one bad file on a shared host, such as
+a script on cdn.jsdelivr.net or a download on github.com, and the app only sees
+the host name, so every visit to that host raised an alarm. The fix leaves
+shared file hosts out. Every other listed name still fires.
+
+Each column is a day. Before the trial you see the alarms of the last two
+weeks, with a line through the ones the fix would have held back. During the
+trial you see what still fired, the hits the fix held back as grey crosses, and
+the days to come as dashed rings. A self-check runs on the threat lists: a
+listed name off the shared hosts must still match, so you know real hits still
+fire. A fix is suggested once you have marked one of its alarms a false alarm.
+Nothing changes until you press **Start a two week trial**, and at the end you
+choose **Keep the fix** or **Undo it**. Pick a rule in the false alarms block
+and **Open its fix** takes you to its trial.
+
+The analyst's old prediction record is still at the bottom, folded away. The
+analyst no longer makes predictions on its own; it makes one only when you ask.
 
 ## Detections
 

@@ -148,7 +148,9 @@ logger = logging.getLogger(__name__)
 # daily_tally, per-day counters a sensor keeps only in memory (ClamAV passes).
 # v64: daily_report.dismissed and dismissed_at, the tick box on the Agents tab.
 # v65: duty_run.dismissed_at and dismissed_by, tick boxes on the wake-up list.
-SCHEMA_VERSION = 66
+# v66, 2026-10-12: expectation and expectation_check, and incident verdicts.
+# v67, 2026-10-13: block_hit (the block wall), rule_trial and rule_trial_held.
+SCHEMA_VERSION = 67
 
 
 # HELPERS
@@ -4282,9 +4284,10 @@ def _migrate_run_dismissal(conn) -> int:
 
 
 def _migrate_expectations(conn) -> int:
-    """v66: the expectations the app sets and checks itself. Idempotent."""
-    from core import expectations
-    return expectations.ensure_tables(conn)
+    """v66, v67: the expectations the app sets and checks itself, and rule
+    trials. Idempotent."""
+    from core import expectations, rule_trials
+    return expectations.ensure_tables(conn) | rule_trials.ensure_tables(conn)
 
 
 def _migrate_merge_carried(conn) -> int:

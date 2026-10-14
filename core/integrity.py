@@ -236,6 +236,11 @@ JOURNALLED = {
     "agent_report_expired",
     # The same for wake-up lines (duty_run), kept one week like the reports.
     "agent_run_expired",
+    # The owner's verdict on an incident, and a rule trial started or ended:
+    # a trial stops alarms, so it sits beside the dismissals.
+    "incident_verdict",
+    "rule_trial_started",
+    "rule_trial_ended",
 }
 
 

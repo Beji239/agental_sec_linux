@@ -225,6 +225,13 @@
  },
  {
   "tool": "bandit",
+  "rule": "B608",
+  "path": "core/expectations.py",
+  "text": "\"SELECT ip, COALESCE(NULLIF(known_as, ''), hostname, ip) AS name \"",
+  "reason": "only '?' placeholders and fixed column text are spliced in; every value is a bound parameter"
+ },
+ {
+  "tool": "bandit",
   "rule": "B112",
   "path": "core/home_location.py",
   "text": "except Exception:",
@@ -824,6 +831,13 @@
   "path": "core/retention.py",
   "text": "sql = f\"DELETE FROM {table} WHERE {col} < datetime('now', ?)\"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/rule_trials.py",
+  "text": "f\"SELECT f.found_at, f.detection_id AS rule, f.entity_value AS entity, \"",
+  "reason": "only '?' placeholders and fixed column text are spliced in; every value is a bound parameter"
  },
  {
   "tool": "bandit",

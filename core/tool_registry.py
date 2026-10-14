@@ -1800,6 +1800,9 @@ TOOL_MANIFEST = [
     {
         "name": "write_prediction",
         "description": (
+            "ONLY WHEN THE OWNER ASKS YOU FOR A PREDICTION IN CHAT. The app "
+            "sets and checks its own expectations about the network, so do "
+            "not make predictions on your own.\n\n"
             "Say what you expect to happen, with a deadline, and let this app "
             "check you afterwards.\n\n"
             "THIS IS THE ONE THING IN THIS TOOL THAT CAN TELL YOU YOU WERE "

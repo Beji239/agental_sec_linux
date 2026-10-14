@@ -69,8 +69,8 @@ About a hundred tools, in these groups:
 - **Behaviour:** baselines, deviations and sessions.
 - **Lookups:** enrichment of an address, domain, CVE, hardware prefix or file
   hash, the CISA KEV runbook, and web search when a key is set.
-- **Its own record:** past reports, case memory, its predictions and their
-  score, your answers to its questions.
+- **Its own record:** past reports, case memory, its old predictions and
+  their score, your answers to its questions.
 - **The app itself:** sensor health, database size, and its own source code,
   so it can explain how a finding was produced.
 
@@ -167,8 +167,10 @@ apart from the Chat tab.
 - **It asks you.** When it needs something only you know, it files a question
   on the Questions tab instead of guessing. Unanswered questions retire, they
   are never treated as yes.
-- **It is graded.** It makes predictions with deadlines, and the app checks
-  them. The record is at the bottom of the Expectations tab.
+- **It no longer guesses on its own.** It used to make predictions with
+  deadlines for the app to grade. The app now sets and checks its own
+  expectations, so the analyst makes a prediction only when you ask for one.
+  The old record is at the bottom of the Expectations tab.
 - **It records your verdicts.** Tell it in chat that an incident was a false
   alarm, or real, and it writes your verdict down, marked as given on your
   word. It never gives one on its own.

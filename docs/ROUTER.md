@@ -51,6 +51,8 @@ only what was reported:
 - **neighbors**, the neighbour table: `ip neigh`, or arp and ndp
 - **conntrack**, the router's connection table: who talks to what
 - **counters**, traffic per device
+- **blockhits**, how many packets each block caught: nft, agent version 10
+  or newer. It draws the block wall on the Expectations tab
 - **log** and **dnslog**, the system log and dnsmasq's query log (with
   `log-queries` on)
 - **appblock**, block an app for one device: nft plus dnsmasq built with

@@ -2097,6 +2097,17 @@ def _feed_hit_domain(conn, domain: str):
     return None
 
 
+def _held_back(rule: str, name: str, entity) -> bool:
+    """A rule trial the owner started can hold a hit back (core/rule_trials).
+    Any error lets the alarm through."""
+    try:
+        from core import rule_trials
+        return rule_trials.holds_back(rule, name, entity or "unknown")
+    except Exception as e:                                  # noqa: BLE001
+        logger.debug(f"{rule}: rule trial check failed, alarm kept: {e}")
+        return False
+
+
 def _keep_payload(src_ip, dst_ip, dst_port, protocol, detection_id,
                   entity, src_port=None):
     """
@@ -2317,6 +2328,8 @@ def _check_dns_domains(conn, session_id: str, since_id: int, stale: bool) -> int
         if not hit:
             continue
         matched, feed, family = hit
+        if _held_back("FED-1002", matched, client_ip):
+            continue
         # PER FEED; see _severity_for_feed.
         severity = _severity_for_feed(feed, stale)
 
@@ -2377,6 +2390,8 @@ def _check_tls_sni(conn, session_id: str, since_id: int, stale: bool) -> int:
         if not hit:
             continue
         matched, feed, family = hit
+        if _held_back("FED-1003", matched, src_ip or dst_ip):
+            continue
         # PER FEED; see _severity_for_feed.
         severity = _severity_for_feed(feed, stale)
 

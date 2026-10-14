@@ -1641,8 +1641,36 @@
   .fa-todo .btn { font-size: 11px; padding: 3px 8px; margin-left: 4px; }
   .exp-legend summary { cursor: pointer; color: var(--text); }
   .exp-old summary { cursor: pointer; list-style: none; }
+  .exp-walls { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px;
+                margin-top: 12px; }
+  .exp-wall { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+              padding: 10px 12px; }
+  .exp-wall.st-broken { border-color: var(--red); }
+  .exp-wall svg { width: 100%; height: auto; display: block; }
+  .wall-dot { animation: wall-come 7s linear infinite; }
+  @keyframes wall-come { 0% { transform: translateX(calc(var(--dx) * -1)); opacity: 0; }
+                         15% { opacity: 0.9; } 100% { transform: translateX(0); opacity: 0.9; } }
+  .trial { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+           padding: 12px 14px; margin-top: 10px; }
+  .trial.proposed { border-color: var(--amber); }
+  .trial.flash { box-shadow: 0 0 0 2px var(--text-hi); }
+  .trial-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+  .trial-title { color: var(--text-hi); font-size: 13px; }
+  .trial-pill { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+                padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius);
+                color: var(--text-dim); }
+  .trial.st-trial .trial-pill { color: var(--blue); border-color: var(--blue); }
+  .trial.st-kept .trial-pill { color: var(--green); border-color: var(--green); }
+  .trial-rules { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .trial-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: end; margin-top: 10px; }
+  .trial-days { display: flex; gap: 3px; align-items: flex-end; flex-wrap: wrap; }
+  .trial-day { display: inline-flex; flex-direction: column-reverse; align-items: center; min-width: 16px;
+               min-height: 18px; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+  .trial-day.today { border-bottom-color: var(--text-hi); }
+  .trial-more { font-family: var(--mono); font-size: 9px; color: var(--text-dim); }
+  .trial .btn { margin-top: 10px; margin-right: 6px; }
   @media (prefers-reduced-motion: reduce) {
-    .exp-ring, .exp-dot-broken { animation: none !important; }
+    .exp-ring, .exp-dot-broken, .wall-dot { animation: none !important; }
   }
 </style>
 </head>
@@ -2603,6 +2631,16 @@
       <div id="exp-tickets" class="exp-tickets"></div>
     </div>
     <div class="card">
+      <div class="card-title">The block wall</div>
+      <div class="exp-note" style="margin-top:0;">
+        One wall for each block on the router. The dots running into the wall are packets the router
+        caught and turned away. The strip under it shows the last 24 hours, one cell per hour, darker
+        for more. A red dot on the far side is a connection that got through, and that breaks the block.
+        The wall is only drawn when the router itself counts what each block caught.
+      </div>
+      <div id="exp-walls" class="exp-walls"></div>
+    </div>
+    <div class="card">
       <div class="card-title">False alarms per day</div>
       <div class="exp-note" style="margin-top:0;">
         <b>What it is for.</b> Every alert costs you a look. This block shows which rules are worth
@@ -2623,10 +2661,27 @@
       </div>
       <div id="fa-rules" class="fa-rules"></div>
       <div class="fa-bar"><span id="fa-showing"></span>
-        <button class="btn" id="fa-reset" onclick="resetFalseAlarms()">Show all</button></div>
+        <span><button class="btn" id="fa-trial" style="display:none" onclick="openTrial()">Open its fix</button>
+        <button class="btn" id="fa-reset" onclick="resetFalseAlarms()">Show all</button></span></div>
       <div id="fa-days"></div>
       <div class="card-title" style="margin-top:16px;">Needs your verdict</div>
       <div id="fa-todo"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Rule trials</div>
+      <div class="exp-note" style="margin-top:0;">
+        A rule that keeps crying wolf gets a written fix, and you can try it for two weeks before you
+        decide. The app counts the alarms before and during the trial, and checks that a real hit would
+        still fire. Nothing changes until you start a trial, and nothing is kept until you say so.
+      </div>
+      <details class="exp-legend">
+        <summary>How to read this</summary>
+        Each column is a day, today on the right. A filled amber dot is an alarm you marked false, a green
+        dot one you marked real, and an amber ring one still waiting for your verdict. A line through a dot
+        means the fix holds that alarm back. During the trial, a grey cross is a hit the fix held back, and
+        a dashed ring is a day still to come.
+      </details>
+      <div id="trials"></div>
     </div>
     <details class="card exp-old">
       <summary class="card-title" style="margin-bottom:0;">The model's own predictions, the old record</summary>
@@ -3518,7 +3573,7 @@ function loadPage(name) {
   if (name === 'ports')      { loadPorts(); loadPortSets(); loadListeners(); }
   if (name === 'processes')  loadProcesses();
   if (name === 'behavioral') { loadBaselines(); loadDeviations(); }
-  if (name === 'predictions') { loadExpectations(); loadFalseAlarms(); loadPredictionScore(); loadPredictions(); }
+  if (name === 'predictions') { loadExpectations(); loadFalseAlarms(); loadTrials(); loadPredictionScore(); loadPredictions(); }
   if (name === 'detections') loadDetections();
   if (name === 'performance') loadPerformance();
   if (name === 'questions')   loadQuestions();
@@ -8468,6 +8523,7 @@ function renderExpectations(d) {
   drawMoodRing(d.mood, d.devices || []);
   drawWatchClock(d.watch_24h || []);
   renderExpTickets(d.expectations || []);
+  renderBlockWalls(d.walls || [], r);
 }
 
 function drawMoodRing(mood, devices) {
@@ -8565,6 +8621,182 @@ function renderExpTickets(list) {
   }).join('');
 }
 
+
+// THE BLOCK WALL, drawn only when the router counts what each block caught
+
+function _n(k, word) { return k + ' ' + word + (k === 1 ? '' : 's'); }
+
+function drawBlockWall(w) {
+  const wallX = 180, nearX = 40, farX = 320, cy = 46;
+  const broken = w.state === 'broken';
+  const edge = broken ? 'var(--red)' : 'var(--text-dim)';
+  let bricks = '';
+  for (let r = 0; r < 6; r++) {
+    const y = 16 + r * 11;
+    const row = r % 2 ? [[-13, 6], [-6, 12], [7, 6]] : [[-13, 12], [0, 13]];
+    row.forEach(([dx, wd]) => {
+      bricks += `<rect x="${wallX + dx}" y="${y}" width="${wd - 1}" height="10" rx="1" fill="var(--bg2)" stroke="${edge}" stroke-width="1"/>`;
+    });
+  }
+  const hours = w.hours || [];
+  const busy = [];
+  hours.forEach((n, i) => { if (n > 0) busy.push([i, n]); });
+  let dots = '';
+  busy.slice(-10).forEach(([i, n], k) => {
+    const r = (2.5 + Math.min(3.5, Math.log10(n + 1) * 1.8)).toFixed(1);
+    const x = wallX - 20 - (k % 3) * 8, y = cy + ((k * 13) % 44) - 22;
+    dots += `<circle class="wall-dot" cx="${x}" cy="${y}" r="${r}" fill="var(--amber)" style="--dx:${x - nearX - 22}px;animation-delay:-${(k * 0.7).toFixed(1)}s">`
+          + `<title>${n} packet${n === 1 ? '' : 's'} caught in one hour</title></circle>`;
+  });
+  let leaks = '';
+  for (let k = 0; k < Math.min(6, w.leaks || 0); k++) {
+    leaks += `<circle class="exp-dot-broken" cx="${wallX + 32 + k * 14}" cy="${cy + (k % 2 ? 8 : -8)}" r="5" fill="var(--red)"><title>A connection got through</title></circle>`;
+  }
+  const max = Math.max(1, ...hours);
+  const start = w.hours_start ? new Date(w.hours_start) : null;
+  let strip = '';
+  hours.forEach((n, i) => {
+    const at = start ? new Date(start.getTime() + i * 3600e3).getHours() + ':00' : '';
+    strip += `<rect x="${(nearX + i * 280 / 24).toFixed(1)}" y="98" width="${(280 / 24 - 1).toFixed(1)}" height="9" fill="var(--amber)" opacity="${(n ? 0.2 + 0.8 * n / max : 0.06).toFixed(2)}">`
+           + `<title>${at}, ${n} packet${n === 1 ? '' : 's'} caught</title></rect>`;
+  });
+  const near = w.side === 'device' ? w.name : 'your network';
+  const far = w.side === 'device' ? 'the internet' : w.name;
+  const label = (x, t) => `<text x="${x}" y="${cy + 30}" text-anchor="middle" fill="var(--text)" font-size="10" font-family="var(--mono)">${esc(String(t).slice(0, 18))}</text>`;
+  return `<svg viewBox="0 0 360 112" role="img" aria-label="Block on ${esc(w.subject)}">`
+    + `<line x1="${nearX}" y1="${cy}" x2="${farX}" y2="${cy}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5"/>`
+    + `<circle cx="${nearX}" cy="${cy}" r="14" fill="var(--bg2)" stroke="var(--text-dim)" stroke-width="1.5"/>`
+    + `<circle cx="${farX}" cy="${cy}" r="14" fill="var(--bg2)" stroke="${broken ? 'var(--red)' : 'var(--text-dim)'}" stroke-width="1.5"/>`
+    + dots + bricks + leaks + label(nearX, near) + label(farX, far) + strip + `</svg>`;
+}
+
+function renderBlockWalls(walls, router) {
+  const box = document.getElementById('exp-walls');
+  const r = router || {};
+  if (!r.wall) {
+    box.innerHTML = `<div class="exp-note">${esc(r.wall_reason || "The router can't confirm the blocks.")} No wall is drawn.</div>`;
+    return;
+  }
+  if (!walls.length) {
+    box.innerHTML = '<div class="exp-note">No block is set on the router.</div>';
+    return;
+  }
+  box.innerHTML = walls.map(w => {
+    const n = w.caught_24h;
+    const said = w.missing ? 'This block is no longer on the router, and the app did not lift it.'
+      : w.leaks ? `${_n(w.leaks, 'connection')} got through. The block leaked.`
+      : n == null ? 'The router has not been read for this block yet. Counting starts with the next check.'
+      : `Caught ${_n(n, 'packet')} in the last 24 hours. Nothing got through.`;
+    return `<div class="exp-wall st-${esc(w.state)}">${drawBlockWall(w)}`
+      + `<div class="exp-ticket-title">${esc(w.name)}${w.name !== w.subject ? ', ' + esc(w.subject) : ''}</div>`
+      + `<div class="exp-ticket-detail"${w.leaks || w.missing ? ' style="color:var(--red)"' : ''}>${esc(said)}</div></div>`;
+  }).join('');
+}
+
+// RULE TRIALS, a written fix for a noisy rule, tried for two weeks
+
+const TRIAL_WORD = { off: 'Not tried', trial: 'On trial', kept: 'Kept' };
+let TRIALS = [], FA_FIX = null;
+
+async function loadTrials() {
+  try {
+    const d = await fetch('/api/expectations/trials', { headers: authHeaders() }).then(r => r.json());
+    TRIALS = d.trials || [];
+  } catch (e) {
+    document.getElementById('trials').innerHTML =
+      '<div class="exp-note">Could not reach AgentalSec, so the rule trials are not shown.</div>';
+    return;
+  }
+  renderTrials();
+  if (FA_DATA) renderFalseAlarms();
+}
+
+function _trialDot(d) {
+  const fill = d.verdict === 'false_alarm' ? 'var(--amber)' : d.verdict === 'real' ? 'var(--green)' : 'none';
+  const stroke = d.verdict === 'real' ? 'var(--green)' : 'var(--amber)';
+  const dash = d.verdict === 'not_sure' ? ' stroke-dasharray="2 2"' : '';
+  const tip = `${d.rule}, ${d.entity}: ${(d.names || []).join(', ')}. `
+    + (d.verdict ? 'Verdict: ' + (FA_WORD[d.verdict] || d.verdict) + '. ' : 'No verdict yet. ')
+    + (d.held ? 'The fix holds this back.' : 'The fix lets this through.');
+  return `<svg width="14" height="14" viewBox="0 0 14 14"><title>${esc(tip)}</title>`
+    + `<circle cx="7" cy="7" r="5" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${dash}/>`
+    + (d.held ? '<line x1="2" y1="12" x2="12" y2="2" stroke="var(--text-hi)" stroke-width="1.5"/>' : '')
+    + `</svg>`;
+}
+
+function _trialCol(day, during, today) {
+  const label = new Date(day.day + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  if (during && day.future) {
+    return `<span class="trial-day" title="${esc(label)}, still to come"><svg width="14" height="14" viewBox="0 0 14 14">`
+      + `<circle cx="7" cy="7" r="5" fill="none" stroke="var(--text-dim)" stroke-width="1.5" stroke-dasharray="2 2" opacity="0.6"/></svg></span>`;
+  }
+  const dots = day.dots || [];
+  let inner = dots.slice(0, 5).map(_trialDot).join('');
+  if (dots.length > 5) inner += `<span class="trial-more">+${dots.length - 5}</span>`;
+  if (during && day.held) {
+    inner += `<svg width="14" height="14" viewBox="0 0 14 14"><title>${_n(day.held, 'hit')} held back</title>`
+      + '<line x1="3" y1="3" x2="11" y2="11" stroke="var(--text-dim)" stroke-width="1.5"/>'
+      + '<line x1="11" y1="3" x2="3" y2="11" stroke="var(--text-dim)" stroke-width="1.5"/></svg>'
+      + (day.held > 1 ? `<span class="trial-more">${Number(day.held)}</span>` : '');
+  }
+  return `<span class="trial-day${day.day === today ? ' today' : ''}" title="${esc(label)}">${inner}</span>`;
+}
+
+function renderTrials() {
+  const box = document.getElementById('trials');
+  if (!TRIALS.length) { box.innerHTML = '<div class="exp-note">No fix is written yet.</div>'; return; }
+  const d = new Date(), today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  box.innerHTML = TRIALS.map(t => {
+    const btn = (what, text) => `<button class="btn" data-trial="${what}">${text}</button>`;
+    const btns = t.status === 'off' ? btn('start', 'Start a two week trial')
+      : t.status === 'kept' ? btn('undo', 'Undo the fix')
+      : t.over ? btn('keep', 'Keep the fix') + btn('undo', 'Undo it')
+      : btn('undo', 'Undo the fix now');
+    const during = t.after
+      ? `<div class="trial-row"><span class="fa-day">${t.status === 'kept' ? 'Since' : 'During'}</span>`
+        + `<span class="trial-days">${t.after.map(day => _trialCol(day, true, today)).join('')}</span></div>` : '';
+    return `<div class="trial st-${esc(t.status)}${t.proposed ? ' proposed' : ''}" id="trial-${esc(t.tuning)}" data-tuning="${esc(t.tuning)}">`
+      + `<div class="trial-head"><span class="trial-title">${esc(t.title)}</span>`
+      + `<span class="trial-pill">${esc(TRIAL_WORD[t.status] || t.status)}</span>`
+      + `<span class="trial-rules">${esc((t.rules || []).join(', '))}</span></div>`
+      + `<div class="exp-note"><b>Why.</b> ${esc(t.problem)}</div>`
+      + `<div class="exp-note"><b>The fix.</b> ${esc(t.change)}</div>`
+      + `<div class="exp-sentence" style="margin-top:8px;font-size:13px;">${esc(t.sentence)}</div>`
+      + `<div class="trial-row"><span class="fa-day">Before</span>`
+      + `<span class="trial-days">${(t.before || []).map(day => _trialCol(day, false, t.after ? '' : today)).join('')}</span></div>`
+      + during + btns + `</div>`;
+  }).join('');
+  box.onclick = ev => {
+    const b = ev.target.closest ? ev.target.closest('[data-trial]') : null;
+    const holder = b && b.closest('[data-tuning]');
+    if (holder) trialAction(holder.getAttribute('data-tuning'), b.getAttribute('data-trial'));
+  };
+}
+
+async function trialAction(tuning, what) {
+  const ask = { start: 'Start the two week trial? The fix holds back the alarms it covers until you keep it or undo it.',
+                keep: 'Keep the fix? It stays on, and you can undo it here later.',
+                undo: 'Undo the fix? The alarms it held back will fire again.' }[what];
+  if (!ask || !confirm(ask)) return;
+  const url = what === 'start' ? '/api/expectations/trials/start/' : '/api/expectations/trials/end/';
+  try {
+    const r = await fetch(url + encodeURIComponent(tuning), {
+      method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ keep: what === 'keep' }) }).then(x => x.json());
+    if (r.error) alert(r.error);
+  } catch (e) {
+    alert('That did not reach the app, so nothing changed.');
+  }
+  loadTrials();
+}
+
+function openTrial() {
+  const el = FA_FIX && document.getElementById('trial-' + FA_FIX);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1600);
+}
 
 let EXP_PICKED = null;
 
@@ -8697,8 +8929,13 @@ function renderFalseAlarms() {
     renderFalseAlarms();
   };
   const picked = rules.find(r => r.rule === FA_PICK);
+  const fix = picked && (typeof TRIALS === 'undefined' ? [] : TRIALS).find(t => (t.rules || []).includes(picked.rule));
+  if (typeof FA_FIX !== 'undefined') FA_FIX = fix ? fix.tuning : null;
+  const tb = document.getElementById('fa-trial');
+  tb.style.display = fix ? '' : 'none';
   document.getElementById('fa-showing').textContent = picked
     ? `Showing ${picked.rule} only: ${picked.days} ${picked.days === 1 ? 'dot' : 'dots'} in the last two weeks. The rest are faded.`
+      + (fix ? ' A fix is written for this rule.' : ' No fix is written for this rule yet; you can mute it on the Detections tab.')
     : 'Showing every rule.';
   document.getElementById('fa-reset').disabled = !FA_PICK;
   const days = (d.days || []).slice().reverse();

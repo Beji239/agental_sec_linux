@@ -16,12 +16,13 @@
 #   dnslog     dnsmasq query lines in that log (log-queries must be on)
 #   appblock   nft, and dnsmasq built with nftset or logging its answers
 #   message    nft, nat from nft or else iptables, and uhttpd for the page
+#   blockhits  nft that keeps a counter on each element of a set
 #
 # Verbs:
 #   probe, version
 #   leases, neighbors, conntrack [ip], log [n], dnslog [n]
 #   blocks, block <ip>, unblock <ip>, blockmac <mac>, unblockmac <mac>
-#   counters, restore
+#   counters, restore, blockhits
 #   sinkholes, sinkhole <domain>, unsinkhole <domain>
 #   apps, blockapp <mac> <app>, unblockapp <mac> <app>, apprefresh
 #   messages, message <mac or all> <hex>, messagekeep <mac> <hex>
@@ -38,7 +39,7 @@ umask 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/sbin:/usr/local/bin
 export PATH LC_ALL=C
 
-VERSION=9
+VERSION=10
 NFT_TABLE=agentalsec_gw
 IPT_CHAIN=AGENTALSEC_GW
 PF_TABLE=agentalsec_block
@@ -47,6 +48,8 @@ APPS_FILE_NAME=agentalsec-apps.conf
 STATE_DIR=/etc/agentalsec
 STATE_FILE=$STATE_DIR/blocks
 MAC_ERROR_FILE=$STATE_DIR/mac_rules_error
+# Written when this router's nft refuses a counter on each set element.
+NO_SET_COUNTERS=$STATE_DIR/no_set_counters
 MAX_COUNTED=256
 MAX_BLOCKS=512
 MAX_APP_BLOCKS=256
@@ -168,19 +171,40 @@ nft_load() {
     return $rc
 }
 
+# Each block set keeps a counter per element, so `blockhits` can tell how
+# many packets each block caught. A set made before version 10 has none and
+# the table is made again; the caller then refills it from the state file.
+set_opt() { [ -f "$NO_SET_COUNTERS" ] || printf ' counter;'; }
+sets_current() {
+    [ -f "$NO_SET_COUNTERS" ] || nft list set inet $NFT_TABLE blocked4 2>/dev/null | grep -qw counter
+}
+
 nft_ensure() {
     if nft list table inet $NFT_TABLE >/dev/null 2>&1; then
-        if nft list chain inet $NFT_TABLE devcount >/dev/null 2>&1; then
+        if nft list chain inet $NFT_TABLE devcount >/dev/null 2>&1 && sets_current; then
             mac_rules_ok || nft_mac_rules
             return 0
         fi
         nft delete table inet $NFT_TABLE 2>/dev/null
     fi
+    mkdir -p "$STATE_DIR" 2>/dev/null
+    if ! nft_table >/dev/null && [ ! -f "$NO_SET_COUNTERS" ]; then
+        nft_err "$err" > "$NO_SET_COUNTERS"
+        nft delete table inet $NFT_TABLE 2>/dev/null
+        nft_table >/dev/null
+    fi
+    nft list chain inet $NFT_TABLE devcount >/dev/null 2>&1 || \
+        fail "nft refused to create table $NFT_TABLE: $(nft_err "$err")"
+    nft_mac_rules
+    return 2
+}
+
+nft_table() {
     err=$(nft_load <<EOF
 table inet $NFT_TABLE {
-    set blocked4 { type ipv4_addr; }
-    set blocked6 { type ipv6_addr; }
-    set blockedmac { type ether_addr; }
+    set blocked4 { type ipv4_addr;$(set_opt) }
+    set blocked6 { type ipv6_addr;$(set_opt) }
+    set blockedmac { type ether_addr;$(set_opt) }
     chain forward {
         type filter hook forward priority -5; policy accept;
         ip saddr @blocked4 drop
@@ -198,9 +222,7 @@ table inet $NFT_TABLE {
     }
 }
 EOF
-) || fail "nft refused to create table $NFT_TABLE: $(nft_err "$err")"
-    nft_mac_rules
-    return 2
+)
 }
 
 # The hardware address rules, apart, so a router that refuses them keeps
@@ -209,7 +231,7 @@ nft_mac_rules() {
     mkdir -p "$STATE_DIR" 2>/dev/null
     err=$(nft_load <<EOF
 table inet $NFT_TABLE {
-    set blockedmac { type ether_addr; }
+    set blockedmac { type ether_addr;$(set_opt) }
     chain prerouting {
         type filter hook prerouting priority -5; policy accept;
         ether saddr @blockedmac udp dport { 53, 67 } accept
@@ -275,11 +297,32 @@ do_restore() {
     ok restore; echo "restored=$RESTORED"; echo "skipped=$SKIPPED"
 }
 
+# Only the addresses: a set with counters also lists "counter packets N".
 nft_list() {
     for s in blocked4 blocked6 blockedmac; do
         nft list set inet $NFT_TABLE $s 2>/dev/null | tr -d '{},;' | \
-            awk '/elements/{f=1; sub(/.*=/,"")} f{for(i=1;i<=NF;i++) print $i} /}/{f=0}'
+            awk '/elements/{f=1; sub(/.*=/,"")} f{for(i=1;i<=NF;i++) if ($i ~ /[.:]/) print $i}'
     done | grep -v '^$'
+}
+
+# BLOCK HITS
+# Packets each block caught since it was set or the router started.
+# Body lines: address packets bytes
+do_blockhits() {
+    [ "$(fw_backend)" = nft ] || fail "block hits need nft"
+    nft_ensure; [ $? -eq 2 ] && restore_state
+    if [ -f "$NO_SET_COUNTERS" ]; then
+        ok blockhits; echo "counted=no"; echo "reason=$(cat "$NO_SET_COUNTERS")"; echo "--"; return
+    fi
+    ok blockhits; echo "counted=yes"; echo "--"
+    for s in blocked4 blocked6 blockedmac; do
+        nft list set inet $NFT_TABLE $s 2>/dev/null | tr -d '{},;' | awk '
+            /elements/ { f=1; sub(/.*=/, "") }
+            f { for (i=1; i<=NF; i++) {
+                    if ($i ~ /[.:]/) a=$i
+                    else if ($i=="packets") p=$(i+1)
+                    else if ($i=="bytes" && a!="") { print a, p, $(i+1); a="" } } }'
+    done | head -n $MAX_BLOCKS
 }
 
 ipt_for() { if is_v6 "$1"; then echo ip6tables; else echo iptables; fi; }
@@ -1057,6 +1100,7 @@ do_probe() {
     fw=$(fw_backend); echo "firewall=$fw"
     case $fw in nft|iptables|pf) echo "cap=block" ;; esac
     [ "$fw" = nft ] && { echo "cap=blockmac"; echo "cap=counters"; echo "cap=persist"; }
+    [ "$fw" = nft ] && [ ! -f "$NO_SET_COUNTERS" ] && echo "cap=blockhits"
     dns=$(dns_backend); echo "dns=$dns"
     [ "$dns" != none ] && echo "cap=sinkhole"
     lf=$(lease_file); [ -n "$lf" ] && { echo "cap=leases"; echo "lease_file=$lf"; }
@@ -1113,6 +1157,7 @@ case "$VERB" in
     blockmac) [ -n "$ARG1" ] || fail "blockmac needs a hardware address"; do_blockmac "$ARG1" ;;
     unblockmac) [ -n "$ARG1" ] || fail "unblockmac needs a hardware address"; do_unblockmac "$ARG1" ;;
     counters) do_counters ;;
+    blockhits) do_blockhits ;;
     restore) do_restore ;;
     sinkholes) ok sinkholes; echo "backend=$(dns_backend)"; echo "--"; list_sinkholes ;;
     sinkhole) [ -n "$ARG1" ] || fail "sinkhole needs a domain"; do_sinkhole "$ARG1" ;;

@@ -435,8 +435,8 @@ def main():
           f"gated tools present: {gated}" if gated else "")
     check("file_action_request IS in it — that is how the loop proposes",
           "file_action_request" in allow)
-    check("and write_prediction is, so what it concludes can be graded",
-          "write_prediction" in allow)
+    check("write_prediction is not, the app keeps its own expectations",
+          "write_prediction" not in allow)
     missing = [n for n in duty.DUTY_TOOL_ALLOWLIST if n not in allow]
     check("every name in the allowlist answers to a real tool", not missing,
           f"dropped: {missing}" if missing else "")
