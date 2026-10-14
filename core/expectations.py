@@ -787,6 +787,15 @@ def _read_watch_24h(conn, now: datetime) -> list:
     return out
 
 
+def _own_addresses() -> set:
+    """Every address this computer holds, empty if they cannot be read."""
+    try:
+        from core import place_map
+        return place_map.own_addresses()
+    except Exception:                                       # noqa: BLE001
+        return set()
+
+
 def _given_names() -> tuple:
     """The names the owner gave in the Network tab, by hardware address and
     by address. Retired and merged rows are left out so an old name on a
@@ -955,7 +964,7 @@ def device_detail(ip: str, now: datetime = None, live=None) -> dict:
     day = now - timedelta(hours=24)
     out = {"ip": ip, "mac": mac, "name": name, "blocked": blocked,
            "apps_blocked": apps, "usual": [], "new": [], "countries": [],
-           "expectations": [], "learning": True}
+           "expectations": [], "network": [], "learning": True}
     with me._get_readonly_conn() as conn:
         if me._table_exists_ro(conn, "lan_flow"):
             first = conn.execute(
@@ -981,26 +990,44 @@ def device_detail(ip: str, now: datetime = None, live=None) -> dict:
             out["usual"] = out["usual"][:CONTACTS_USUAL]
             out["new"] = out["new"][:CONTACTS_NEW]
         if me._table_exists_ro(conn, "place_baseline"):
-            for r in conn.execute(
-                    "SELECT COALESCE(place_label, place) AS label, first_seen, "
-                    "hits FROM place_baseline WHERE place_type = 'country' "
-                    "AND subject IN (?, ?) ORDER BY hits DESC LIMIT 20",
-                    (ip, mac or ip)):
+            # This computer's countries are learned from its own capture, by
+            # program and as "this machine", since the router rows for its
+            # addresses are left out. Those are summed per country.
+            if ip in _own_addresses():
+                from tools.place_watch import THIS_MACHINE
+                sql = ("SELECT COALESCE(MAX(place_label), place) AS label, "
+                       "MIN(first_seen) AS first_seen, SUM(hits) AS hits "
+                       "FROM place_baseline WHERE place_type = 'country' "
+                       "AND (subject_type = 'program' OR subject IN (?, ?, ?)) "
+                       "GROUP BY place ORDER BY hits DESC LIMIT 20")
+                args = (THIS_MACHINE, ip, mac or ip)
+            else:
+                sql = ("SELECT COALESCE(place_label, place) AS label, "
+                       "first_seen, hits FROM place_baseline WHERE "
+                       "place_type = 'country' AND subject IN (?, ?) "
+                       "ORDER BY hits DESC LIMIT 20")
+                args = (ip, mac or ip)
+            for r in conn.execute(sql, args):
                 out["countries"].append({
                     "label": r["label"], "hits": r["hits"],
                     "new": (_parse(r["first_seen"]) or now) >= day})
+        # Every device gets the same list: the checks that name it, then the
+        # network-wide checks it is part of, so a quiet device is not blank.
         if me._table_exists_ro(conn, "expectation"):
             for r in conn.execute(
                     "SELECT id, kind, subject, title, state, detail, "
-                    "evidence_json FROM expectation WHERE ended_at IS NULL"):
+                    "evidence_json FROM expectation WHERE ended_at IS NULL "
+                    "ORDER BY id"):
                 ev = r["evidence_json"] or ""
+                row = {k: r[k] for k in ("id", "kind", "title", "state",
+                                         "detail")}
                 own_block = r["kind"] == "block_holds" and r["subject"] in (
                     ip, mac)
                 if own_block or (r["state"] in ("new", "broken") and (
                         f'"{ip}"' in ev or (mac and f'"{mac}"' in ev))):
-                    out["expectations"].append(
-                        {k: r[k] for k in ("id", "kind", "title", "state",
-                                           "detail")})
+                    out["expectations"].append(row)
+                elif r["kind"] != "block_holds":
+                    out["network"].append(row)
     return out
 
 

@@ -186,6 +186,12 @@ ok(dev.includes('Iceland, new today'), 'a new country is marked');
 ok(!dev.includes('<b>odd') && !dev.includes('<img'), 'names from outside are escaped', dev);
 page.renderExpDevice({ ip: '172.21.0.31', name: 'new', learning: true, usual: [], new: [], countries: [], expectations: [] });
 ok(els['exp-device'].innerHTML.includes('less than a day'), 'a device watched under a day says so');
+page.renderExpDevice({ ip: '172.21.0.32', name: 'quiet', learning: false, usual: [], new: [], countries: [],
+  expectations: [], network: [{ id: 1, kind: 'head_count', title: 'The same devices stay on the network', state: 'holding' }] });
+const quiet = els['exp-device'].innerHTML;
+ok(quiet.includes('Not blocked on the router') && quiet.includes('names this device'),
+   'a quiet device still lists its block state and its own checks');
+ok(quiet.includes('The same devices stay on the network: holding'), 'a quiet device lists the network-wide checks');
 page.renderExpDevice({ error: 'not an address' });
 ok(els['exp-device'].innerHTML.includes('not an address'), 'a refused address says so');
 

@@ -8840,13 +8840,18 @@ function renderExpDevice(d) {
   const countries = (d.countries || []).length
     ? '<ul>' + d.countries.map(c => `<li${c.new ? ' style="color:var(--amber)"' : ''}>${esc(c.label)}${c.new ? ', new today' : ''}</li>`).join('') + '</ul>'
     : '<div class="exp-note">No country learned yet.</div>';
-  const blocks = [];
-  if (d.blocked) blocks.push('This device is blocked on the router.');
+  // The same lines for every device: its block state, what names it, then
+  // the network-wide checks it is part of.
+  const blocks = [d.blocked ? 'This device is blocked on the router.' : 'Not blocked on the router.'];
   (d.apps_blocked || []).forEach(a => blocks.push('App blocked: ' + a + '.'));
   (d.expectations || []).forEach(e => blocks.push(`${e.title}: ${(EXP_WORD[e.state] || e.state).toLowerCase()}. ${e.detail || ''}`));
-  const blockHtml = blocks.length
-    ? '<ul>' + blocks.map(b => `<li>${esc(b)}</li>`).join('') + '</ul>'
-    : '<div class="exp-note">No block, and no expectation about this device is broken or new.</div>';
+  if (!(d.expectations || []).length) blocks.push('No expectation names this device as broken or new.');
+  const network = (d.network || []).length
+    ? '<ul>' + d.network.map(e => `<li style="color:${EXP_COLOR[e.state] || 'var(--text)'}">`
+        + `${esc(e.title)}: ${esc((EXP_WORD[e.state] || e.state).toLowerCase())}</li>`).join('') + '</ul>'
+    : '<div class="exp-note">No check has run yet. The first runs a minute after the app starts.</div>';
+  const blockHtml = '<ul>' + blocks.map(b => `<li>${esc(b)}</li>`).join('') + '</ul>'
+    + `<h4>Checks across the network</h4>${network}`;
   box.innerHTML = `<div class="exp-dev"><div>${drawDeviceOrbit(d)}`
     + `<div class="exp-note" style="text-align:center;">Inner ring: its usual contacts this week. `
     + `Outer ring, amber and dashed: new in the last 24 hours.</div></div>`

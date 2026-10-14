@@ -349,6 +349,30 @@ check("under a day of watching, nothing is called new",
       d["learning"] and not d["new"], d)
 check("a value that is not an address is refused",
       "error" in ex.device_detail("1.2.3.4' OR 1=1", live=live))
+place = ("INSERT INTO place_baseline (subject_type, subject, place_type, "
+         "place, place_label, hits, first_seen, last_seen) VALUES "
+         "(?, ?, 'country', ?, ?, ?, ?, ?)")
+old = ex._iso(T - timedelta(days=3))
+sql((place, ("program", "firefox", "US", "United States", 5, old, old)),
+    (place, ("device", "this machine", "US", "United States", 2, old, old)),
+    (place, ("device", "this machine", "DE", "Germany", 1, old, old)),
+    (place, ("device", "aa:aa:aa:aa:aa:30", "FR", "France", 4, old, old)))
+own_addresses = ex._own_addresses
+ex._own_addresses = lambda: {"192.0.2.10"}
+d = ex.device_detail("192.0.2.10", now=T, live=live)
+check("this computer's countries come from its own capture, summed",
+      [(c["label"], c["hits"]) for c in d["countries"]]
+      == [("United States", 7), ("Germany", 1)], d["countries"])
+d = ex.device_detail("172.21.0.30", now=T, live=live)
+check("another device keeps only its own countries",
+      [c["label"] for c in d["countries"]] == ["France"], d["countries"])
+check("every device lists the network-wide checks, no single blocks",
+      d["network"] and all(e["kind"] != "block_holds" for e in d["network"])
+      and [e["id"] for e in d["network"]]
+      == [e["id"] for e in ex.device_detail("192.0.2.10", now=T,
+                                             live=live)["network"]],
+      d["network"])
+ex._own_addresses = own_addresses
 
 # Smart devices keep to their usual contacts
 
