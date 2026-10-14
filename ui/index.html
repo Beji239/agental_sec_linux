@@ -2634,8 +2634,9 @@
       <div class="card-title">The block wall</div>
       <div class="exp-note" style="margin-top:0;">
         One wall for each block on the router. The dots running into the wall are packets the router
-        caught and turned away. The strip under it shows the last 24 hours, one cell per hour, darker
-        for more. A red dot on the far side is a connection that got through, and that breaks the block.
+        caught and turned away. The strip under it shows the last 24 hours, one cell per hour, grey for
+        none and a stronger amber for more. A red dot on the far side is a connection that got through,
+        and that breaks the block.
         The wall is only drawn when the router itself counts what each block caught.
       </div>
       <div id="exp-walls" class="exp-walls"></div>
@@ -8653,13 +8654,13 @@ function _n(k, word) { return k + ' ' + word + (k === 1 ? '' : 's'); }
 function drawBlockWall(w) {
   const wallX = 180, nearX = 40, farX = 320, cy = 46;
   const broken = w.state === 'broken';
-  const edge = broken ? 'var(--red)' : 'var(--text-dim)';
+  const edge = broken ? 'var(--red)' : 'var(--text)';
   let bricks = '';
   for (let r = 0; r < 6; r++) {
     const y = 16 + r * 11;
     const row = r % 2 ? [[-13, 6], [-6, 12], [7, 6]] : [[-13, 12], [0, 13]];
     row.forEach(([dx, wd]) => {
-      bricks += `<rect x="${wallX + dx}" y="${y}" width="${wd - 1}" height="10" rx="1" fill="var(--bg2)" stroke="${edge}" stroke-width="1"/>`;
+      bricks += `<rect x="${wallX + dx}" y="${y}" width="${wd - 1}" height="10" rx="1" fill="var(--bg3)" stroke="${edge}" stroke-width="1.2"/>`;
     });
   }
   const hours = w.hours || [];
@@ -8681,16 +8682,17 @@ function drawBlockWall(w) {
   let strip = '';
   hours.forEach((n, i) => {
     const at = start ? new Date(start.getTime() + i * 3600e3).getHours() + ':00' : '';
-    strip += `<rect x="${(nearX + i * 280 / 24).toFixed(1)}" y="98" width="${(280 / 24 - 1).toFixed(1)}" height="9" fill="var(--amber)" opacity="${(n ? 0.2 + 0.8 * n / max : 0.06).toFixed(2)}">`
+    // An hour with nothing caught is a plain grey cell, still visible.
+    strip += `<rect x="${(nearX + i * 280 / 24).toFixed(1)}" y="98" width="${(280 / 24 - 1).toFixed(1)}" height="9" fill="${n ? 'var(--amber)' : 'var(--text-dim)'}" opacity="${(n ? 0.45 + 0.55 * n / max : 0.3).toFixed(2)}">`
            + `<title>${at}, ${n} packet${n === 1 ? '' : 's'} caught</title></rect>`;
   });
   const near = w.side === 'device' ? w.name : 'your network';
   const far = w.side === 'device' ? 'the internet' : w.name;
-  const label = (x, t) => `<text x="${x}" y="${cy + 30}" text-anchor="middle" fill="var(--text)" font-size="10" font-family="var(--mono)">${esc(String(t).slice(0, 18))}</text>`;
+  const label = (x, t) => `<text x="${x}" y="${cy + 30}" text-anchor="middle" fill="var(--text-hi)" font-size="10" font-family="var(--mono)">${esc(String(t).slice(0, 18))}</text>`;
   return `<svg viewBox="0 0 360 112" role="img" aria-label="Block on ${esc(w.subject)}">`
-    + `<line x1="${nearX}" y1="${cy}" x2="${farX}" y2="${cy}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5"/>`
-    + `<circle cx="${nearX}" cy="${cy}" r="14" fill="var(--bg2)" stroke="var(--text-dim)" stroke-width="1.5"/>`
-    + `<circle cx="${farX}" cy="${cy}" r="14" fill="var(--bg2)" stroke="${broken ? 'var(--red)' : 'var(--text-dim)'}" stroke-width="1.5"/>`
+    + `<line x1="${nearX}" y1="${cy}" x2="${farX}" y2="${cy}" stroke="var(--text-dim)" stroke-width="1" stroke-dasharray="2 5"/>`
+    + `<circle cx="${nearX}" cy="${cy}" r="14" fill="var(--bg3)" stroke="var(--text)" stroke-width="1.5"/>`
+    + `<circle cx="${farX}" cy="${cy}" r="14" fill="var(--bg3)" stroke="${broken ? 'var(--red)' : 'var(--text)'}" stroke-width="1.5"/>`
     + dots + bricks + leaks + label(nearX, near) + label(farX, far) + strip + `</svg>`;
 }
 
