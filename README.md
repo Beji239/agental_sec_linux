@@ -117,7 +117,7 @@ contact with a new one becomes an alert.
 Every sensor, in detail: [docs/SENSORS.md](docs/SENSORS.md).
 
 <p align="center">
-  <img src="assets/screenshots/threat_map.png" alt="The threat map, with the panel for one address: who reached it, its alerts and actions" width="800">
+  <img src="assets/screenshots/threat_map_point.png" alt="The threat map, with the panel for one address: who reached it, its alerts and actions" width="800">
 </p>
 
 ## The AI analyst
