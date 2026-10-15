@@ -3670,6 +3670,27 @@ def capped_sets(picture: dict) -> list:
 
 # THE PASSES
 
+def drop_package_changes(changes: list, out: dict) -> list:
+    """Leave out file findings a package install or upgrade explains; they
+    are listed under out["by_packages"] instead of raised."""
+    from core import package_activity
+    keep = []
+    for f in changes:
+        hit = None
+        if f.get("entity_type") == "file" and not (
+                f.get("title") or "").startswith("File removed"):
+            hit = package_activity.explains(f.get("entity_value"))
+        if hit:
+            out.setdefault("by_packages", []).append(
+                {"path": f.get("entity_value"), "detection_id":
+                 f.get("detection_id"), **hit})
+            logger.info(f"{f.get('detection_id')} not raised for "
+                        f"{f.get('entity_value')}: {hit['how']}")
+        else:
+            keep.append(f)
+    return keep
+
+
 def tier_a_pass() -> dict:
     """
     One tier A pass: read, compare against the stored baseline, reseed.
@@ -3722,7 +3743,7 @@ def tier_a_pass() -> dict:
             # the oldest known state rather than against yesterday.
             save_baseline(name, current)
             out["reseeded"].append(name)
-            out["findings"].extend(changes)
+            out["findings"].extend(drop_package_changes(changes, out))
 
     # The first pass, and only the first pass, gets the world-writable rule.
     if "ssh" in out["seeded"]:
@@ -3763,7 +3784,7 @@ def tier_b_pass() -> dict:
         save_baseline("sweep", {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                                 "suid": sweep["suid"], "sgid": sweep["sgid"],
                                 "caps": sweep["caps"]})
-        out["findings"].extend(changes)
+        out["findings"].extend(drop_package_changes(changes, out))
 
     # The coverage findings are raised whether or not the sets moved: the
     # sweep's blind spots are a fact about EVERY pass, not about the passes

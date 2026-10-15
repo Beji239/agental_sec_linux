@@ -136,6 +136,25 @@ check("on the device's address", sorted(r[1] for r in rows("LAN-1010")),
       ["192.0.2.70", "192.0.2.72"])
 check("not again on the next poll", ids(a.check(20030.0, {}, set(), {}, flows, names)), [])
 
+print("[5] the shared file host fix holds back a listed file host")
+from core import rule_trials                           # noqa: E402
+with me._get_conn() as conn:
+    conn.execute("INSERT INTO threat_feed(indicator, indicator_type, feed, malware_family, "
+                 "first_added, last_refreshed) VALUES('cdn.jsdelivr.net','domain','testfeed',"
+                 "'',CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+host = [{"device": "192.0.2.73", "remote": "198.51.100.11", "port": 443, "proto": "tcp"}]
+host_names = {("192.0.2.73", "198.51.100.11"): "cdn.jsdelivr.net"}
+check("raised while the fix is off",
+      ids(la.LanAlerts("t").check(30000.0, {}, set(), {}, host, host_names)),
+      ["LAN-1010"])
+rule_trials.start("fed_file_hosts")
+check("held back once it is on",
+      ids(la.LanAlerts("t").check(40000.0, {}, set(), {}, host, host_names)), [])
+check("a listed address still raises",
+      ids(la.LanAlerts("t").check(40000.0, {}, set(), {}, [dict(
+          flows[0], device="192.0.2.74")], {})),
+      ["LAN-1010"])
+
 print()
 print("ALL CHECKS PASSED" if not fails else f"FAILED: {fails}")
 sys.exit(1 if fails else 0)

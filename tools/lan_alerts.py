@@ -269,6 +269,8 @@ class LanAlerts:
                         hit, what = (feed, family), f"{name} ({remote})"
                 if not hit:
                     continue
+                if matched and fm._held_back("LAN-1010", matched, device):
+                    continue
                 key = (device, remote)
                 if key in self._feed_alerted and \
                         now - self._feed_alerted[key] < FEED_COOLDOWN_SECONDS:

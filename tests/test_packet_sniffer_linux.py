@@ -170,6 +170,21 @@ true("and the finding carries the window it was judged over",
 true("and it reports CONNECTION ATTEMPTS, which is what the rule says",
      hits and "connection attempts" in hits[0]["description"])
 
+# (c2) The app's own scheduled login to the router is not a beacon.
+ps._beacon_data.clear(); ps._detections_skipped.clear()
+ps.set_own_endpoints([("198.51.100.44", 22)])
+hits = []
+for i in range(12):
+    with mock.patch.object(ps.time, "time", return_value=t0 + i * 30.0):
+        out = ps._detect_beaconing(beacon_input("198.51.100.44")
+                                   | {"dst_port": 22})
+    if out:
+        hits.append(out)
+check("the router reader's own timer is not raised", len(hits), 0)
+true("and the skip says why",
+     any("own scheduled" in r for r in ps._detections_skipped))
+ps.set_own_endpoints([])
+
 # (d) THE INTERVAL FLOOR. A busy off-host destination at 1 s intervals is a
 # stream; the Windows tree's BEACON_MIN_INTERVAL is 5 s and the port dropped it.
 ps._beacon_data.clear()

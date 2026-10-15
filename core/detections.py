@@ -1531,20 +1531,26 @@ _REGISTER: list[Detection] = [
 
     # Place learning for the Threat Map. The entity is the remote address, so
     # the map colours the point that was new.
-    _d("GEO-1001", 1, "new_country_for_subject", "place_watch", "ip",
+    _d("GEO-1001", 2, "new_country_for_subject", "place_watch", "ip",
        {"low", "medium"},
        "A program on this machine, or a device on the network, reached a "
        "country it had not reached during its learning period or since. "
        "Medium when nothing in the home had ever reached that country, low "
-       "when something else already had. A country is not a verdict: CDNs "
-       "and cloud providers move, so this is a prompt to look, not a claim.",
+       "when something else already had. Only a destination reached by "
+       "address alone counts: one whose name was asked of DNS, a time "
+       "server, a peer on a high UDP port or a big cloud or CDN network is "
+       "learned without an alert, because its country is only where the "
+       "nearest edge is. The blind spot is a server rented in a big cloud "
+       "and reached by address; the threat lists still check it.",
        ("confidentiality",)),
 
-    _d("GEO-1002", 1, "new_network_for_subject", "place_watch", "ip",
+    _d("GEO-1002", 2, "new_network_for_subject", "place_watch", "ip",
        {"low"},
        "A program or device reached a network owner (ASN) it had not reached "
-       "before, after its learning period. Needs the optional ASN database; "
-       "without it this rule never fires and the map says why.",
+       "before, after its learning period, by address alone. The same "
+       "destinations GEO-1001 learns quietly are learned quietly here. Needs "
+       "the optional ASN database; without it this rule never fires and the "
+       "map says why.",
        ("confidentiality",)),
 
     # The sensor watchdog, core/sensor_watch. The entity is "sensor:<name>".

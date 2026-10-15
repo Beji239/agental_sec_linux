@@ -155,6 +155,56 @@ check("a brand new program only learns", r4["alerts"], 0)
 check_true("places_for lists them",
            place_watch.places_for("browser")["places"])
 
+print("\n[4a] Destinations that explain themselves are learned quietly")
+
+
+def add_flow_on(dst, proto, port, name=None):
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    with me._get_conn() as c:
+        c.execute("INSERT INTO lan_flow (device_ip, device_mac, proto, dst, "
+                  "dport, dst_name, bytes_out, bytes_in, packets_out, "
+                  "packets_in, first_seen, last_seen) "
+                  "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (DEV_IP, DEV_MAC, proto, dst, port, name, 100, 100, 1, 1,
+                   now, now))
+
+
+QUIET = {"208.67.222.222": ("udp", 123, None, "AS64510", "Example Ntp"),
+         "149.112.112.112": ("udp", 3478, None, "AS64511", "Example Isp"),
+         "94.140.14.14": ("tcp", 443, "cdn.example.", "AS64512", "Example Cdn"),
+         "94.140.15.15": ("tcp", 443, None, "AS64513", "Example Edge"),
+         "76.76.2.0": ("tcp", 443, None, "AS16509", "Amazon.com, Inc.")}
+for i, (ip, (proto, port, name, asn, org)) in enumerate(QUIET.items()):
+    GEO[ip] = {"lat": 0.0, "lon": float(i), "city": "", "region": "",
+               "country": f"Quiet {i}", "country_code": f"Q{i}"}
+    ASN[ip] = {"asn": asn, "org": org}
+    add_flow_on(ip, proto, port, name)
+with me._get_conn() as c:
+    c.execute("INSERT INTO dns_answer (first_seen, last_seen, times_seen, "
+              "name, rrtype, value) VALUES (?,?,1,?,?,?)",
+              (old, old, "edge.example", "A", "94.140.15.15"))
+GEO["185.228.168.9"] = {"lat": 1.0, "lon": 1.0, "city": "", "region": "",
+                        "country": "Loud", "country_code": "LD"}
+ASN["185.228.168.9"] = {"asn": "AS64514", "org": "Example Hosting"}
+add_flow_on("185.228.168.9", "tcp", 443)
+r5 = pw.learn_once()
+check("only the address-alone destination raises", r5["alerts"], 2)
+check("the quiet ones are counted by reason", r5["quiet"],
+      {"time": 2, "peer": 2, "named": 4, "cloud": 2})
+loud = me.query_findings(entity_type="ip", entity_value="185.228.168.9",
+                         limit=10)
+check("the raised one is the unnamed host",
+      sorted(f["detection_id"] for f in loud), ["GEO-1001", "GEO-1002"])
+with me._get_readonly_conn() as c:
+    learned = {r[0] for r in c.execute(
+        "SELECT example_ip FROM place_baseline WHERE subject = ?", (DEV_MAC,))}
+check_true("quiet places are still learned", set(QUIET) <= learned)
+check("cloud by network number", place_watch.is_cloud(
+    {"asn": "AS13335", "org": "x"}), True)
+check("not cloud", place_watch.is_cloud({"asn": "AS64500", "org": "x"}), False)
+check("mixed ports are not a peer",
+      place_watch.quiet_reason({"udp/5000", "tcp/443"}, set(), None), None)
+
 print("\n[4b] The hourly tally keeps this machine on the map across a restart")
 with me._get_readonly_conn() as c:
     tallied = {r[0] for r in c.execute("SELECT remote_ip FROM place_traffic")}

@@ -2387,6 +2387,37 @@ def register_routes(app):
         out = rule_trials.end(str(tuning), keep=body.get("keep") is True)
         return jsonify(out), (200 if out["success"] else 400)
 
+    # Learned rules: quiet rules the model made from false alarms.
+
+    @app.route("/api/expectations/learned")
+    @require_api_key
+    def learned_rules_list():
+        from core import learned_rules
+        return jsonify(learned_rules.listing(include_undone=True))
+
+    @app.route("/api/expectations/learned/undo/<int:rule_id>", methods=["POST"])
+    @require_api_key
+    def learned_rule_undo(rule_id):
+        from core import learned_rules
+        out = learned_rules.undo(rule_id, by="owner")
+        return jsonify(out), (200 if out["success"] else 400)
+
+    # Alerts the model sorted before they were filed.
+
+    @app.route("/api/expectations/reviewed")
+    @require_api_key
+    def reviewed_alerts():
+        from core import alert_review
+        return jsonify(alert_review.listing())
+
+    @app.route("/api/expectations/reviewed/show/<int:review_id>",
+               methods=["POST"])
+    @require_api_key
+    def reviewed_alert_show(review_id):
+        from core import alert_review
+        out = alert_review.show(review_id)
+        return jsonify(out), (200 if out["success"] else 400)
+
     # THE ACTION QUEUE. v36, T3.
     #
     # THE APPROVE/DENY ENDPOINTS FOR A QUEUED CARD, and they are deliberately

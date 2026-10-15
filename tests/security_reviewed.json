@@ -2378,5 +2378,40 @@
   "path": "tools/gateway_agent.sh",
   "text": "err=$(nft add rule inet $NFT_TABLE portal iifname \"$dev\" ether saddr != @msgdone meta nfproto ipv4 ip daddr != @portalip tcp dport 80 $(portal_action \"$a\") comment '\"msgall\"' 2>&1) \\",
   "reason": "portal_action returns several nft words on purpose, built from the router's own address"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/package_activity.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
+  "reason": "a fixed argument list, no shell; the path is passed as one argument"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
+  "reason": "a fixed argument list, no shell; the package name comes from dpkg itself"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
+  "reason": "a system program found on PATH"
  }
 ]

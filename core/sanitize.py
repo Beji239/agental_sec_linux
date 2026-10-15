@@ -230,6 +230,8 @@ UNTRUSTED_TOOLS = {
     "query_router_clients",
     "query_router_config",
     "query_findings",
+    # Learned rules carry finding titles, which hold device and program names.
+    "query_learned_rules",
     "query_events",
     # search_logs, ADDED 2026-09-23 WITH THE TOOL. The lines it hands back are
     # lines something on this machine WROTE, and a log line is text chosen by

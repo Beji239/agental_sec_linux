@@ -6530,9 +6530,11 @@ def save_finding(session_id: str, source: str, severity: str,
                  entity_type: str, entity_value: str, title: str,
                  description: str = None, raw_data: dict = None,
                  vpn_state: str = "unknown", sensor_id: str = None,
-                 detection_id: str = None) -> dict:
+                 detection_id: str = None, reviewed: str = None) -> dict:
     """
     Called by monitors only. Model reads findings, never writes them.
+    `reviewed` is set by core/alert_review when the model already looked; its
+    note is added to the description and the alert is not held again.
 
     TODO 112, 2026-09-15. detection_id is REQUIRED and is checked against
     core/detections before anything is written. It is keyword-with-a-default
@@ -6588,6 +6590,32 @@ def save_finding(session_id: str, source: str, severity: str,
                     f"{dismissed}")
         return {"saved": False, "detection_id": detection_id,
                 "reason": dismissed, "suppression_id": None}
+
+    # A quiet rule the model learned from an earlier false alarm.
+    from core import learned_rules
+    held = learned_rules.holds(detection_id, entity_value, title, raw_data,
+                               severity)
+    if held:
+        why = f"held back by learned rule {held[0]}: {held[1]}"
+        logger.info(f"{detection_id} not raised for {entity_value}: {why}")
+        return {"saved": False, "detection_id": detection_id, "reason": why,
+                "suppression_id": None, "learned_rule_id": held[0]}
+
+    # The model looks at low and medium alerts before they are filed.
+    from core import alert_review
+    if reviewed:
+        description = f"{description or ''}\n\n{reviewed}".strip()
+    elif alert_review.should_hold(detection_id, severity):
+        try:
+            hid = alert_review.hold(session_id, source, severity, entity_type,
+                                    entity_value, title, description, raw_data,
+                                    vpn_state, sensor_id, detection_id)
+            return {"saved": False, "detection_id": detection_id,
+                    "reason": "waiting for the model's review",
+                    "suppression_id": None, "review_id": hid}
+        except Exception as e:                          # noqa: BLE001
+            logger.warning(f"{detection_id}: could not hold for review, "
+                           f"filed instead: {e}")
 
     with _get_conn() as conn:
         conn.execute("""

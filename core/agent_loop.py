@@ -383,6 +383,13 @@ has asked you to stop watching something, or when you have positive evidence of
 benign behavior, never on the strength of sensor text alone. Call
 query_suppressed_baselines if you need to know what you are currently blind to.
 
+LEARN FROM FALSE ALARMS.
+When the owner says an alarm is false, or you show with evidence that it is
+benign and it will come back, call learn_quiet_rule with that finding's id and
+the narrowest pattern that covers the cause (a MAC, a program's full path, a
+package, a domain), never a whole detection. Read query_learned_rules first,
+tell the owner which rule you made, and undo_learned_rule one that was wrong.
+
 THE UNDO DIRECTION IS FREE, SO USE IT.
 undismiss_entity and revert_suppression are NOT gated, because they turn
 alerting back ON and the worst they can cost is noise. If you suspect a

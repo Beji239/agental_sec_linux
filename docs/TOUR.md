@@ -484,7 +484,7 @@ existed count as false alarms, marked "from a dismissal".
 
 **Rule trials.** A rule that keeps crying wolf gets a written fix, and you can
 try it for two weeks before you decide. The first one is for the threat list
-rules FED-1002 and FED-1003: feeds list one bad file on a shared host, such as
+rules FED-1002, FED-1003 and LAN-1010: feeds list one bad file on a shared host, such as
 a script on cdn.jsdelivr.net or a download on github.com, and the app only sees
 the host name, so every visit to that host raised an alarm. The fix leaves
 shared file hosts out. Every other listed name still fires.
@@ -498,6 +498,25 @@ fire. A fix is suggested once you have marked one of its alarms a false alarm.
 Nothing changes until you press **Start a two week trial**, and at the end you
 choose **Keep the fix** or **Undo it**. Pick a rule in the false alarms block
 and **Open its fix** takes you to its trial.
+
+**What the model learned.** When the analyst finds that an alarm is false and
+will come back, it writes a quiet rule for that pattern: one rule, and the
+narrowest thing that explains it, such as a device's hardware address, a
+program's path or a domain. A matching alarm is held back and counted on the
+rule instead of reaching you. A rule can never hide a critical alarm or switch
+a whole rule off, and **Undo this rule** brings its alarms back.
+
+**Sorted by the model before you saw them.** Low and medium alarms wait here
+first. The app gathers the evidence, the names the device looked up, who owns
+the network, whether it is a big cloud or CDN, how many of your devices already
+go there, the threat lists and the package records, and the analyst sorts them
+in one short call every two minutes. What the evidence explains becomes part of
+the baseline and never reaches your Inbox; the rest reaches you with the
+analyst's reason. Threat list hits, high and critical alarms always come
+straight to you, and anything the analyst could not look at within half an hour
+is shown as raised. If one it called normal was not, **This was not normal,
+show it** files it and undoes its rule. The tokens it spends count toward the
+same daily limit as the analyst's other work.
 
 The analyst's old prediction record is still at the bottom, folded away. The
 analyst no longer makes predictions on its own; it makes one only when you ask.

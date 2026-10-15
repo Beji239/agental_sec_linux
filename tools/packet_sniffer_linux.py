@@ -1249,6 +1249,17 @@ def _is_connection_attempt(packet_data: dict) -> tuple[bool, str]:
     return False, f"protocol {protocol or 'unknown'} is not a connection"
 
 
+# The app's own outbound services, such as the router reader's SSH login on
+# a timer. Its regular cadence is not a beacon. Set by the adapter.
+_own_endpoints: set = set()
+
+
+def set_own_endpoints(pairs) -> None:
+    """(address, port) pairs the app itself connects to on a schedule."""
+    global _own_endpoints
+    _own_endpoints = {(str(a), int(p)) for a, p in pairs if a and p}
+
+
 def _detect_beaconing(packet_data: dict) -> dict | None:
     """
     Detect beaconing: repeated CONNECTION ATTEMPTS to one destination at a
@@ -1284,6 +1295,14 @@ def _detect_beaconing(packet_data: dict) -> dict | None:
     is_attempt, why_not_attempt = _is_connection_attempt(packet_data)
     if not is_attempt:
         _note_skip(f"beacon: {why_not_attempt}")
+        return None
+
+    try:
+        own = (dst, int(packet_data.get("dst_port") or 0)) in _own_endpoints
+    except (TypeError, ValueError):
+        own = False
+    if own:
+        _note_skip("beacon: the app's own scheduled connection")
         return None
 
     now = time.time()

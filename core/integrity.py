@@ -241,6 +241,9 @@ JOURNALLED = {
     "incident_verdict",
     "rule_trial_started",
     "rule_trial_ended",
+    # A quiet rule the model learned, or its undo: it holds findings back.
+    "learned_rule_made",
+    "learned_rule_undone",
 }
 
 

@@ -1560,6 +1560,9 @@ def _findings_from(records: list):
         if counts["path"] > CAP_PER_ID_PER_PASS:
             counts["path_cut"] = counts.get("path_cut", 0) + 1
             continue
+        if _package_explains(path, record.get("at_iso")):
+            counts["by_package"] = counts.get("by_package", 0) + 1
+            continue
         who = process_identity(record)
         out.append({
             "detection_id": "AUD-1002",
@@ -1598,6 +1601,20 @@ def _findings_from(records: list):
         })
 
     return out, counts
+
+
+def _package_explains(path: str, at_iso) -> bool:
+    """A watched path a package install or upgrade explains is not raised."""
+    from datetime import datetime
+    from core import package_activity
+    try:
+        at = datetime.fromisoformat(str(at_iso)) if at_iso else None
+    except ValueError:
+        at = None
+    hit = package_activity.explains(path, at)
+    if hit:
+        logger.info(f"AUD-1002 not raised for {path}: {hit['how']}")
+    return bool(hit)
 
 
 def _kernel_lost(fields: dict) -> int:

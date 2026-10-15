@@ -7,6 +7,10 @@
 # itself for traffic no program could be named for, and each device on the
 # network (from the router's connection log, keyed by hardware address).
 # Without a router agent only the first two are learned.
+#
+# A new place is learned quietly, never raised, when the destination explains
+# itself: a name was asked of DNS for it, it is a time server, it is a peer on
+# a high UDP port (calls, games), or it sits in a big cloud or CDN network.
 
 import logging
 import threading
@@ -24,6 +28,35 @@ DEFAULTS = {"enabled": True, "interval_seconds": 300, "learn_hours": 72,
             "max_batches": 5, "seed_hours": 24}
 TRAFFIC_KEEP_DAYS = 8
 THIS_MACHINE = "this machine"
+
+# Big cloud and CDN networks. Their country is where the nearest edge is.
+CLOUD_ASNS = frozenset({
+    16509, 14618, 8987, 38895, 7224, 10124, 17493, 19047, 39111, 62785,
+    15169, 36040, 396982, 19527, 36384, 36492, 43515, 139070, 139190, 16550,
+    8075, 8068, 8069, 12076, 3598, 6584,
+    714, 6185, 2709,
+    20940, 16625, 16702, 12222, 18680, 18717, 21342, 21357, 21399, 23454,
+    23455, 31107, 31108, 31109, 31110, 33905, 34164, 35204, 35993, 35994,
+    36183, 39836, 43639, 55409, 55770, 63949, 133103, 393560,
+    13335, 209242, 132892, 395747, 14789,
+    54113, 32934, 63293, 54115, 2906, 40027, 55095,
+    15133, 14153, 22822, 60068, 20253, 200325, 33438, 12989,
+    31898, 7160, 45102, 37963, 132203, 45090, 396986, 138699,
+    13414, 30103, 33353, 32590,
+})
+CLOUD_ORGS = ("amazon", "akamai", "google", "microsoft", "cloudflare",
+              "fastly", "apple inc", "facebook", "meta platforms", "netflix",
+              "edgecast", "edgio", "limelight", "cdn77", "datacamp", "qwilt",
+              "oracle", "alibaba", "tencent", "bytedance",
+              "sony interactive")
+NTP_PORT = "123"
+PEER_PORT_FLOOR = 1024
+QUIET_WHY = {
+    "named": "it asked DNS for the name first",
+    "time": "a time server (NTP)",
+    "peer": "a peer on a high UDP port, as calls and games use",
+    "cloud": "a big cloud or CDN network",
+}
 
 _instance = None
 
@@ -51,6 +84,52 @@ def _parse(value) -> datetime | None:
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
         return None
+
+
+def _split(value) -> set:
+    return {x for x in str(value or "").split(",") if x}
+
+
+def is_cloud(net: dict | None) -> bool:
+    """Is this network a big cloud or CDN provider."""
+    if not net:
+        return False
+    try:
+        if int(str(net.get("asn", "")).upper().lstrip("AS")) in CLOUD_ASNS:
+            return True
+    except ValueError:
+        pass
+    org = (net.get("org") or "").lower()
+    return any(k in org for k in CLOUD_ORGS)
+
+
+def quiet_reason(ports: set, names: set, net: dict | None) -> str | None:
+    """Why a new place needs no alert, or None. Ports are "proto/port"."""
+    nums = {p.rsplit("/", 1)[-1] for p in ports}
+    if nums and nums <= {NTP_PORT}:
+        return "time"
+    if ports and all(p.startswith("udp/") and p[4:].isdigit()
+                     and int(p[4:]) >= PEER_PORT_FLOOR for p in ports):
+        return "peer"
+    if names:
+        return "named"
+    if is_cloud(net):
+        return "cloud"
+    return None
+
+
+def _names_for(conn, ips) -> dict:
+    """Names DNS gave for these addresses, from the router's resolver log."""
+    out = {}
+    if not ips or not me._table_exists_ro(conn, "dns_answer"):
+        return out
+    for ip in ips:
+        rows = conn.execute("SELECT DISTINCT name FROM dns_answer WHERE "
+                            "value = ? AND rrtype IN ('A', 'AAAA') LIMIT 3",
+                            (ip,)).fetchall()
+        if rows:
+            out[ip] = {r[0] for r in rows if r[0]}
+    return out
 
 
 class PlaceWatch:
@@ -122,9 +201,9 @@ class PlaceWatch:
 
     def _read(self, conn, now: datetime) -> tuple[list, dict]:
         """
-        Observations since the cursors: (subject_type, subject, label, ip).
-        The packet read also fills self._tally, the hourly destination tally
-        the Threat Map reads.
+        Observations since the cursors: (subject_type, subject, label, ip,
+        ports, names). The packet read also fills self._tally, the hourly
+        destination tally the Threat Map reads.
         """
         obs, cursors = [], {}
         self._tally = {}
@@ -140,12 +219,13 @@ class PlaceWatch:
                            COUNT(*) AS packets,
                            COALESCE(SUM(packet_size), 0) AS bytes,
                            GROUP_CONCAT(DISTINCT dst_port) AS ports,
+                           GROUP_CONCAT(DISTINCT src_port) AS sports,
                            GROUP_CONCAT(DISTINCT protocol) AS protocols,
                            GROUP_CONCAT(DISTINCT threat_label) AS labels,
                            MAX(id) AS top
                       FROM (SELECT id, captured_at, src_ip, dst_ip,
                                    process_name, packet_size, dst_port,
-                                   protocol, threat_label
+                                   src_port, protocol, threat_label
                               FROM packets WHERE id > ? ORDER BY id LIMIT ?)
                      GROUP BY hour, src_ip, dst_ip, process_name""",
                     (top, batch)).fetchall()
@@ -164,8 +244,12 @@ class PlaceWatch:
             labels = place_map.device_labels()
             start = self._cursor(conn, "lan_flow", "lan_flow", "last_seen", now)
             rows = conn.execute("""
-                SELECT device_ip, MAX(device_mac) AS mac, dst, MAX(id) AS top
-                  FROM (SELECT id, device_ip, device_mac, dst FROM lan_flow
+                SELECT device_ip, MAX(device_mac) AS mac, dst,
+                       GROUP_CONCAT(DISTINCT proto || '/' || dport) AS ports,
+                       GROUP_CONCAT(DISTINCT dst_name) AS names,
+                       MAX(id) AS top
+                  FROM (SELECT id, device_ip, device_mac, dst, proto, dport,
+                               dst_name FROM lan_flow
                          WHERE id > ? ORDER BY id LIMIT ?)
                  GROUP BY device_ip, dst""",
                 (start, self.cfg["batch_rows"])).fetchall()
@@ -177,21 +261,26 @@ class PlaceWatch:
                 mac = (r["mac"] or "").lower()
                 name = place_map._label(labels, r["device_ip"], mac)
                 obs.append(("device", mac or r["device_ip"],
-                            name or r["device_ip"], r["dst"]))
+                            name or r["device_ip"], r["dst"],
+                            _split(r["ports"]),
+                            {n.rstrip(".") for n in _split(r["names"])}))
             cursors["lan_flow"] = top
         return obs, cursors
 
     def _count(self, r, obs: list) -> None:
         """One grouped packet row into the observations and the tally."""
-        for near, far in ((r["src_ip"], r["dst_ip"]),
-                          (r["dst_ip"], r["src_ip"])):
+        for near, far, port_col in ((r["src_ip"], r["dst_ip"], "ports"),
+                                    (r["dst_ip"], r["src_ip"], "sports")):
             if not far or not geoip.is_routable(far):
                 continue
             proc = r["process_name"] or ""
+            ports = {f"{pr}/{po}" for pr in _split(r["protocols"])
+                     for po in _split(r[port_col])}
             if proc:
-                obs.append(("program", proc, proc, far))
+                obs.append(("program", proc, proc, far, ports, set()))
             else:
-                obs.append(("device", THIS_MACHINE, THIS_MACHINE, far))
+                obs.append(("device", THIS_MACHINE, THIS_MACHINE, far, ports,
+                            set()))
             key = (r["hour"], far, near or "", proc)
             t = self._tally.setdefault(key, [0, 0, set(), set(), set()])
             t[0] += r["packets"] or 0
@@ -199,6 +288,17 @@ class PlaceWatch:
             for i, col in ((2, "ports"), (3, "protocols"), (4, "labels")):
                 t[i] |= {x for x in str(r[col] or "").split(",") if x}
             return
+
+    @staticmethod
+    def _merge(obs: list) -> list:
+        """One observation per subject and address, ports and names joined."""
+        out = {}
+        for stype, subj, label, ip, ports, names in obs:
+            o = out.setdefault((stype, subj, ip),
+                               [stype, subj, label, ip, set(), set()])
+            o[4] |= ports
+            o[5] |= names
+        return [tuple(o) for o in out.values()]
 
     # Learning
 
@@ -213,6 +313,8 @@ class PlaceWatch:
             if not me._table_exists_ro(conn, "place_baseline"):
                 return {"ran": False, "reason": "place_baseline table missing"}
             obs, cursors = self._read(conn, now)
+            obs = self._merge(obs)
+            names = _names_for(conn, {o[3] for o in obs if not o[5]})
             known, subj_first, anywhere = set(), {}, set()
             for r in conn.execute("SELECT subject_type, subject, place_type, "
                                   "place, first_seen FROM place_baseline"):
@@ -223,11 +325,13 @@ class PlaceWatch:
                     subj_first[key] = r[4]
 
         # Place lookups once per address.
-        places_by_ip = {}
-        for _, _, _, ip in obs:
+        places_by_ip, nets = {}, {}
+        for o in obs:
+            ip = o[3]
             if ip in places_by_ip:
                 continue
             geo, net = geoip.lookup(ip), geoip.asn_lookup(ip)
+            nets[ip] = net
             p = []
             if geo and geo.get("country_code"):
                 p.append(("country", geo["country_code"],
@@ -238,8 +342,11 @@ class PlaceWatch:
             places_by_ip[ip] = p
 
         updates, inserts, new = [], [], []
+        quiet = {}
         seen_pairs = set()
-        for stype, subj, label, ip in obs:
+        for stype, subj, label, ip, ports, known_names in obs:
+            why = quiet_reason(ports, known_names or names.get(ip, set()),
+                               nets.get(ip))
             for ptype, place, plabel in places_by_ip[ip]:
                 key = (stype, subj, ptype, place)
                 if key in seen_pairs:
@@ -251,7 +358,9 @@ class PlaceWatch:
                 inserts.append((stype, subj, ptype, place, plabel, ip,
                                 stamp, stamp))
                 first = _parse(subj_first.get((stype, subj)))
-                if first is not None and now - first >= learn:
+                if first is not None and now - first >= learn and why:
+                    quiet[why] = quiet.get(why, 0) + 1
+                elif first is not None and now - first >= learn:
                     new.append({"subject_type": stype, "subject": subj,
                                 "label": label, "place_type": ptype,
                                 "place": place, "place_label": plabel,
@@ -302,7 +411,7 @@ class PlaceWatch:
         except Exception as e:                              # noqa: BLE001
             logger.debug(f"place_watch: map refresh failed: {e}")
         self.last_pass = {"at": stamp, "observations": len(obs),
-                          "new_places": learned,
+                          "new_places": learned, "quiet": quiet,
                           "alerts": raised, "cursors": cursors}
         self._last_ok_at = time.time()
         return {"ran": True, **self.last_pass}
@@ -326,8 +435,11 @@ class PlaceWatch:
                     title=f"{who} reached a new {kind}: {n['place_label']}",
                     description=(f"{who} reached {n['ip']} in "
                                  f"{n['place_label']}, a {kind} it had not "
-                                 f"reached before.{first_home} A new place is "
-                                 f"a prompt to look, not a verdict."),
+                                 f"reached before.{first_home} It was reached "
+                                 f"by address alone, with no name asked of DNS "
+                                 f"first, and it is not a big cloud or CDN "
+                                 f"network. A new place is a prompt to look, "
+                                 f"not a verdict."),
                     raw_data=n)
                 raised += 1
             except Exception as e:                          # noqa: BLE001

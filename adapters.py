@@ -1546,6 +1546,9 @@ class LinuxPacketSniffer(_BaseAdapter):
         self._promisc = bool(sniff_cfg.get("promiscuous", False))
         self._filter = sniff_cfg.get("filter") or None
         self._rcvbuf = sniff_cfg.get("rcvbuf")
+        gw = (self.config or {}).get("gateway") or {}
+        if gw.get("enabled") and gw.get("host"):
+            sn.set_own_endpoints([(gw["host"], gw.get("port") or 22)])
         started = sn.start_sniffer(
             interface=sniff_cfg.get("interface") or None,
             filter_str=self._filter,
@@ -5721,7 +5724,8 @@ class LinuxAutorunMonitor(_BaseAdapter):
         from core import memory_engine as me
 
         tally = {"written": 0, "unregistered": {}, "no_entity": 0,
-                 "dismissed": 0, "already_open": 0, "failed": {}}
+                 "dismissed": 0, "already_open": 0, "by_package": 0,
+                 "failed": {}}
 
         for f in findings:
             did = self.FINDING_IDS.get(f.get("type"))
@@ -5755,6 +5759,15 @@ class LinuxAutorunMonitor(_BaseAdapter):
             if me.is_dismissed("file", entity_value):
                 tally["dismissed"] += 1
                 continue
+            # An entry a package install or upgrade put there is not raised.
+            if did in ("LNX-4004", "LNX-4005"):
+                from core import package_activity
+                hit = package_activity.explains(entity_value)
+                if hit:
+                    tally["by_package"] += 1
+                    logger.info(f"{did} not raised for {entity_value}: "
+                                f"{hit['how']}")
+                    continue
 
             # THE TITLE IS BUILT ONCE AND USED TWICE, which is the whole point:
             # `finding_already_open` matches on the TITLE, and the first version

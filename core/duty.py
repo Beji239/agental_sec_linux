@@ -794,7 +794,12 @@ def spend_in_window(hours: int = 24) -> dict:
                        AS worked
               FROM duty_run WHERE ran_at >= ?
         """, (cutoff,)).fetchone()
-    return {"available": True, "spent": row["spent"], "runs": row["runs"],
+    # The model's look at alerts before they are filed spends from the same
+    # daily ceiling.
+    from core import alert_review
+    review = alert_review.tokens_in_window(hours)
+    return {"available": True, "spent": row["spent"] + review,
+            "review_spent": review, "runs": row["runs"],
             "model_calls": row["calls"], "ran_work": row["worked"],
             "estimated_rows": row["estimated"], "window_hours": hours}
 

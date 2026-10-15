@@ -32,15 +32,16 @@ FILE_HOSTS = frozenset({
 
 TUNINGS = {
     "fed_file_hosts": {
-        "rules": ("FED-1002", "FED-1003"),
+        "rules": ("FED-1002", "FED-1003", "LAN-1010"),
         "title": "Threat lists: leave out shared file hosts",
         "problem": "Threat feeds list one bad file on a shared host, such as "
                    "a script on cdn.jsdelivr.net or a download on github.com. "
                    "The app only sees the host name, so every visit to that "
                    "host raised an alarm.",
-        "change": "A name on a shared file host no longer raises FED-1002 or "
-                  "FED-1003. Every other listed name still does, and so do "
-                  "listed addresses (FED-1001).",
+        "change": "A name on a shared file host no longer raises FED-1002, "
+                  "FED-1003 or LAN-1010. Every other listed name still does, "
+                  "and so do listed addresses (FED-1001, and LAN-1010 by "
+                  "address).",
     },
 }
 

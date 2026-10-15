@@ -150,7 +150,10 @@ logger = logging.getLogger(__name__)
 # v65: duty_run.dismissed_at and dismissed_by, tick boxes on the wake-up list.
 # v66, 2026-10-12: expectation and expectation_check, and incident verdicts.
 # v67, 2026-10-13: block_hit (the block wall), rule_trial and rule_trial_held.
-SCHEMA_VERSION = 67
+# v68, 2026-10-14: learned_rule and learned_rule_held, quiet rules the model
+# learns from false alarms; review_hold and review_run, alerts the model sorts
+# before they are filed.
+SCHEMA_VERSION = 68
 
 
 # HELPERS
@@ -4284,10 +4287,12 @@ def _migrate_run_dismissal(conn) -> int:
 
 
 def _migrate_expectations(conn) -> int:
-    """v66, v67: the expectations the app sets and checks itself, and rule
-    trials. Idempotent."""
-    from core import expectations, rule_trials
-    return expectations.ensure_tables(conn) | rule_trials.ensure_tables(conn)
+    """v66 to v68: the expectations the app sets and checks itself, rule
+    trials and learned rules. Idempotent."""
+    from core import alert_review, expectations, learned_rules, rule_trials
+    return (expectations.ensure_tables(conn) | rule_trials.ensure_tables(conn)
+            | learned_rules.ensure_tables(conn)
+            | alert_review.ensure_tables(conn))
 
 
 def _migrate_merge_carried(conn) -> int:

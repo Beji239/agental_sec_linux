@@ -2732,6 +2732,25 @@
       </details>
       <div id="trials"></div>
     </div>
+    <div class="card">
+      <div class="card-title">What the model learned</div>
+      <div class="exp-note" style="margin-top:0;">
+        When the model finds that an alarm is false and will come back, it writes a quiet rule for that
+        pattern. A matching alarm is held back and counted here instead of reaching your inbox. Critical
+        alarms are never held. Undo a rule and its alarms fire again.
+      </div>
+      <div id="learned"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Sorted by the model before you saw them</div>
+      <div class="exp-note" style="margin-top:0;">
+        Low and medium alerts wait here first. The model reads the evidence; the ones it explains become
+        part of the baseline and never reach your inbox, the rest reach you with its reason. Threat list
+        hits, high and critical alerts always come straight to you. If one below was not normal, bring it
+        back and its rule is undone.
+      </div>
+      <div id="reviewed"></div>
+    </div>
     <details class="card exp-old">
       <summary class="card-title" style="margin-bottom:0;">The model's own predictions, the old record</summary>
     <div style="margin-top:12px;">
@@ -3523,7 +3542,7 @@ function loadPage(name) {
   if (name === 'lan')        startLanLive(); else stopLanLive();
   if (name === 'computer')   { loadProcesses(); loadListeners(); }
   if (name === 'baselines')  { loadBaselines(); loadDeviations(); loadPerformance(); }
-  if (name === 'predictions') { loadExpectations(); loadFalseAlarms(); loadTrials(); loadPredictionScore(); loadPredictions(); }
+  if (name === 'predictions') { loadExpectations(); loadFalseAlarms(); loadTrials(); loadLearned(); loadReviewed(); loadPredictionScore(); loadPredictions(); }
   if (name === 'detections') { loadDetections(); searchRunbook(); refreshCvssStatus(false); }
   if (name === 'inbox')      { loadActions(); loadQuestions(); loadReviewQueue(); }
   if (name === 'agents')      { loadAgents(); loadDailyReports(); }
@@ -8764,6 +8783,100 @@ async function trialAction(tuning, what) {
   loadTrials();
 }
 
+// LEARNED RULES, the model's quiet rules from false alarms
+
+function _pattern(m) {
+  const parts = [];
+  if (m.entity) parts.push('subject ' + m.entity);
+  if (m.title) parts.push('title ' + m.title);
+  Object.entries(m.raw || {}).forEach(([k, v]) => parts.push(k + ' ' + v));
+  return parts.join('; ');
+}
+
+async function loadLearned() {
+  const box = document.getElementById('learned');
+  let d;
+  try {
+    d = await fetch('/api/expectations/learned', { headers: authHeaders() }).then(r => r.json());
+  } catch (e) {
+    box.innerHTML = '<div class="exp-note">Could not reach AgentalSec, so the learned rules are not shown.</div>';
+    return;
+  }
+  const rules = d.rules || [];
+  if (!rules.length) { box.innerHTML = '<div class="exp-note">No rule learned yet.</div>'; return; }
+  box.innerHTML = rules.map(r => {
+    const when = new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return `<div class="trial st-${r.status === 'on' ? 'kept' : 'off'}" data-learned="${Number(r.id)}">`
+      + `<div class="trial-head"><span class="trial-title">${esc(r.reason)}</span>`
+      + `<span class="trial-pill">${r.status === 'on' ? 'On' : 'Undone'}</span>`
+      + `<span class="trial-rules">${esc(r.detection_id)}</span></div>`
+      + `<div class="exp-note"><b>Holds back.</b> ${esc(_pattern(r.match || {}))}</div>`
+      + `<div class="exp-note"><b>Made by</b> ${r.created_by === 'owner' ? 'you' : 'the model'} on ${esc(when)}. `
+      + `Held back ${Number(r.held_count)} so far, ${Number(r.held_last_7_days)} in the last week.`
+      + (r.last_example ? ` Last one: ${esc(r.last_example)}.` : '') + `</div>`
+      + (r.status === 'on' ? '<button class="btn" data-undo="1">Undo this rule</button>' : '')
+      + `</div>`;
+  }).join('');
+  box.onclick = async ev => {
+    const b = ev.target.closest ? ev.target.closest('[data-undo]') : null;
+    const holder = b && b.closest('[data-learned]');
+    if (!holder || !confirm('Undo this rule? The alarms it holds back will fire again.')) return;
+    try {
+      const r = await fetch('/api/expectations/learned/undo/' + encodeURIComponent(holder.getAttribute('data-learned')), {
+        method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: '{}' }).then(x => x.json());
+      if (r.error) alert(r.error);
+    } catch (e) {
+      alert('That did not reach the app, so nothing changed.');
+    }
+    loadLearned();
+  };
+}
+
+const REVIEW_WORD = { waiting: 'Waiting for the model', normal: 'Normal, not shown',
+                      alarm: 'Sent to you', shown: 'Shown as raised' };
+
+async function loadReviewed() {
+  const box = document.getElementById('reviewed');
+  let d;
+  try {
+    d = await fetch('/api/expectations/reviewed', { headers: authHeaders() }).then(r => r.json());
+  } catch (e) {
+    box.innerHTML = '<div class="exp-note">Could not reach AgentalSec, so the sorted alerts are not shown.</div>';
+    return;
+  }
+  const c = d.last_7_days || {};
+  const head = `<div class="exp-note">${d.running ? 'The model is sorting alerts.' : 'The review is off, so alerts are filed as raised.'} `
+    + `Last 7 days: ${Number(c.normal || 0)} normal, ${Number(c.alarm || 0)} sent to you, `
+    + `${Number(c.shown || 0)} shown because the model could not look in time, ${Number(c.waiting || 0)} waiting. `
+    + `Tokens in the last day: ${Number(d.tokens_24h || 0)}.</div>`;
+  const items = (d.items || []).slice(0, 40);
+  if (!items.length) { box.innerHTML = head + '<div class="exp-note">Nothing sorted yet.</div>'; return; }
+  box.innerHTML = head + '<ul class="review-list">' + items.map(it => {
+    const when = new Date(it.held_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `<li data-review="${Number(it.id)}"><b>${esc(REVIEW_WORD[it.status] || it.status)}</b>, ${esc(when)}: ${esc(it.title)}`
+      + (Number(it.count) > 1 ? ` (${Number(it.count)} times)` : '')
+      + (it.reason ? `<div class="exp-note">${esc(it.reason)}</div>` : '')
+      + (it.status === 'normal' ? '<button class="btn" data-show="1">This was not normal, show it</button>' : '')
+      + '</li>';
+  }).join('') + '</ul>';
+  box.onclick = async ev => {
+    const b = ev.target.closest ? ev.target.closest('[data-show]') : null;
+    const holder = b && b.closest('[data-review]');
+    if (!holder || !confirm('Show this alert and undo the rule the model made for it?')) return;
+    try {
+      const r = await fetch('/api/expectations/reviewed/show/' + encodeURIComponent(holder.getAttribute('data-review')), {
+        method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: '{}' }).then(x => x.json());
+      if (r.error) alert(r.error);
+    } catch (e) {
+      alert('That did not reach the app, so nothing changed.');
+    }
+    loadReviewed();
+    loadLearned();
+  };
+}
+
 function openTrial() {
   const el = FA_FIX && document.getElementById('trial-' + FA_FIX);
   if (!el) return;
@@ -8847,7 +8960,7 @@ function renderExpDevice(d) {
   (d.expectations || []).forEach(e => blocks.push(`${e.title}: ${(EXP_WORD[e.state] || e.state).toLowerCase()}. ${e.detail || ''}`));
   if (!(d.expectations || []).length) blocks.push('No expectation names this device as broken or new.');
   const network = (d.network || []).length
-    ? '<ul>' + d.network.map(e => `<li style="color:${EXP_COLOR[e.state] || 'var(--text)'}">`
+    ? '<ul>' + d.network.map(e => `<li style="color:${esc(EXP_COLOR[e.state] || 'var(--text)')}">`
         + `${esc(e.title)}: ${esc((EXP_WORD[e.state] || e.state).toLowerCase())}</li>`).join('') + '</ul>'
     : '<div class="exp-note">No check has run yet. The first runs a minute after the app starts.</div>';
   const blockHtml = '<ul>' + blocks.map(b => `<li>${esc(b)}</li>`).join('') + '</ul>'

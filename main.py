@@ -2339,6 +2339,14 @@ def main(argv=None):
         logger.error("Requests can still be filed and decided; none of them "
                      "will execute.")
 
+    # The model sorts low and medium alerts before they are filed.
+    try:
+        from core import alert_review
+        logger.info(f"Alert review: {alert_review.start(config, session_id)}")
+    except Exception as e:
+        logger.error(f"Alert review failed to start, alerts are filed "
+                     f"unreviewed: {e}")
+
     # the duty loop. T4's piece, and the one the whole programme was
     # approved for: SOMETHING HAS TO DO THE LOOKING when nobody is typing.
     # Before this, agent_loop.run() was called from /api/chat and nowhere
