@@ -299,9 +299,11 @@ _KNOWN_ROOTS = frozenset([
     "apple", "icloud", "aaplimg", "fbcdn", "akadns",
 ])
 
-# Names that never leave the network, so no attacker registered them.
+# Names no attacker can register: local ones, and the reserved names devices
+# use as probes (this-url-does-not-exist.invalid, _dns.resolver.arpa, reverse
+# lookups under in-addr.arpa).
 _LOCAL_SUFFIXES = (".lan", ".local", ".localdomain", ".home.arpa",
-                   ".internal")
+                   ".internal", ".invalid", ".localhost", ".arpa")
 
 # A registered domain this many devices query in the window is shared
 # infrastructure. Both rules here describe ONE device talking to a domain, so
@@ -630,6 +632,9 @@ def _check_dga(conn, since_id: int, session_id: str) -> int:
                     f"process queries this name and whether the destination "
                     f"is expected."
                 ),
+                raw_data={"domain": domain,
+                          "registered_domain": _registered_domain(domain),
+                          "client_ip": client_ip},
                 detection_id="DNS-1001",
             )
             if result.get("saved"):
@@ -855,6 +860,9 @@ def _check_tunnels(conn, session_id: str) -> int:
                 f"filtered on the client shows every name, and query_tls "
                 f"shows what the device connected to afterwards."
             ),
+            raw_data={"domain": registered,
+                      "registered_domain": registered,
+                      "client_ip": client_ip},
             detection_id="DNS-1003",
         )
         if result.get("saved"):
@@ -1211,6 +1219,8 @@ def _check_beacons(conn, session_id: str) -> int:
 
     raised = 0
     for client_ip, domain, cnt in candidates:
+        if _is_local_name(domain):
+            continue
         # Fetch the timestamps sorted ascending so interval computation is simple.
         ts_rows = conn.execute("""
             SELECT queried_at FROM dns_queries
@@ -1278,6 +1288,9 @@ def _check_beacons(conn, session_id: str) -> int:
                 f"agents and system updaters. Confirm the process querying "
                 f"this name is expected."
             ),
+            raw_data={"domain": domain,
+                      "registered_domain": _registered_domain(domain),
+                      "client_ip": client_ip},
             detection_id="DNS-1002",
         )
         if result.get("saved"):

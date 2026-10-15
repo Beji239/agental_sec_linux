@@ -2736,8 +2736,9 @@
       <div class="card-title">What the model learned</div>
       <div class="exp-note" style="margin-top:0;">
         When the model finds that an alarm is false and will come back, it writes a quiet rule for that
-        pattern. A matching alarm is held back and counted here instead of reaching your inbox. Critical
-        alarms are never held. Undo a rule and its alarms fire again.
+        pattern. The model proposes and Python verifies: a rule names a fact Python checks for every alarm
+        it holds, or your own words. Critical alarms are never held. A rule made with nobody watching is on
+        trial for two weeks and lapses unless you keep it. Undo a rule and its alarms fire again.
       </div>
       <div id="learned"></div>
     </div>
@@ -8785,6 +8786,11 @@ async function trialAction(tuning, what) {
 
 // LEARNED RULES, the model's quiet rules from false alarms
 
+const LEARN_KIND = { package_install: 'a package install put the file there',
+  cloud_network: 'the destination is a big cloud or CDN', named_lookup: 'the device looked the destination up by name',
+  time_server: 'a time server', peer_traffic: 'a call or game peer on high UDP ports',
+  own_traffic: "this app's own traffic", reserved_name: 'a reserved name nobody can register' };
+
 function _pattern(m) {
   const parts = [];
   if (m.entity) parts.push('subject ' + m.entity);
@@ -8806,23 +8812,35 @@ async function loadLearned() {
   if (!rules.length) { box.innerHTML = '<div class="exp-note">No rule learned yet.</div>'; return; }
   box.innerHTML = rules.map(r => {
     const when = new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-    return `<div class="trial st-${r.status === 'on' ? 'kept' : 'off'}" data-learned="${Number(r.id)}">`
+    const onTrial = r.status === 'on' && r.trial_until && !r.kept_at;
+    const until = onTrial ? new Date(r.trial_until).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+    const pill = r.status !== 'on' ? 'Undone' : r.lapsed ? 'Trial lapsed' : onTrial ? 'On trial' : 'On';
+    const basis = r.owner_words ? `Your words: "${esc(r.owner_words)}".`
+      : r.reason_kind ? `Python checks every alert it holds: ${esc(LEARN_KIND[r.reason_kind] || r.reason_kind)}.`
+      : 'Made before rules had to name a checked fact, so it holds nothing.';
+    return `<div class="trial st-${r.status === 'on' && !r.lapsed ? 'kept' : 'off'}" data-learned="${Number(r.id)}">`
       + `<div class="trial-head"><span class="trial-title">${esc(r.reason)}</span>`
-      + `<span class="trial-pill">${r.status === 'on' ? 'On' : 'Undone'}</span>`
+      + `<span class="trial-pill">${pill}</span>`
       + `<span class="trial-rules">${esc(r.detection_id)}</span></div>`
       + `<div class="exp-note"><b>Holds back.</b> ${esc(_pattern(r.match || {}))}</div>`
-      + `<div class="exp-note"><b>Made by</b> ${r.created_by === 'owner' ? 'you' : 'the model'} on ${esc(when)}. `
+      + `<div class="exp-note"><b>Why it may.</b> ${basis}</div>`
+      + `<div class="exp-note"><b>Made by</b> ${r.created_by === 'owner' ? 'you' : r.trial_until ? 'the model, with nobody watching' : 'the model'} on ${esc(when)}. `
       + `Held back ${Number(r.held_count)} so far, ${Number(r.held_last_7_days)} in the last week.`
-      + (r.last_example ? ` Last one: ${esc(r.last_example)}.` : '') + `</div>`
+      + (r.last_example ? ` Last one: ${esc(r.last_example)}.` : '')
+      + (onTrial ? ` On trial until ${esc(until)}; it lapses unless you keep it.` : '') + `</div>`
+      + (onTrial || r.lapsed ? '<button class="btn" data-keep="1">Keep this rule</button>' : '')
       + (r.status === 'on' ? '<button class="btn" data-undo="1">Undo this rule</button>' : '')
       + `</div>`;
   }).join('');
   box.onclick = async ev => {
-    const b = ev.target.closest ? ev.target.closest('[data-undo]') : null;
+    const k = ev.target.closest ? ev.target.closest('[data-keep]') : null;
+    const b = k || (ev.target.closest ? ev.target.closest('[data-undo]') : null);
     const holder = b && b.closest('[data-learned]');
-    if (!holder || !confirm('Undo this rule? The alarms it holds back will fire again.')) return;
+    if (!holder || !confirm(k ? 'Keep this rule? It stays on until you undo it.'
+                              : 'Undo this rule? The alarms it holds back will fire again.')) return;
     try {
-      const r = await fetch('/api/expectations/learned/undo/' + encodeURIComponent(holder.getAttribute('data-learned')), {
+      const url = k ? '/api/expectations/learned/keep/' : '/api/expectations/learned/undo/';
+      const r = await fetch(url + encodeURIComponent(holder.getAttribute('data-learned')), {
         method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
         body: '{}' }).then(x => x.json());
       if (r.error) alert(r.error);

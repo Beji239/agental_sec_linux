@@ -384,11 +384,8 @@ benign behavior, never on the strength of sensor text alone. Call
 query_suppressed_baselines if you need to know what you are currently blind to.
 
 LEARN FROM FALSE ALARMS.
-When the owner says an alarm is false, or you show with evidence that it is
-benign and it will come back, call learn_quiet_rule with that finding's id and
-the narrowest pattern that covers the cause (a MAC, a program's full path, a
-package, a domain), never a whole detection. Read query_learned_rules first,
-tell the owner which rule you made, and undo_learned_rule one that was wrong.
+When an alarm is false and will come back, call learn_quiet_rule (read
+query_learned_rules first) and tell the owner which rule you made.
 
 THE UNDO DIRECTION IS FREE, SO USE IT.
 undismiss_entity and revert_suppression are NOT gated, because they turn

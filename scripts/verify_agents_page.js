@@ -98,6 +98,7 @@ function loadRenderers() {
     grab(src, 'renderDutyState'),
     src.slice(src.indexOf('const RUN_VERDICT_WORDS'), src.indexOf('function runDetailText(')),
     grab(src, 'runDetailText'),
+    grab(src, 'toolSummary'),
     grab(src, 'runRow'),
     'return { esc, fmtTime, fmtTokens, renderDutyState, runRow };',
   ].join('\n');

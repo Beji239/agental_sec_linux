@@ -457,6 +457,10 @@ def _initialize_database():
         import traceback
         logger.error(traceback.format_exc())
         logger.error("Refusing to start on an un-migrated database.")
+        if "locked" in str(e):
+            logger.error("Another program has the database open, most often "
+                         "an AgentalSec that is still running. Close it and "
+                         "start again; nothing was changed.")
         return False
 
     status = result.get("status")
@@ -2027,6 +2031,14 @@ def main(argv=None):
 
     session_id = str(uuid.uuid4())
     logger.info(f"Session ID: {session_id}")
+
+    # A copy already running holds the database, so an upgrade would fail on
+    # a lock. Say so before touching the database.
+    _flask = config.get("flask", {})
+    _host, _port = _flask.get("host", "127.0.0.1"), int(_flask.get("port", 5000))
+    _held = _port_holder(_host, _port)
+    if _held.get("taken"):
+        return _refuse_busy_port(_host, _port, _held)
 
     if not _initialize_database():
         logger.error("Cannot start - database initialization failed")

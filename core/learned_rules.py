@@ -1,8 +1,11 @@
 # core/learned_rules.py
-# Quiet rules the model learns from false alarms. A rule names one detection
-# and a pattern (entity, title or raw fields, as case-blind globs); a finding
-# that matches is held back instead of written, and counted on the rule so the
-# owner can see what it holds and undo it. Critical findings are never held.
+# Quiet rules the model learns from false alarms. A rule names one detection,
+# a pattern over trusted fields (core/evidence) and a reason Python can check;
+# a matching finding is held back only when that reason still checks out for
+# it, and is counted on the rule so the owner can see it and undo it. On the
+# owner's word a rule needs no check. A rule made with nobody watching is on
+# trial for two weeks and lapses unless the owner keeps it. Critical findings
+# are never held.
 
 import fnmatch
 import json
@@ -22,6 +25,10 @@ WIDE_FLOOR = 5           # a rule matching every one of at least this many
 WIDE_ENTITIES = 3        # findings over this many entities turns the rule off
 NEVER_HELD = ("critical",)
 MAX_RAW_KEYS = 6
+TRIAL_DAYS = 14
+UNATTENDED_PER_DAY = 5   # tripwire: rules made with nobody watching
+NEW_COLUMNS = (("reason_kind", "TEXT"), ("owner_words", "TEXT"),
+               ("trial_until", "TEXT"), ("kept_at", "TEXT"))
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS learned_rule (
@@ -54,12 +61,32 @@ DDL = (
 
 _cache = {"at": 0.0, "rules": None}
 _lock = threading.Lock()
+_turn = threading.local()
+
+
+class unattended_turn:
+    """Marks the thread's model turn as one nobody is watching."""
+
+    def __enter__(self):
+        _turn.unattended = True
+
+    def __exit__(self, *exc):
+        _turn.unattended = False
+
+
+def unattended_now() -> bool:
+    return bool(getattr(_turn, "unattended", False))
 
 
 def ensure_tables(conn) -> int:
     added = 0 if me._table_exists_ro(conn, "learned_rule") else 1
     for ddl in DDL:
         conn.execute(ddl)
+    have = {r[1] for r in conn.execute("PRAGMA table_info(learned_rule)")}
+    for col, kind in NEW_COLUMNS:
+        if col not in have:
+            conn.execute(f"ALTER TABLE learned_rule ADD COLUMN {col} {kind}")
+            added = 1
     return added
 
 
@@ -170,16 +197,31 @@ def replay(conn, detection_id: str, match: dict, days: int = REPLAY_DAYS):
 
 def learn(detection_id: str, finding_id, match, reason: str,
           by: str = "model", clear_open: bool = True,
-          example: dict = None) -> dict:
-    """Make a quiet rule from one false alarm, a finding or (example) an
-    alert the model reviewed before it was filed. Refuses rules that would
-    silence a whole detection or that do not cover their own example."""
+          example: dict = None, reason_kind: str = None,
+          owner_words: str = None, unattended: bool = False) -> dict:
+    """
+    Make a quiet rule from one false alarm, a finding or (example) an alert
+    the model reviewed before it was filed. Without the owner's words the
+    rule needs a reason_kind that core/evidence confirms for the example, and
+    may match trusted fields only. Refuses rules that silence a whole
+    detection or do not cover their own example.
+    """
     from core import detections as det
+    from core import evidence
     reason = (reason or "").strip()
+    owner_words = (owner_words or "").strip() or None
     if not reason:
         return {"success": False, "error": "say why this is a false alarm"}
     if by not in ("model", "owner"):
         return {"success": False, "error": "by must be model or owner"}
+    if unattended and owner_words:
+        return {"success": False, "error": "nobody gave owner words here"}
+    if not owner_words and reason_kind not in evidence.REASONS:
+        return {"success": False,
+                "error": (f"name reason_kind, one of "
+                          f"{', '.join(evidence.REASONS)}; Python checks it. "
+                          f"Without one, only the owner's own words can "
+                          f"make a rule")}
     try:
         rule = det.get(detection_id)
     except Exception as e:                                  # noqa: BLE001
@@ -204,6 +246,18 @@ def learn(detection_id: str, finding_id, match, reason: str,
         if example["severity"] in NEVER_HELD:
             return {"success": False,
                     "error": "critical findings are never held back"}
+        if not owner_words:
+            ok, why = evidence.closable(example)
+            if not ok:
+                return {"success": False, "error": why}
+            ok, found = evidence.verify(reason_kind, example)
+            if not ok:
+                return {"success": False,
+                        "error": f"Python could not confirm {reason_kind}: "
+                                 f"{found}"}
+        bad = evidence.check_pattern(clean, example, bool(owner_words))
+        if bad:
+            return {"success": False, "error": bad}
         if not matches(clean, example["entity_value"], example["title"],
                        example["raw_data"]):
             return {"success": False,
@@ -222,6 +276,16 @@ def learn(detection_id: str, finding_id, match, reason: str,
                               f"the detection off. Narrow it, or ask the "
                               f"owner."),
                     "replay": {k: v for k, v in rp.items() if k != "open_ids"}}
+        if unattended:
+            since = _iso(datetime.now(timezone.utc) - timedelta(days=1))
+            made = conn.execute("SELECT COUNT(*) FROM learned_rule WHERE "
+                                "trial_until IS NOT NULL AND created_at >= ?",
+                                (since,)).fetchone()[0]
+            if made >= UNATTENDED_PER_DAY:
+                return {"success": False,
+                        "error": (f"{made} rules were made with nobody "
+                                  f"watching in the last day, the limit; "
+                                  f"the owner decides the rest")}
         dup = conn.execute("SELECT id FROM learned_rule WHERE detection_id = ? "
                            "AND match_json = ? AND status = 'on'",
                            (detection_id, json.dumps(clean, sort_keys=True))
@@ -229,16 +293,25 @@ def learn(detection_id: str, finding_id, match, reason: str,
         if dup:
             return {"success": False, "error": f"rule {dup[0]} already says "
                                                f"this", "rule_id": dup[0]}
+        trial = _iso(datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)) \
+            if unattended else None
         cur = conn.execute(
             "INSERT INTO learned_rule (detection_id, match_json, reason, "
-            "evidence_json, created_by, created_at) VALUES (?,?,?,?,?,?)",
+            "evidence_json, created_by, created_at, reason_kind, owner_words, "
+            "trial_until) VALUES (?,?,?,?,?,?,?,?,?)",
             (detection_id, json.dumps(clean, sort_keys=True), reason[:500],
-             json.dumps(dict(source, title=example["title"])), by, _iso()))
+             json.dumps(dict(source, title=example["title"])), by, _iso(),
+             None if owner_words else reason_kind,
+             owner_words[:300] if owner_words else None, trial))
         rid = cur.lastrowid
         cleared, entities = 0, set()
         if clear_open and rp["open_ids"]:
             note = f"learned rule {rid}: {reason[:200]}"
             for fid, entity in rp["open_ids"]:
+                if not owner_words:
+                    f = _finding(conn, fid)
+                    if not f or not evidence.verify(reason_kind, f)[0]:
+                        continue
                 conn.execute("UPDATE findings SET dismissed = 1, "
                              "dismissed_at = datetime('now'), "
                              "dismissed_reason = ? WHERE id = ? AND "
@@ -248,11 +321,14 @@ def learn(detection_id: str, finding_id, match, reason: str,
     _forget()
     _journal("learned_rule_made", rid,
              {"detection_id": detection_id, "match": clean, "by": by,
-              "reason": reason[:300], "cleared": cleared})
+              "reason": reason[:300], "cleared": cleared,
+              "reason_kind": reason_kind, "owner_words": bool(owner_words),
+              "trial_until": trial})
     if entities:
         _settle_incidents(detection_id, entities, rid, reason)
     return {"success": True, "rule_id": rid, "detection_id": detection_id,
             "match": clean, "cleared_open_findings": cleared,
+            "trial_until": trial,
             "replay": {k: v for k, v in rp.items() if k != "open_ids"}}
 
 
@@ -292,11 +368,15 @@ def _active() -> dict:
     try:
         with me._get_readonly_conn() as conn:
             if me._table_exists_ro(conn, "learned_rule"):
-                for r in conn.execute("SELECT id, detection_id, match_json, "
-                                      "reason FROM learned_rule WHERE "
-                                      "status = 'on'"):
+                # A trial nobody kept has lapsed.
+                for r in conn.execute(
+                        "SELECT id, detection_id, match_json, reason, "
+                        "reason_kind, owner_words FROM learned_rule WHERE "
+                        "status = 'on' AND (trial_until IS NULL OR kept_at "
+                        "IS NOT NULL OR trial_until > ?)", (_iso(),)):
                     rules.setdefault(r["detection_id"], []).append(
-                        (r["id"], json.loads(r["match_json"]), r["reason"]))
+                        (r["id"], json.loads(r["match_json"]), r["reason"],
+                         r["reason_kind"], bool(r["owner_words"])))
     except Exception as e:                                  # noqa: BLE001
         logger.warning(f"learned rules not read, nothing held: {e}")
     with _lock:
@@ -310,10 +390,18 @@ def holds(detection_id, entity_value, title, raw_data, severity):
     if severity in NEVER_HELD:
         return None
     try:
-        for rid, match, reason in _active().get(detection_id, ()):
-            if matches(match, entity_value, title, raw_data):
-                _count(rid, entity_value, title)
-                return rid, reason
+        from core import evidence
+        item = {"detection_id": detection_id, "entity_value": entity_value,
+                "title": title, "raw_data": raw_data, "severity": severity}
+        for rid, match, reason, kind, owner in _active().get(detection_id, ()):
+            if not matches(match, entity_value, title, raw_data):
+                continue
+            # A rule the owner did not word holds only what still checks out.
+            if not owner and (not evidence.closable(item)[0]
+                              or not evidence.verify(kind, item)[0]):
+                continue
+            _count(rid, entity_value, title)
+            return rid, reason
     except Exception as e:                                  # noqa: BLE001
         logger.warning(f"learned rule check failed, finding kept: {e}")
     return None
@@ -352,6 +440,24 @@ def undo(rule_id: int, by: str = "owner", reason: str = None) -> dict:
     return {"success": True, "rule_id": int(rule_id), "status": "undone"}
 
 
+def keep(rule_id: int, by: str = "owner") -> dict:
+    """The owner keeps a rule that was on trial; it no longer lapses."""
+    with me._get_conn() as conn:
+        ensure_tables(conn)
+        row = conn.execute("SELECT status, trial_until, kept_at FROM "
+                           "learned_rule WHERE id = ?",
+                           (int(rule_id),)).fetchone()
+        if row is None or row["status"] != "on":
+            return {"success": False, "error": f"no rule {rule_id} is on"}
+        if not row["trial_until"] or row["kept_at"]:
+            return {"success": False, "error": "this rule is not on trial"}
+        conn.execute("UPDATE learned_rule SET kept_at = ? WHERE id = ?",
+                     (_iso(), int(rule_id)))
+    _forget()
+    _journal("learned_rule_kept", int(rule_id), {"by": by})
+    return {"success": True, "rule_id": int(rule_id)}
+
+
 def listing(include_undone: bool = False, limit: int = 200) -> dict:
     with me._get_readonly_conn() as conn:
         if not me._table_exists_ro(conn, "learned_rule"):
@@ -364,6 +470,8 @@ def listing(include_undone: bool = False, limit: int = 200) -> dict:
         for r in rows:
             d = dict(r)
             d["match"] = json.loads(d.pop("match_json") or "{}")
+            d["lapsed"] = bool(d.get("trial_until") and not d.get("kept_at")
+                               and d["trial_until"] <= _iso())
             d["evidence"] = json.loads(d.pop("evidence_json") or "{}")
             d["held_last_7_days"] = conn.execute(
                 "SELECT COALESCE(SUM(count), 0) FROM learned_rule_held WHERE "

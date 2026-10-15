@@ -323,18 +323,41 @@ def _canonical_ip(value: str) -> str:
     return str(ipaddress.ip_address(value.strip()))
 
 
+# Hosts where a listed URL names one file (a release download, a script), not
+# the host. Only the URL path is bad there, and this app sees host names only.
+URL_FILE_HOSTS_EXTRA = frozenset({
+    "drive.usercontent.google.com", "sites.google.com", "gist.github.com",
+    "codeload.github.com", "media.discordapp.net", "paste.ee", "telegra.ph",
+    "t.me", "files.catbox.moe", "bitbucket.io",
+})
+
+
+def _url_names_one_file(host: str, path: str) -> bool:
+    """A URL with a real path on a shared file host: the file is listed, not
+    the host, so it must not become a domain row."""
+    if not path.strip("/"):
+        return False
+    from core.rule_trials import is_file_host
+    h = (host or "").lower().strip(".")
+    return is_file_host(h) or h in URL_FILE_HOSTS_EXTRA
+
+
 def _host_rows(value: str, family: str) -> list:
     """
     A domain, hostname or URL indicator as rows of the right type.
 
     A URL whose host is an address is an IP indicator. Filing it as a domain
-    made it unmatchable: 140 live rows were stored that way (FM-1).
+    made it unmatchable: 140 live rows were stored that way (FM-1). A URL to
+    one file on a shared host (github.com/<user>/.../x.dat) gives no row: the
+    host is not what was listed.
     """
     import ipaddress
     raw = str(value or "").strip()
-    if "://" in raw:
+    was_url = "://" in raw
+    if was_url:
         raw = raw.split("://", 1)[1]
     host = raw.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    path = raw[len(host):].split("?", 1)[0].split("#", 1)[0]
     host = host.rsplit("@", 1)[-1]
     if host.startswith("["):
         host = host[1:].split("]", 1)[0]
@@ -347,6 +370,8 @@ def _host_rows(value: str, family: str) -> list:
     except ValueError:
         pass
     domain = _clean_domain(host)
+    if was_url and domain and _url_names_one_file(domain, path):
+        return []
     if domain and domain not in _NEVER_MATCH_DOMAINS:
         return [(domain, "domain", family)]
     return []

@@ -2395,6 +2395,13 @@ def register_routes(app):
         from core import learned_rules
         return jsonify(learned_rules.listing(include_undone=True))
 
+    @app.route("/api/expectations/learned/keep/<int:rule_id>", methods=["POST"])
+    @require_api_key
+    def learned_rule_keep(rule_id):
+        from core import learned_rules
+        out = learned_rules.keep(rule_id, by="owner")
+        return jsonify(out), (200 if out["success"] else 400)
+
     @app.route("/api/expectations/learned/undo/<int:rule_id>", methods=["POST"])
     @require_api_key
     def learned_rule_undo(rule_id):

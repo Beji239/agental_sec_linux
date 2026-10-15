@@ -431,6 +431,7 @@ DEPENDS: dict[str, tuple] = {
     "ask_operator":               (),
     "record_incident_verdict":    (),
     "learn_quiet_rule":           (),
+    "close_incidents":            (),
     "query_learned_rules":        (),
     "undo_learned_rule":          (),
     "query_operator_answers":     (),

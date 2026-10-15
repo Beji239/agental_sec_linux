@@ -1260,6 +1260,53 @@ def set_verdict(incident_id: int, verdict: str, by: str = "owner",
             "verdict": verdict, "by": by}
 
 
+def close_many(incident_ids, reason: str, owner_words: str = None,
+               by: str = "model", limit: int = 300) -> dict:
+    """
+    Dismiss incidents the owner or the model judged false, with their open
+    findings. owner_words, when given, also records a false alarm verdict on
+    the owner's word. A critical incident is closed only on the owner's word.
+    """
+    reason = (reason or "").strip()
+    if not reason:
+        return {"success": False, "error": "say why these are not real"}
+    try:
+        ids = [int(i) for i in (incident_ids or [])][:limit]
+    except (TypeError, ValueError):
+        return {"success": False, "error": "incident_ids must be numbers"}
+    note = reason[:300] + (f" Owner: {owner_words.strip()[:200]}"
+                           if (owner_words or "").strip() else "")
+    out = {"closed": [], "skipped": {}, "findings_cleared": 0}
+    for iid in ids:
+        with me._get_readonly_conn() as conn:
+            row = conn.execute("SELECT detection_id, entity_value, severity, "
+                               "status FROM incident WHERE id = ?",
+                               (iid,)).fetchone()
+        if row is None:
+            out["skipped"][iid] = "no such incident"
+            continue
+        if row["severity"] == "critical" and not (owner_words or "").strip():
+            out["skipped"][iid] = "critical, closed only on the owner's word"
+            continue
+        r = set_status(iid, "dismissed", by=by, note=note)
+        if not r.get("success"):
+            out["skipped"][iid] = r.get("error")
+            continue
+        with me._get_conn() as conn:
+            cur = conn.execute(
+                "UPDATE findings SET dismissed = 1, dismissed_at = "
+                "datetime('now'), dismissed_reason = ? WHERE detection_id = ? "
+                "AND entity_value = ? AND dismissed = 0",
+                (f"incident {iid} closed: {note}", row["detection_id"],
+                 row["entity_value"]))
+            out["findings_cleared"] += cur.rowcount
+        if (owner_words or "").strip():
+            set_verdict(iid, "false_alarm", by="model", note=owner_words)
+        out["closed"].append(iid)
+    out["success"] = bool(out["closed"]) or not ids
+    return out
+
+
 def summary() -> dict:
     """
     Counts for the dashboard and for the model, never summed into one number.

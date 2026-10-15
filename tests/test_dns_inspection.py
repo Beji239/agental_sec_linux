@@ -1085,6 +1085,15 @@ def test_a_local_name_is_never_dga_or_tunnel():
     assert saved == []
 
 
+def test_reserved_probe_names_are_never_dga_or_beacon():
+    for name in ("this-url-does-not-exist-9f3c2a7b1d.invalid",
+                 "_dns.resolver.arpa", "4.3.2.1.in-addr.arpa",
+                 "qx7zvbk4wtrp9lm.localhost"):
+        assert di._is_local_name(name) is True, name
+        assert di._is_dga_candidate(name) is False, name
+    assert di._is_local_name("qx7zvbk4wtrp9lm.com") is False
+
+
 def _tunnel_setup_named(names, clients=("192.0.2.5",)):
     mp = pytest.MonkeyPatch()
     try:

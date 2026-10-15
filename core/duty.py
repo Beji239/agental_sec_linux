@@ -1012,8 +1012,11 @@ DUTY_TOOL_ALLOWLIST = (
     "lookup_ip", "query_enrichment", "geolocate_ip", "query_threat_map",
     "query_map_summary",
     "query_runbook", "query_performance",
-    # the one write the loop is allowed, which only touches our records
+    # the writes the loop is allowed, which only touch our records
     "file_action_request",
+    # Quiet rules from false alarms (owner, 2026-10-15). Python verifies each
+    # one, a rule made here is on trial, and there is a daily limit.
+    "learn_quiet_rule", "query_learned_rules", "undo_learned_rule",
     # Questions for the owner. Filing one changes nothing on the machine and
     # waits for the popup budget; before 2026-10-11 the prompt named the tool
     # and the loop could not call it, so it never asked anything.
@@ -1503,7 +1506,8 @@ WHAT TO DO, in order:
 4. Reach a verdict. One of: `real`, `benign`, `needs_human`, or `no_action`.
 5. If the verdict is `needs_human` and there is an action that would stop it, FILE it with file_action_request. That is a proposal and nothing runs from it. State your objection in the reason if you have one.
 6. If the verdict is `no_action`, you must say WHAT YOU SAW. Not "all clear", the specific things you read and why none of them needed doing.
-7. {ask}
+7. If the verdict is `benign`, name in reason_kind the fact that makes it so: package_install, cloud_network, named_lookup, time_server, peer_traffic, own_traffic or reserved_name. Python checks it against its own records and closes the incident only if it holds. If the same thing will come back, also call learn_quiet_rule with the latest finding id above, the same reason_kind and the narrowest trusted pattern; read query_learned_rules first. A rule you make here is on trial until the owner keeps it.
+8. {ask}
 
 IF THE CASE FILE SAYS IT COULD NOT BE READ, that is a real limitation of this run and you must say so in your report. An assessment made with no history is a different thing from one made with it, and a reader has to be able to tell which they are reading.
 
@@ -1514,6 +1518,7 @@ ANSWER WITH A JSON OBJECT AND NOTHING ELSE, in exactly this shape:
   "hypothesis": "what you think this is, one or two sentences",
   "evidence": "what you read, naming the tools, and what came back",
   "verdict": "real; benign; needs_human; no_action",
+  "reason_kind": "required when the verdict is benign, else empty",
   "saw": "required when the verdict is no_action: the specific things you examined and why none needed doing",
   "report": "the report body for the Agents page, in this app's voice, a short paragraph or three"
 }}
@@ -1634,8 +1639,17 @@ def _incident_block(row: dict) -> str:
         f"{row.get('last_seen_at')}\n"
         f"suppressed at the time: "
         f"{'yes: ' + (row.get('suppressed_reason') or 'no reason recorded') if row.get('suppressed') else 'no'}\n"
-        f"coverage when it was raised: {cov}"
+        f"coverage when it was raised: {cov}\n"
+        f"latest finding id: {_latest_finding_id(row)}"
     )
+
+
+def _latest_finding_id(row: dict):
+    try:
+        ids = json.loads(row.get("finding_ids_json") or "[]")
+        return max(int(i) for i in ids) if ids else "not recorded"
+    except (TypeError, ValueError):
+        return "not recorded"
 
 
 def _findings_block(rows: list) -> str:
@@ -2218,29 +2232,73 @@ def _parse_report(replies: list) -> dict:
     return parsed
 
 
-def _finish_incident(incident_id: int, verdict: str, note: str) -> dict:
+AUTOCLOSE_PER_DAY = 40      # tripwire: incidents the loop may close a day
+
+
+def _finish_incident(incident_id: int, verdict: str, note: str,
+                     reason_kind: str = None) -> dict:
     """
     Move an assessed incident to `triaged`, with the assessment on the row.
 
-    IT DOES NOT RESOLVE AND IT DOES NOT DISMISS. Both of those are judgements
-    about whether something is over, and the loop's own output is a hypothesis
-    plus a look — resolving on that would be the app closing its own tickets.
-    The owner asked for a page where the agent's work is READABLE; making the
-    work also self-certifying is a different, worse thing.
+    A benign verdict closes it only when Python confirms the named fact for
+    its latest finding (core/evidence): the model proposes, Python verifies.
+    Threat list, high and critical incidents, tampered ones and anything past
+    the daily limit stay triaged for the owner.
     """
     try:
         from core import incident
+        if verdict == "benign":
+            why = _verified_close(incident_id, reason_kind)
+            if why.startswith("Checked: "):
+                return incident.close_many([incident_id], f"{note} {why}",
+                                           by="model")
+            note = f"{note} Left for the owner: {why}"
         return incident.set_status(incident_id, "triaged", by="model", note=note)
     except Exception as e:
         logger.error(f"Could not move incident {incident_id} to triaged: {e}")
         return {"success": False, "error": str(e)}
 
 
+def _verified_close(incident_id: int, reason_kind: str) -> str:
+    """'Checked: <fact>' when the incident may close, else why not."""
+    from core import evidence
+    with me._get_readonly_conn() as conn:
+        row = conn.execute("SELECT finding_ids_json FROM incident WHERE id = ?",
+                           (incident_id,)).fetchone()
+        closed = conn.execute(
+            "SELECT COUNT(*) FROM incident WHERE status = 'dismissed' AND "
+            "status_by = 'model' AND status_at >= ?",
+            (_sql_ts(_now() - timedelta(days=1)),)).fetchone()[0]
+        try:
+            ids = json.loads((row and row[0]) or "[]")
+            fid = max(int(i) for i in ids) if ids else None
+        except (TypeError, ValueError):
+            fid = None
+        f = conn.execute("SELECT detection_id, severity, entity_type, "
+                         "entity_value, title, raw_data FROM findings WHERE "
+                         "id = ?", (fid,)).fetchone() if fid else None
+    if closed >= AUTOCLOSE_PER_DAY:
+        return f"{closed} incidents were closed today, the limit"
+    if f is None:
+        return "its finding could not be read"
+    item = dict(f)
+    ok, why = evidence.closable(item)
+    if not ok:
+        return why
+    if not reason_kind:
+        return "no reason_kind was given for Python to check"
+    ok, found = evidence.verify(reason_kind, item)
+    return f"Checked: {found}." if ok else (
+        f"Python could not confirm {reason_kind}: {found}")
+
+
 def _run_unattended(prompt: str, session_id: str) -> dict:
-    """Call agent_loop's unattended turn. Imported lazily; see _tool_allowlist."""
-    from core import agent_loop
-    return agent_loop.run_unattended(prompt, session_id, _tool_allowlist(),
-                                     extra_system=UNATTENDED_ADDENDUM)
+    """Call agent_loop's unattended turn. Imported lazily; see _tool_allowlist.
+    Rules it learns are on trial (core/learned_rules)."""
+    from core import agent_loop, learned_rules
+    with learned_rules.unattended_turn():
+        return agent_loop.run_unattended(prompt, session_id, _tool_allowlist(),
+                                         extra_system=UNATTENDED_ADDENDUM)
 
 
 # LOOP-12, 2026-09-27. ONE TICK AT A TIME.
@@ -2577,7 +2635,8 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
             subject["incident_id"], parsed.get("verdict") or "",
             note=(f"Assessed by the duty loop: "
                   f"{parsed.get('verdict') or 'no verdict recorded'}. "
-                  f"{(parsed.get('hypothesis') or '')[:300]}"))
+                  f"{(parsed.get('hypothesis') or '')[:300]}"),
+            reason_kind=parsed.get("reason_kind"))
 
     _record_run_tagged(session_id, trigger,
                 "reported" if kind == "regular" else "investigated",

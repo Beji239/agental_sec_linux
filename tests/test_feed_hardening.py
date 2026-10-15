@@ -111,6 +111,19 @@ check("user info is not part of the host",
       [("evil.example", "domain", "")])
 check("a plain domain is unchanged", fm._host_rows("Evil.Example.", ""),
       [("evil.example", "domain", "")])
+check("a URL to one file on github.com does not list github.com",
+      fm._host_rows("https://github.com/someone/repo/releases/download/v1/a.dat",
+                    "x"), [])
+check("nor one script on cdn.jsdelivr.net",
+      fm._host_rows("https://cdn.jsdelivr.net/gh/someone/x/y.js", "x"), [])
+check("a URL to a tenant's own subdomain is still listed",
+      fm._host_rows("https://evil-tenant.workers.dev/x", ""),
+      [("evil-tenant.workers.dev", "domain", "")])
+check("and a bare github.com listing is still kept",
+      fm._host_rows("github.com", ""), [("github.com", "domain", "")])
+check("MISP url to one file on a shared host goes the same way",
+      fm._misp_value_to_rows("https://drive.google.com/file/d/1/view", "url",
+                             ""), [])
 check("OTX URL type goes the same way",
       fm._otx_value_to_rows("http://8.8.8.8/x", "URL", ""), [("8.8.8.8", "ip", "")])
 check("MISP url type goes the same way",

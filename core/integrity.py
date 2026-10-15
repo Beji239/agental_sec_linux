@@ -244,6 +244,7 @@ JOURNALLED = {
     # A quiet rule the model learned, or its undo: it holds findings back.
     "learned_rule_made",
     "learned_rule_undone",
+    "learned_rule_kept",
 }
 
 

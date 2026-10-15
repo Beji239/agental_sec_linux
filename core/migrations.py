@@ -153,7 +153,9 @@ logger = logging.getLogger(__name__)
 # v68, 2026-10-14: learned_rule and learned_rule_held, quiet rules the model
 # learns from false alarms; review_hold and review_run, alerts the model sorts
 # before they are filed.
-SCHEMA_VERSION = 68
+# v69, 2026-10-15: learned_rule.reason_kind, owner_words, trial_until and
+# kept_at, so a rule says which fact Python checks and when a trial lapses.
+SCHEMA_VERSION = 69
 
 
 # HELPERS
@@ -4287,8 +4289,8 @@ def _migrate_run_dismissal(conn) -> int:
 
 
 def _migrate_expectations(conn) -> int:
-    """v66 to v68: the expectations the app sets and checks itself, rule
-    trials and learned rules. Idempotent."""
+    """v66 to v69: the expectations the app sets and checks itself, rule
+    trials, learned rules and the alert review. Idempotent."""
     from core import alert_review, expectations, learned_rules, rule_trials
     return (expectations.ensure_tables(conn) | rule_trials.ensure_tables(conn)
             | learned_rules.ensure_tables(conn)

@@ -499,12 +499,27 @@ Nothing changes until you press **Start a two week trial**, and at the end you
 choose **Keep the fix** or **Undo it**. Pick a rule in the false alarms block
 and **Open its fix** takes you to its trial.
 
+**The model proposes, Python verifies.** When the analyst calls an alarm
+normal it has to name the fact that makes it so: a package install put the file
+there, the destination is a big cloud or CDN, the device looked the name up
+first, a time server, a call or game peer, the app's own traffic, or a reserved
+name. Python checks that fact against its own records (the package database,
+the network owner, the router's DNS and connection logs) and, if it does not
+hold, the alarm reaches you with what Python found. Names, titles and other
+text a device wrote are never evidence. Threat list hits, high and critical
+alarms, and any alarm whose text reads like instructions to the analyst always
+come to you.
+
 **What the model learned.** When the analyst finds that an alarm is false and
-will come back, it writes a quiet rule for that pattern: one rule, and the
-narrowest thing that explains it, such as a device's hardware address, a
-program's path or a domain. A matching alarm is held back and counted on the
-rule instead of reaching you. A rule can never hide a critical alarm or switch
-a whole rule off, and **Undo this rule** brings its alarms back.
+will come back, it writes a quiet rule for that pattern, on fields nothing on
+the network can write: a domain, a network owner, an address, a port, a
+package, a device's hardware address together with another field. Every alarm a
+rule holds back is checked again against the rule's fact. A rule made with
+nobody watching is on trial for two weeks and lapses unless you press **Keep
+this rule**; a rule can also rest on your own words in chat, and then it says
+so. A rule can never hide a critical alarm or switch a whole rule off, and
+**Undo this rule** brings its alarms back. The analyst makes at most five rules
+a day on its own and closes at most forty incidents a day.
 
 **Sorted by the model before you saw them.** Low and medium alarms wait here
 first. The app gathers the evidence, the names the device looked up, who owns
