@@ -909,12 +909,56 @@ def _dispatch(verb: str, *args, backend: str = None, **kwargs) -> dict:
     return _BACKENDS[backend][verb](*args, **kwargs)
 
 
+_PROTOCOLS = ("tcp", "udp")
+
+
+def _port_refusal(port, protocol):
+    """None when port and protocol are usable, else the refusal. Callers check
+    too, but every value here ends up in a firewall command."""
+    if protocol not in _PROTOCOLS:
+        return {"success": False,
+                "error": f"protocol must be tcp or udp, got {protocol!r}. "
+                         f"Nothing was changed."}
+    # bool is an int in Python, and True is not port 1.
+    if isinstance(port, int) and not isinstance(port, bool) \
+            and 1 <= port <= 65535:
+        return None
+    return {"success": False,
+            "error": f"port must be a whole number from 1 to 65535, got "
+                     f"{port!r}. Nothing was changed."}
+
+
+def _ip_refusal(ip):
+    """None when ip is one plain address, else the refusal. No ranges, no
+    scope ids, no spaces: the text goes into the rule as it is."""
+    try:
+        addr = ipaddress.ip_address(ip) if isinstance(ip, str) else None
+    except ValueError:
+        addr = None
+    if addr is not None and not getattr(addr, "scope_id", None):
+        return None
+    return {"success": False,
+            "error": f"{ip!r} is not a single IP address. Nothing was changed."}
+
+
+def _as_port(port):
+    """A port written as digits becomes an int; anything else is left for
+    _port_refusal to refuse."""
+    if isinstance(port, str) and re.fullmatch(r"[0-9]{1,5}", port):
+        return int(port)
+    return port
+
+
 def block_port(port: int, direction: str, protocol: str = "tcp",
                backend: str = None) -> dict:
     """Block one TCP port through whichever firewall is really in charge."""
     if direction not in ("inbound", "outbound"):
         return {"success": False,
                 "error": f"direction must be inbound or outbound, got {direction!r}"}
+    port = _as_port(port)
+    refusal = _port_refusal(port, protocol)
+    if refusal:
+        return refusal
     return _dispatch("block_port", port, direction, protocol, backend=backend)
 
 
@@ -923,6 +967,10 @@ def unblock_port(port: int, direction: str, protocol: str = "tcp",
     if direction not in ("inbound", "outbound"):
         return {"success": False,
                 "error": f"direction must be inbound or outbound, got {direction!r}"}
+    port = _as_port(port)
+    refusal = _port_refusal(port, protocol)
+    if refusal:
+        return refusal
     return _dispatch("unblock_port", port, direction, protocol, backend=backend)
 
 
@@ -932,6 +980,9 @@ def block_ip_address(ip: str, direction: str = "both",
     if direction not in ("inbound", "outbound", "both"):
         return {"success": False,
                 "error": f"direction must be inbound, outbound or both, got {direction!r}"}
+    refusal = _ip_refusal(ip)
+    if refusal:
+        return refusal
     return _dispatch("block_ip", ip, direction, backend=backend)
 
 
@@ -940,6 +991,9 @@ def unblock_ip_address(ip: str, direction: str = "both",
     if direction not in ("inbound", "outbound", "both"):
         return {"success": False,
                 "error": f"direction must be inbound, outbound or both, got {direction!r}"}
+    refusal = _ip_refusal(ip)
+    if refusal:
+        return refusal
     return _dispatch("unblock_ip", ip, direction, backend=backend)
 
 

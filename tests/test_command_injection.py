@@ -178,11 +178,29 @@ for name in ("unit_properties", "stop_unit", "user_unit_known",
           HOSTILE + ["--all", "-.mount", "ssh", "x.service --now"])
 
 from tools import iptables_manager as ipm  # noqa: E402
-suite("firewall: an address that is not one is refused",
-      lambda v: ipm.block_ip_address(v), HOSTILE + ["1.2.3.4 -j ACCEPT",
-                                                   "192.0.2.1;id"])
-suite("firewall: a port that is not one is refused",
-      lambda v: ipm.block_port(v, "inbound"), HOSTILE + ["22;id", "-1"])
+# Act as root, or the root check refuses first and nothing below is tested.
+ipm.needs_root = lambda: False
+BAD_IPS = HOSTILE + ["1.2.3.4 -j ACCEPT", "192.0.2.1;id", " 192.0.2.1",
+                     "192.0.2.0/24", "fe80::1%-rf"]
+BAD_PORTS = HOSTILE + ["22;id", "-1", " 22", "0", "65536"]
+for be in ("ufw", "nftables", "iptables"):
+    for verb in ("block_ip_address", "unblock_ip_address"):
+        suite(f"firewall {be} {verb}: an address that is not one is refused",
+              lambda v, f=getattr(ipm, verb), b=be: f(v, backend=b), BAD_IPS)
+    for verb in ("block_port", "unblock_port"):
+        suite(f"firewall {be} {verb}: a port that is not one is refused",
+              lambda v, f=getattr(ipm, verb), b=be: f(v, "inbound", backend=b),
+              BAD_PORTS)
+RAN.clear()
+ipm.block_port(True, "inbound", backend="iptables")
+check("firewall: True is not port 1", not RAN, RAN)
+RAN.clear()
+ipm.block_port(22, "inbound", "tcp --version", backend="iptables")
+check("firewall: a protocol that is not tcp or udp is refused", not RAN, RAN)
+RAN.clear()
+ipm.block_ip_address("192.0.2.1", backend="iptables")
+check("firewall: a real address still reaches the rule",
+      any("192.0.2.1" in a for a, _ in RAN if isinstance(a, list)), RAN)
 
 from tools import remediation_linux as rl  # noqa: E402
 suite("kill: a pid that is not one is refused",
