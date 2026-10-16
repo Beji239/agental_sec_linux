@@ -292,9 +292,10 @@ project folder. Running it again is safe: it keeps your settings and
 downloads nothing it already has.
 
 When it finishes, start AgentalSec from its icon. The dashboard opens at
-http://127.0.0.1:5000; enter the dashboard key the installer printed (it is
-also in `.env` as `AGENTAL_APP_API_KEY`). If a desktop icon says "untrusted",
-right-click it and choose "Allow launching".
+http://127.0.0.1:5000, already signed in. Opened by hand, it asks once for the
+dashboard key the installer printed (it is also in `.env` as
+`AGENTAL_APP_API_KEY`), and that browser stays signed in for 30 days. If a
+desktop icon says "untrusted", right-click it and choose "Allow launching".
 
 The optional parts (root helpers, your router, start on boot) and every step
 done by hand are in [SETUP.md](SETUP.md). To update later:
@@ -317,8 +318,10 @@ the root action helper described in [SETUP.md](SETUP.md).
 
 - Your data stays in the project folder: the database, `config.json` and
   `.env`. Stored secrets are encrypted with a key derived from this machine.
-- The dashboard listens on 127.0.0.1 only and needs its API key. Requests that
-  name any other host are refused. To use it from another machine, use an SSH
+- The dashboard listens on 127.0.0.1 only and needs its API key. The page
+  itself carries no key: the browser signs in once and keeps a session for 30
+  days, and the page runs no script but its own. Requests that name any other
+  host are refused. To use it from another machine, use an SSH
   tunnel (see [SETUP.md](SETUP.md)).
 - Outbound traffic goes to the model provider you configure, the threat feeds
   and lookup services, and a public address lookup that places the threat

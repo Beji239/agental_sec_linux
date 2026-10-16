@@ -111,7 +111,8 @@ python3 main.py --check            # should end with "Check complete: OK"
 python3 main.py
 ```
 
-Open http://127.0.0.1:5000 and enter `AGENTAL_APP_API_KEY`. Stop with Ctrl+C.
+The browser opens on the dashboard, signed in. Opened by hand at
+http://127.0.0.1:5000, it asks once for `AGENTAL_APP_API_KEY`. Stop with Ctrl+C.
 
 Both commands print a reminder that the launchers are not installed yet. That
 is expected at this point; step 9 installs them.
@@ -167,7 +168,9 @@ sudo ./scripts/install_ebpf_camera.sh --apply
 ```
 
 Each script run without arguments shows what it would change. `--uninstall`
-removes it.
+removes it. The boot service of the action helper and the kernel camera run
+sandboxed: systemd gives each only the rights its job needs, no network and
+no writing outside its own folders.
 
 ## 11. Optional sensors
 
