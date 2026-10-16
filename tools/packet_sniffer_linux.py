@@ -1093,7 +1093,15 @@ def dns_query_of(pkt) -> dict | None:
     got = _dns_message(pkt)
     if got is None:
         return None
-    dns, label = got
+    try:
+        return _query_from(*got)
+    except Exception:                                         # noqa: BLE001
+        # Junk on a DNS port dissects into records with no fields, so reading
+        # one raises. It is not DNS, which is what None says.
+        return None
+
+
+def _query_from(dns, label) -> dict | None:
     if dns.qr != 0 or not dns.qd:
         return None
     q = dns.qd[0] if isinstance(dns.qd, list) else dns.qd
@@ -1121,7 +1129,13 @@ def dns_answers_of(pkt) -> dict | None:
     got = _dns_message(pkt)
     if got is None:
         return None
-    dns, label = got
+    try:
+        return _answers_from(*got)
+    except Exception:                                         # noqa: BLE001
+        return None              # not DNS, see dns_query_of
+
+
+def _answers_from(dns, label) -> dict | None:
     if dns.qr != 1:
         return None
     question = ""

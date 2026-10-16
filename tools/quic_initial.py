@@ -79,6 +79,8 @@ def header_protection_mask(hp: bytes, sample: bytes) -> bytes:
 
 def _varint(buf: bytes, i: int) -> tuple:
     """(value, next index) of a QUIC variable-length integer."""
+    if i >= len(buf):
+        raise ValueError("truncated varint")
     first = buf[i]
     n = 1 << (first >> 6)
     if i + n > len(buf):

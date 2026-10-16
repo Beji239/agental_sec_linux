@@ -217,7 +217,8 @@ _real_analyse = di.analyse_once
 _import_logging = logging
 _ns = {"__name__": "main", "__file__": str(ROOT / "main.py"),
        "logger": logging.getLogger("main"), "logging": logging,
-       "time": __import__("time"), "threading": threading}
+       "time": __import__("time"), "threading": threading,
+       "_LOOPS_STOP": threading.Event()}
 exec(compile(_seg, str(ROOT / "main.py"), "exec"), _ns)
 
 _records = []
