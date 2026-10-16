@@ -95,7 +95,10 @@ _USER_MARKERS = ("/user@", ".service/", ".slice/", "/user.slice/")
 
 # A unit name as systemd spells it, with the suffix that says what kind it is.
 # getty@tty1.service, ssh.service, vte-spawn-<uuid>.scope, system-getty.slice.
-_UNIT_RE = re.compile(r"([A-Za-z0-9@:_.\\-]+\.(?:service|scope|socket|timer|"
+# From a name's start only, or a long name with no unit suffix is retried at
+# every character.
+_UNIT_RE = re.compile(r"(?<![A-Za-z0-9@:_.\\-])"
+                      r"([A-Za-z0-9@:_.\\-]+\.(?:service|scope|socket|timer|"
                       r"target|slice|mount|path))")
 
 

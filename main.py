@@ -30,6 +30,9 @@ logging.basicConfig(
     format=_LOG_FORMAT,
     datefmt="%H:%M:%S",
 )
+from core.log_format import SafeFormatter  # noqa: E402
+for _h in logging.getLogger().handlers:
+    _h.setFormatter(SafeFormatter(_LOG_FORMAT, datefmt="%H:%M:%S"))
 logger = logging.getLogger("agental_sec_linux")
 
 try:
@@ -75,7 +78,7 @@ try:
 
     if _file_handler is not None:
         _file_handler.setFormatter(
-            logging.Formatter(_LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
+            SafeFormatter(_LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
         )
         _file_handler.setLevel(logging.INFO)
         logging.getLogger().addHandler(_file_handler)

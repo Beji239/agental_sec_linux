@@ -139,10 +139,15 @@ _FENCE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 # The same marker with any separators and angle-quote look-alikes, matched
-# after NFKC folding.
+# after NFKC folding. It starts only where a run of opening brackets starts,
+# and the separators beside the bracket runs cannot be brackets themselves:
+# with both overlapping, a hostname of 8000 "<" took minutes to scrub.
+_OPENERS = "<\u2039\u00ab\u2329\u27e8\u3008"
+_CLOSERS = ">\u203a\u00bb\u232a\u27e9\u3009"
 _LOOSE_FENCE = re.compile(
-    r"[<\u2039\u00ab\u2329\u27e8\u3008]{2,}[\W_]*(?:END[\W_]*)?UNTRUSTED"
-    r"[\W_]*SENSOR[\W_]*DATA[\W_]*[>\u203a\u00bb\u232a\u27e9\u3009]{2,}",
+    rf"(?<![{_OPENERS}])[{_OPENERS}]{{2,}}(?:[^\w{_OPENERS}]|_)*"
+    r"(?:END[\W_]*)?UNTRUSTED[\W_]*SENSOR[\W_]*DATA"
+    rf"(?:[^\w{_CLOSERS}]|_)*[{_CLOSERS}]{{2,}}",
     re.IGNORECASE,
 )
 
@@ -473,6 +478,15 @@ UNTRUSTED_TOOLS = {
     # those arrives here looking exactly like data about this machine. The
     # records are worth quoting and must never be read as instruction.
     "query_audit_events",
+    # 2026-10-16, found by tests/test_prompt_fence.py. The gateway sensor's
+    # notes quote what the router agent says about itself; predictions are
+    # the model's own text about outside names, read back later; unit
+    # descriptions and changed file paths are written by whoever made them.
+    "query_sensors",
+    "query_predictions",
+    "query_prediction_score",
+    "query_services",
+    "query_local_integrity",
 }
 
 

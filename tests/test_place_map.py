@@ -271,7 +271,7 @@ UI = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 for route in ("/api/map/point", "/api/map/block", "/api/map/unblock",
               "/api/map/sinkhole", "/api/map/unsinkhole"):
     check_true(f"route {route}", f'"{route}"' in ROUTES)
-check_true("chat accepts a map address", 'data.get("map_ip")' in ROUTES)
+check_true("chat accepts a map address", '_text(data, "map_ip")' in ROUTES)
 check_true("map context is fenced", "sanitize.fence(" in ROUTES)
 for fn in ("openMapPanel", "openMapChat", "mapChatSend", "mapBlock",
            "mapSinkhole", "mapCutDevice", "_mapChatDragSetup"):

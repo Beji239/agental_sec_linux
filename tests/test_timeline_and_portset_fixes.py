@@ -629,7 +629,7 @@ check_true("the scan sends the chosen set",
 check_true("and names it on the status line before the scan starts",
            "(${chosen} ports)" in UI)
 check_true("the catalogue route is defined", "/api/ports/port-sets" in RT)
-check_true("the scan route reads the port_set", 'data.get("port_set")' in RT)
+check_true("the scan route reads the port_set", '_text(data, "port_set")' in RT)
 check_true("the picker's numbers are read from the server, not hardcoded",
            "PortScanner" not in UI and "65535" not in UI.split("port-set-picker")[1][:2000])
 check_true("the route refuses an unknown set rather than correcting it",

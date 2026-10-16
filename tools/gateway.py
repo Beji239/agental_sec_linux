@@ -547,7 +547,7 @@ def parse_block_hits(lines: list) -> dict:
     return out
 
 
-_KV = re.compile(r"(\w+)=(\S+)")
+_KV = re.compile(r"(?<!\w)(\w+)=(\S+)")     # from a name's start only
 
 
 def parse_flows(lines: list) -> list:

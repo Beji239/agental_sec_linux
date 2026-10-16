@@ -138,7 +138,7 @@ em._drain_remaining.clear()
 
 print("\n[5] 26: the pcap origin is asked for, and passed through")
 check("there is an origin box", 'id="pcap-origin"' in UI, True)
-check("the route accepts it", 'data.get("origin")' in ROUTES, True)
+check("the route accepts it", '_text(data, "origin")' in ROUTES, True)
 # Origin is a CLAIM. Guessing it from the file contents is the failure the
 # tool description already warns about, so the UI must say so too.
 check("the page says leave it blank rather than guess",

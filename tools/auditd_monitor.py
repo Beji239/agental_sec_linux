@@ -159,7 +159,9 @@ _KERNEL_MISSED_FIELDS = ("audit_lost", "lost")
 # which every record carries and which is the only reliable ordering key.
 _AUDIT_RE = re.compile(r"audit\((\d+(?:\.\d+)?):(\d+)\)")
 _TYPE_RE = re.compile(r"^type=([A-Z0-9_]+)")
-_KEYVAL_RE = re.compile(r'([A-Za-z0-9_]+)=("[^"]*"|\S+)')
+# Starts only where a name starts: from inside a long name with no "=" it
+# retried at every character, minutes on one long line.
+_KEYVAL_RE = re.compile(r'(?<![A-Za-z0-9_])([A-Za-z0-9_]+)=("[^"]*"|\S+)')
 
 # The enrichment separator in audit 3.x. Written as an escape so the byte
 # never appears in this file's own text, which matters: a literal unit

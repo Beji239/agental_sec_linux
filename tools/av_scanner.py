@@ -147,7 +147,9 @@ def scan_paths(paths: list, timeout: int = 600, eng: dict = None) -> dict:
     if not eng["installed"]:
         return {"ok": False, "infected": [], "tool": None,
                 "error": f"ClamAV is not installed. Install it with: {INSTALL_COMMAND}"}
-    paths = [p for p in paths if isinstance(p, str) and p.startswith("/")]
+    # A NUL byte cannot be in a file name, and subprocess raises on one.
+    paths = [p for p in paths if isinstance(p, str) and p.startswith("/")
+             and "\x00" not in p]
     if not paths:
         return {"ok": True, "infected": [], "tool": eng["tool"], "scanned": 0}
     try:

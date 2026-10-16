@@ -141,6 +141,17 @@ def _session_ok(api_key: str) -> bool:
     return ds.session_valid(api_key, request.headers.get(ds.HEADER))
 
 
+def _text(body: dict, key: str) -> str:
+    """A text field of a JSON body, stripped; "" when empty. Any other type is
+    the caller's mistake, a 400, not a 500 from .strip() on a list."""
+    value = body.get(key)
+    if not value:
+        return ""
+    if not isinstance(value, str):
+        raise me.BadInput(f"{key} must be text, got {type(value).__name__}.")
+    return value.strip()
+
+
 def _int_arg(name: str, default: int, low: int = 1, high: int = 1000) -> int:
     """
     One integer out of the query string, clamped, never raising.
@@ -345,6 +356,27 @@ def register_routes(app):
             ),
         }), 403
 
+    @app.before_request
+    def _json_body_is_an_object():
+        """Every route reads its body as an object. A list, a bare value or
+        JSON too deep to parse is refused here, once, rather than raising in
+        whichever handler calls .get() on it."""
+        if request.method not in ("POST", "PUT", "PATCH") or not request.is_json:
+            return None
+        if not request.get_data(cache=True):
+            return None
+        try:
+            body = request.get_json(silent=False)
+        except RecursionError:
+            body = None
+        except Exception:                                   # noqa: BLE001
+            return jsonify({"error": "Bad request",
+                            "detail": "The body is not valid JSON."}), 400
+        if not isinstance(body, dict):
+            return jsonify({"error": "Bad request",
+                            "detail": "The body must be a JSON object."}), 400
+        return None
+
     # API answers carry findings, device names and sometimes the shape of the
     # network. None of that should sit in a disk cache or get sniffed into
     # something the browser decides to execute. Cheap, so it goes on all of
@@ -405,7 +437,7 @@ def register_routes(app):
         api_key = current_app.config["AGENTAL_API_KEY"]
         caller = request.remote_addr or "unknown"
         body = request.get_json(silent=True) or {}
-        supplied = str(body.get("key") or "").strip().lower()
+        supplied = _text(body, "key").lower()
 
         ok = bool(api_key) and hmac.compare_digest(
             supplied.encode("utf-8", "surrogateescape"),
@@ -546,7 +578,7 @@ def register_routes(app):
     @require_api_key
     def chat():
         data    = request.get_json(silent=True) or {}
-        message = (data.get("message") or "").strip()
+        message = _text(data, "message")
 
         if not message:
             return jsonify({"error": "Empty message"}), 400
@@ -563,7 +595,7 @@ def register_routes(app):
         # A chat opened from one Threat Map point keeps its own thread, and
         # its first message carries what the app recorded about that address.
         thread = None
-        map_ip = (data.get("map_ip") or "").strip()
+        map_ip = _text(data, "map_ip")
         if map_ip:
             import ipaddress
             try:
@@ -1133,8 +1165,8 @@ def register_routes(app):
 
     def _map_block(block: bool):
         data = request.get_json(silent=True) or {}
-        ip = (data.get("ip") or "").strip()
-        reason = (data.get("reason") or "").strip()
+        ip = _text(data, "ip")
+        reason = _text(data, "reason")
         if not reason:
             return jsonify({"success": False,
                             "error": "Say why, so the record explains it later."}), 400
@@ -1172,8 +1204,8 @@ def register_routes(app):
     def _map_sinkhole(block: bool):
         import re
         data = request.get_json(silent=True) or {}
-        domain = (data.get("domain") or "").strip().lower().rstrip(".")
-        reason = (data.get("reason") or "").strip()
+        domain = _text(data, "domain").lower().rstrip(".")
+        reason = _text(data, "reason")
         if not re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
                             r"(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", domain):
             return jsonify({"success": False, "error": "Not a domain name."}), 400
@@ -1302,18 +1334,18 @@ def register_routes(app):
         person who owns the network said so.
         """
         data = request.get_json(silent=True) or {}
-        ip   = (data.get("ip") or "").strip()
+        ip   = _text(data, "ip")
 
-        known_as = (data.get("known_as") or "").split(",")[0].split('"')[0].strip()[:64]
+        known_as = _text(data, "known_as").split(",")[0].split('"')[0].strip()[:64]
         if not ip or not known_as:
             return jsonify({"error": "ip and known_as required"}), 400
 
         result = me.identify_device(
             ip=ip,
             known_as=known_as,
-            device_type=(data.get("device_type") or "").strip()[:32] or None,
-            notes=(data.get("notes") or "").strip()[:500] or None,
-            evidence=(data.get("evidence") or "").strip()[:500]
+            device_type=_text(data, "device_type")[:32] or None,
+            notes=_text(data, "notes")[:500] or None,
+            evidence=_text(data, "evidence")[:500]
                      or "Named by the user from the dashboard.",
             identified_by="user",
         )
@@ -1352,7 +1384,7 @@ def register_routes(app):
         baseline recorded later already contains whatever changed.
         """
         data = request.get_json(silent=True) or {}
-        ip   = (data.get("ip") or "").strip()
+        ip   = _text(data, "ip")
 
         if not ip:
             return jsonify({"error": "ip required"}), 400
@@ -1395,7 +1427,7 @@ def register_routes(app):
             return jsonify(me.always_on_devices())
 
         data = request.get_json(silent=True) or {}
-        ip   = (data.get("ip") or "").strip()
+        ip   = _text(data, "ip")
         if not ip:
             return jsonify({"error": "ip required"}), 400
         if "always_on" not in data:
@@ -1487,8 +1519,8 @@ def register_routes(app):
         by filing.
         """
         data   = request.get_json(silent=True) or {}
-        source = (data.get("source_ip") or "").strip()
-        target = (data.get("target_ip") or "").strip()
+        source = _text(data, "source_ip")
+        target = _text(data, "target_ip")
 
         if not source or not target:
             return jsonify({"error": "source_ip and target_ip required"}), 400
@@ -1505,7 +1537,7 @@ def register_routes(app):
     def unmerge_device_route():
         """Undo one merge. A merge is a claim and claims get revised."""
         data = request.get_json(silent=True) or {}
-        ip   = (data.get("ip") or "").strip()
+        ip   = _text(data, "ip")
         if not ip:
             return jsonify({"error": "ip required"}), 400
 
@@ -1676,9 +1708,9 @@ def register_routes(app):
         if gwmod is None or not getattr(gwmod, "enabled", False):
             return jsonify({"success": False,
                             "error": "The router agent is not enabled."}), 409
-        mac = (data.get("mac") or "").strip().lower()
-        ip = (data.get("ip") or "").strip()
-        reason = (data.get("reason") or "").strip() or (
+        mac = _text(data, "mac").lower()
+        ip = _text(data, "ip")
+        reason = _text(data, "reason") or (
             "Cut off from the internet by the owner, from the Live LAN tab."
             if block else "Restored by the owner, from the Live LAN tab.")
         sid = get_session_id()
@@ -1728,14 +1760,14 @@ def register_routes(app):
         if gwmod is None or not getattr(gwmod, "enabled", False):
             return jsonify({"success": False,
                             "error": "The router agent is not enabled."}), 409
-        mac = (data.get("mac") or "").strip().lower()
-        app_name = (data.get("app") or "").strip().lower()
-        ip = (data.get("ip") or "").strip() or None
+        mac = _text(data, "mac").lower()
+        app_name = _text(data, "app").lower()
+        ip = _text(data, "ip") or None
         if not (mac and app_name):
             return jsonify({"success": False,
                             "error": "Name the device's hardware address and "
                                      "the app."}), 400
-        reason = (data.get("reason") or "").strip() or (
+        reason = _text(data, "reason") or (
             f"{app_name} blocked on this device by the owner, from the Live "
             f"LAN tab." if block else
             f"{app_name} allowed again on this device by the owner, from the "
@@ -1808,7 +1840,7 @@ def register_routes(app):
             return err
         from tools import gateway as gw
         data = request.get_json(silent=True) or {}
-        target = (data.get("target") or "").strip().lower()
+        target = _text(data, "target").lower()
         try:
             out = g.message(target, data.get("text") or "",
                             keep=bool(data.get("keep")) and target != "all")
@@ -1824,7 +1856,7 @@ def register_routes(app):
         if err:
             return err
         from tools import gateway as gw
-        target = ((request.get_json(silent=True) or {}).get("target") or "").strip().lower()
+        target = _text(request.get_json(silent=True) or {}, "target").lower()
         try:
             out = g.unmessage(target)
         except gw.GatewayError as e:
@@ -1838,7 +1870,7 @@ def register_routes(app):
         if err:
             return err
         from tools import gateway as gw
-        rid = ((request.get_json(silent=True) or {}).get("id") or "").strip()
+        rid = _text(request.get_json(silent=True) or {}, "id")
         try:
             out = g.clear_reply(rid)
         except gw.GatewayError as e:
@@ -1974,8 +2006,8 @@ def register_routes(app):
     @require_api_key
     def undismiss():
         data         = request.get_json(silent=True) or {}
-        entity_type  = (data.get("entity_type") or "").strip()
-        entity_value = (data.get("entity_value") or "").strip()
+        entity_type  = _text(data, "entity_type")
+        entity_value = _text(data, "entity_value")
         if not entity_type or not entity_value:
             return jsonify({"error": "entity_type and entity_value required"}), 400
 
@@ -2220,8 +2252,8 @@ def register_routes(app):
         reachable only from the page.
         """
         body = request.get_json(silent=True) or {}
-        did = (body.get("detection_id") or "").strip()
-        reason = (body.get("reason") or "").strip()
+        did = _text(body, "detection_id")
+        reason = _text(body, "reason")
         if not did:
             return jsonify({"error": "detection_id is required"}), 400
         if not reason:
@@ -2245,7 +2277,7 @@ def register_routes(app):
     def detections_unsuppress():
         """Let a rule speak again. removed 0 is a real answer, not an error."""
         body = request.get_json(silent=True) or {}
-        did = (body.get("detection_id") or "").strip()
+        did = _text(body, "detection_id")
         if not did:
             return jsonify({"error": "detection_id is required"}), 400
         out = me.unsuppress_detection(
@@ -2914,8 +2946,8 @@ def register_routes(app):
         is a UI that manufactures decisions nobody made.
         """
         data   = request.get_json(silent=True) or {}
-        ip     = (data.get("ip") or "").strip()
-        reason = (data.get("reason") or "").strip()
+        ip     = _text(data, "ip")
+        reason = _text(data, "reason")
         try:
             port = int(data.get("port"))
         except (TypeError, ValueError):
@@ -2946,7 +2978,7 @@ def register_routes(app):
         and answered.
         """
         data = request.get_json(silent=True) or {}
-        ip   = (data.get("ip") or "").strip()
+        ip   = _text(data, "ip")
         try:
             port = int(data.get("port"))
         except (TypeError, ValueError):
@@ -3032,7 +3064,7 @@ def register_routes(app):
         """One non-secret field in config.json, from a fixed allow-list."""
         from core import settings as st
         data   = request.get_json(silent=True) or {}
-        result = st.set_config((data.get("path") or "").strip(), data.get("value"))
+        result = st.set_config(_text(data, "path"), data.get("value"))
         return jsonify(result), (200 if result.get("ok") else 400)
 
     @app.route("/api/settings/provider-test", methods=["POST"])
@@ -3052,8 +3084,8 @@ def register_routes(app):
         key first, and the result says so when the key is what was refused.
         """
         data  = request.get_json(silent=True) or {}
-        url   = (data.get("api_url") or "").strip()
-        model = (data.get("model") or "").strip()
+        url   = _text(data, "api_url")
+        model = _text(data, "model")
         if not url:
             return jsonify({"ok": False,
                             "reason": "Give an endpoint to test."}), 400
@@ -3488,8 +3520,8 @@ def register_routes(app):
                     "port_set": None,
                 }), 400
 
-        target    = (data.get("target_host") or "127.0.0.1").strip()
-        port_set  = (data.get("port_set") or "").strip().lower()
+        target    = _text(data, "target_host") or "127.0.0.1"
+        port_set  = _text(data, "port_set").lower()
 
         try:
             addr = ipaddress.ip_address(target)
@@ -3564,7 +3596,7 @@ def register_routes(app):
             "file_path":   file_path,
             "max_packets": data.get("max_packets", 10000),
         }
-        origin = (data.get("origin") or "").strip()
+        origin = _text(data, "origin")
         if origin:
             params["origin"] = origin
         result = execute_tool("run_pcap_analysis", params)
@@ -3606,7 +3638,7 @@ def register_routes(app):
             logger.info("User switched automatic retention OFF from the UI.")
             return jsonify(retention.decline(me.DB_PATH))
 
-        preset = (data.get("preset") or "").strip()
+        preset = _text(data, "preset")
         if not preset:
             return jsonify({"error": "preset required, or off:true"}), 400
 
@@ -3637,7 +3669,7 @@ def register_routes(app):
     @require_api_key
     def web_search():
         data  = request.get_json(silent=True) or {}
-        query = data.get("query", "").strip()
+        query = _text(data, "query")
         if not query:
             return jsonify({"error": "query required"}), 400
         result = execute_tool("web_search", {"query": query})
