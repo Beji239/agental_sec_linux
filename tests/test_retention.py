@@ -287,5 +287,51 @@ check("the -wal is emptied after the vacuum",
 check("so the size freed is a positive number", v["freed"] > 0, True)
 
 
+print("\n[15] only an unmeasured baseline is measured, and no lock is held meanwhile")
+# Re-measuring every baseline took over twenty minutes on a 2 GB database,
+# holding the write lock, and the runs it was about to delete were already in
+# the stored measurements.
+from core import intervals                             # noqa: E402
+m_db = make_db({"s1": (5, 1)})
+c = sqlite3.connect(m_db)
+c.execute("INSERT INTO behavioral_baseline(entity_type, entity_value, "
+          "behavior_key, beacon_detail) VALUES('ip','192.0.2.10',"
+          "'beacon_destinations','{\"measured_at\": \"before\"}')")
+c.execute("INSERT INTO behavioral_baseline(entity_type, entity_value, "
+          "behavior_key) VALUES('ip','192.0.2.11','beacon_destinations')")
+c.commit()
+asked, locked = [], []
+real = intervals.contact_intervals
+
+
+def fake(conn, ip, **kw):
+    asked.append(ip)
+    locked.append(conn.in_transaction)
+    mr = {"mean_seconds": 60.0, "stddev_seconds": 1.0, "min_seconds": 58.0,
+          "max_seconds": 62.0}
+    return {"most_regular": mr, "destinations": []}
+
+
+intervals.contact_intervals = fake
+intervals_describe = intervals.describe
+intervals.describe = lambda mr: "every minute"
+try:
+    res = rt.measure_first(c)
+finally:
+    intervals.contact_intervals = real
+    intervals.describe = intervals_describe
+check("only the unmeasured address is measured", asked, ["192.0.2.11"])
+check("and no write is open while it is read", locked, [False])
+check("the counts say so", (res["measured"], res["already"]), (1, 1))
+rows = dict(c.execute("SELECT entity_value, beacon_detail FROM "
+                      "behavioral_baseline ORDER BY entity_value"))
+check("the stored measurement is left as it was",
+      rows["192.0.2.10"], '{"measured_at": "before"}')
+check("the new one is written",
+      json.loads(rows["192.0.2.11"])["source"],
+      "measured before a retention prune")
+c.close()
+
+
 print("\n" + ("ALL PASS" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

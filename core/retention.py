@@ -462,6 +462,12 @@ def measure_first(conn, write=True) -> dict:
     ever revisited, which is exactly the state this project was in when
     retention was specified.
 
+    So only baselines with no measurement yet are measured. Re-measuring the
+    rest took over twenty minutes on a 2 GB database, mostly on this host's
+    own address, and the runs being deleted are the oldest, already in the
+    stored measurement. All reads come first and the writes go in one short
+    transaction, so the write lock is not held across the slow part.
+
     Only fills value_mean / stddev / min / max and beacon_detail on
     beacon_destinations rows. Never touches confidence, sample_count,
     flagged_as_normal or alert_suppressed, for the reason
@@ -479,12 +485,18 @@ def measure_first(conn, write=True) -> dict:
                            "measurements cannot be stored. Start main.py once "
                            "to run the migration. NOTHING WAS PRUNED.")}
 
+    already = conn.execute(
+        "SELECT COUNT(*) FROM behavioral_baseline "
+        "WHERE behavior_key='beacon_destinations' AND entity_type='ip' "
+        "AND beacon_detail IS NOT NULL").fetchone()[0]
     rows = conn.execute(
         "SELECT id, entity_value FROM behavioral_baseline "
-        "WHERE behavior_key='beacon_destinations' AND entity_type='ip'"
+        "WHERE behavior_key='beacon_destinations' AND entity_type='ip' "
+        "AND beacon_detail IS NULL"
     ).fetchall()
 
     measured = skipped = 0
+    updates = []
     for bid, ip in rows:
         try:
             res = intervals.contact_intervals(conn, ip)
@@ -506,15 +518,16 @@ def measure_first(conn, write=True) -> dict:
                 "destinations": res.get("destinations", [])[:8],
                 "note": intervals.describe(mr),
             })
-            conn.execute(
-                "UPDATE behavioral_baseline SET value_mean=?, value_stddev=?, "
-                "value_min=?, value_max=?, beacon_detail=? WHERE id=?",
+            updates.append(
                 (mr["mean_seconds"], mr["stddev_seconds"], mr["min_seconds"],
                  mr["max_seconds"], detail, bid))
-    if write:
+    if write and updates:
+        conn.executemany(
+            "UPDATE behavioral_baseline SET value_mean=?, value_stddev=?, "
+            "value_min=?, value_max=?, beacon_detail=? WHERE id=?", updates)
         conn.commit()
     return {"ok": True, "measured": measured, "skipped": skipped,
-            "reason": None}
+            "already": already, "reason": None}
 
 
 # THE PLAN
@@ -772,7 +785,8 @@ def run(db_path, current_session_id=None, dry_run=True, progress=None) -> dict:
             report["ok"] = False
             report["reason"] = m["reason"]
             return report
-        say(f"  {m['measured']} baseline(s) carry measured spacing, "
+        say(f"  {m['measured']} baseline(s) newly measured, "
+            f"{m['already']} already carried a measurement, "
             f"{m['skipped']} had too few contacts to measure.")
 
         for s in p["to_delete"]:
