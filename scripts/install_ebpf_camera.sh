@@ -141,12 +141,22 @@ ReadWritePaths=$DATA_DIR
 ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictRealtime=yes
+# Checked 2026-10-16 with the camera recording exec and connect events.
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE CAP_SYS_ADMIN CAP_DAC_READ_SEARCH
+ProtectSystem=strict
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+IPAddressDeny=any
+UMask=0077
 # NOT set, deliberately, and each for a reason a reader can check:
 #   ProtectKernelTunables  would hide /sys/kernel/tracing and stop the attach
-#   RestrictAddressFamilies would block the AF_INET sockets the connect event
-#                          reports on (the tracepoint itself would still fire,
-#                          but the kernel's own accounting would be affected)
-#   MemoryDenyWriteExecute would break libbpf's JIT handling
+#   MemoryDenyWriteExecute would break the ctypes callback of the ring buffer
 # The honest summary: this needs real privilege, and the design confines that
 # privilege to a process whose only inputs are kernel structs and whose only
 # output is a SQLite file with bound parameters.

@@ -82,6 +82,31 @@ Wants=network-pre.target
 [Service]
 Type=oneshot
 ExecStart=$HELPER_DST restore_blocks
+# It reads one state file, writes nft sets and its own log: firewall rights,
+# netlink and that folder only.
+CapabilityBoundingSet=CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=$LOG_DIR
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+IPAddressDeny=any
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
