@@ -141,7 +141,7 @@ _FENCE_PATTERN = re.compile(
 # The same marker with any separators and angle-quote look-alikes, matched
 # after NFKC folding. It starts only where a run of opening brackets starts,
 # and the separators beside the bracket runs cannot be brackets themselves:
-# with both overlapping, a hostname of 8000 "<" took minutes to scrub.
+# with both overlapping, a long run of brackets was slow to scrub.
 _OPENERS = "<\u2039\u00ab\u2329\u27e8\u3008"
 _CLOSERS = ">\u203a\u00bb\u232a\u27e9\u3009"
 _LOOSE_FENCE = re.compile(
