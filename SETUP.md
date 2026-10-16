@@ -64,6 +64,10 @@ pip install --user --break-system-packages -r requirements.txt
 `--break-system-packages` is required on Ubuntu 23.04+ and Debian 12+. It only
 writes to `~/.local`, the system Python is not touched.
 
+`requirements.lock` holds the exact versions this release was checked with,
+each file hashed. To install those instead, use `--require-hashes -r
+requirements.lock` in place of `-r requirements.txt`.
+
 ## 4. Config files
 
 ```bash

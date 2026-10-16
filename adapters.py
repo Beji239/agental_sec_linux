@@ -6391,6 +6391,10 @@ class LinuxGateway(_BaseAdapter):
         self.cfg = gw.settings(config)
         self._transport = transport
         self._gw = None
+        # Set only when the router itself could not be read. A failure to
+        # store what was read is this app's own trouble, and is counted like
+        # any other failed poll rather than reported as a blind router.
+        self._router_error = None
         self._state = {"probe": None, "polls": 0, "last": None,
                        "clients_seen": 0, "clients_new": 0, "raised": 0}
 
@@ -6430,10 +6434,23 @@ class LinuxGateway(_BaseAdapter):
         from core import memory_engine as me
         from core import sensors as sn
 
-        g = self._gateway()
-        probe = g.probe()
+        try:
+            g = self._gateway()
+            probe = g.probe()
+            caps = probe["capabilities"]
+            rows = {}
+            if "neighbors" in caps:
+                for r in g.neighbors():
+                    rows[(r["ip"], r["mac"])] = r
+            if "leases" in caps:
+                for r in g.leases():
+                    rows[(r["ip"], r["mac"])] = r
+        except Exception as e:
+            self._router_error = f"{type(e).__name__}: {e}"
+            raise
+        self._router_error = None
         self._state["probe"] = probe
-        caps = probe["capabilities"]
+
 
         scope = sn.describe("gateway_api")
         described = gw.describe_capabilities(caps)
@@ -6448,13 +6465,6 @@ class LinuxGateway(_BaseAdapter):
                    f"{', '.join(caps) or 'none'}. Router OS as it reports "
                    f"itself: {probe.get('os_release') or probe.get('os')}."))
 
-        rows = {}
-        if "neighbors" in caps:
-            for r in g.neighbors():
-                rows[(r["ip"], r["mac"])] = r
-        if "leases" in caps:
-            for r in g.leases():
-                rows[(r["ip"], r["mac"])] = r
         saved = me.save_router_clients(list(rows.values()), self.cfg["host"],
                                        self._sensor_id())
         raised = rm._raise_client_findings(saved["new"], self.cfg["host"],
@@ -6475,10 +6485,10 @@ class LinuxGateway(_BaseAdapter):
                                  "at the router.")})
             return out
         out.update(self._state)
-        if self._last_error:
+        if self._router_error:
             out["blind"] = True
             out["blind_reason"] = (f"Could not read the router through its agent: "
-                                   f"{self._last_error}. Router clients and "
+                                   f"{self._router_error}. Router clients and "
                                    f"router actions are unavailable, which is "
                                    f"not the same as the network being quiet.")
         else:

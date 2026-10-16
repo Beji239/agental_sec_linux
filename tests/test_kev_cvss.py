@@ -356,7 +356,7 @@ ui     = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 routes = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
 
 check_true("there is a button to start the backfill",
-           'onclick="startCvssBackfill()"' in ui)
+           'data-onclick="startCvssBackfill()"' in ui)
 check_true("it posts to the start route", "'/api/runbook/cvss/start'" in ui)
 check_true("the start route exists",
            '@app.route("/api/runbook/cvss/start", methods=["POST"])' in routes)

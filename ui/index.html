@@ -1681,24 +1681,23 @@
 <!-- API KEY MODAL -->
 <div id="key-modal-overlay" style="display:none;">
   <div id="key-modal">
-    <h2>AgentalSec // No App API Key</h2>
+    <h2>AgentalSec // Sign In</h2>
     <p>
-      This page loaded without an app API key, so every <code>/api/*</code> call
-      will return 401. The server sets it, nothing you type here is saved.
-      Put a 64-character hex value in <code>AGENTAL_APP_API_KEY</code> in
-      <code>.env</code> and restart:<br>
-      <code>python -c "import secrets; print(secrets.token_hex(32))"</code>
+      This browser is not signed in, so every <code>/api/*</code> call
+      returns 401. The app signs the browser in when it opens the dashboard
+      itself. To sign in here, paste the <code>AGENTAL_APP_API_KEY</code>
+      value from <code>.env</code>. It is sent once and not kept; this
+      browser keeps a session for 30 days.
     </p>
     <p>
       This is <strong>not</strong> your model provider key, that one is
       <code>AGENTAL_API_KEY</code> and the dashboard never handles it.
-      Pasting it below will not work.
     </p>
     <input type="password" class="input" id="key-input" placeholder="64-char hex app key" autocomplete="off">
     <div id="key-modal-error">That does not look like a 64-character hex key.</div>
     <div class="row">
-      <button class="btn primary" onclick="saveApiKey()">Use for this tab</button>
-      <button class="btn" onclick="document.getElementById('key-modal-overlay').style.display='none'">Later</button>
+      <button class="btn primary" data-onclick="saveApiKey()">Sign in</button>
+      <button class="btn" data-onclick="hideKeyModal()">Later</button>
     </div>
   </div>
 </div>
@@ -1715,7 +1714,7 @@
     <div class="pill" id="pill-vpn"><span class="dot"></span> VPN</div>
     <div class="pill" id="pill-sniffer"><span class="dot"></span> Sniffer</div>
     <div class="pill" id="pill-sensors" style="cursor:pointer;"
-         onclick="openSensorWatch()"><span class="dot"></span> Sensors</div>
+         data-onclick="openSensorWatch()"><span class="dot"></span> Sensors</div>
     <div class="pill" id="pill-protected">PROTECTED</div>
 
     <span id="model-note" title="Which model reasons about your network"></span>
@@ -1739,31 +1738,31 @@
        up. The page ignored claimed.actions_waiting entirely. -->
   <div class="qp-body" id="qp-actions" style="display:none;"></div>
   <div class="qp-row">
-    <button class="btn" onclick="goToInbox()">Open the Inbox</button>
-    <button class="btn" onclick="dismissQuestionPopup()">Not now</button>
+    <button class="btn" data-onclick="goToInbox()">Open the Inbox</button>
+    <button class="btn" data-onclick="dismissQuestionPopup()">Not now</button>
   </div>
 </div>
 
 <!-- NAV -->
 <div id="nav">
-  <div class="nav-tab active" onclick="showPage('chat')"     data-page="chat">Chat</div>
-  <div class="nav-tab"        onclick="showPage('dashboard')"data-page="dashboard">Dashboard</div>
-  <div class="nav-tab"        onclick="showPage('alerts')"   data-page="alerts">Alerts <span class="badge" id="alert-badge" style="display:none">0</span></div>
-  <div class="nav-tab"        onclick="showPage('timeline')" data-page="timeline">Timeline</div>
-  <div class="nav-tab"        onclick="showPage('devices')"  data-page="devices">Devices <span class="badge" id="inventory-badge" style="display:none">0</span></div>
-  <div class="nav-tab"        onclick="showPage('lan')"      data-page="lan">Live LAN</div>
-  <div class="nav-tab"        onclick="showPage('map')"      data-page="map">Threat Map</div>
-  <div class="nav-tab"        onclick="showPage('computer')" data-page="computer">This Computer</div>
-  <div class="nav-tab"        onclick="showPage('pcap')"     data-page="pcap">PCAP</div>
-  <div class="nav-tab"        onclick="showPage('baselines')" data-page="baselines">Baselines</div>
-  <div class="nav-tab"        onclick="showPage('predictions')" data-page="predictions">Expectations</div>
-  <div class="nav-tab"        onclick="showPage('detections')" data-page="detections">Detections</div>
+  <div class="nav-tab active" data-onclick="showPage('chat')"     data-page="chat">Chat</div>
+  <div class="nav-tab"        data-onclick="showPage('dashboard')"data-page="dashboard">Dashboard</div>
+  <div class="nav-tab"        data-onclick="showPage('alerts')"   data-page="alerts">Alerts <span class="badge" id="alert-badge" style="display:none">0</span></div>
+  <div class="nav-tab"        data-onclick="showPage('timeline')" data-page="timeline">Timeline</div>
+  <div class="nav-tab"        data-onclick="showPage('devices')"  data-page="devices">Devices <span class="badge" id="inventory-badge" style="display:none">0</span></div>
+  <div class="nav-tab"        data-onclick="showPage('lan')"      data-page="lan">Live LAN</div>
+  <div class="nav-tab"        data-onclick="showPage('map')"      data-page="map">Threat Map</div>
+  <div class="nav-tab"        data-onclick="showPage('computer')" data-page="computer">This Computer</div>
+  <div class="nav-tab"        data-onclick="showPage('pcap')"     data-page="pcap">PCAP</div>
+  <div class="nav-tab"        data-onclick="showPage('baselines')" data-page="baselines">Baselines</div>
+  <div class="nav-tab"        data-onclick="showPage('predictions')" data-page="predictions">Expectations</div>
+  <div class="nav-tab"        data-onclick="showPage('detections')" data-page="detections">Detections</div>
   <!-- The badge counts only what waits on your answer, so it clears when you answer. -->
-  <div class="nav-tab"        onclick="showPage('inbox')"    data-page="inbox">Inbox <span class="badge" id="inbox-badge" style="display:none">0</span></div>
-  <div class="nav-tab"        onclick="showPage('agents')"   data-page="agents">Agents <span class="badge" id="agents-badge" style="display:none">0</span></div>
-  <div class="nav-tab"        onclick="showPage('review')"   data-page="review">Review</div>
+  <div class="nav-tab"        data-onclick="showPage('inbox')"    data-page="inbox">Inbox <span class="badge" id="inbox-badge" style="display:none">0</span></div>
+  <div class="nav-tab"        data-onclick="showPage('agents')"   data-page="agents">Agents <span class="badge" id="agents-badge" style="display:none">0</span></div>
+  <div class="nav-tab"        data-onclick="showPage('review')"   data-page="review">Review</div>
   <!-- The badge counts PROBLEMS only, never things that are simply off. -->
-  <div class="nav-tab"        onclick="showPage('settings')" data-page="settings">Settings <span class="badge" id="settings-badge" style="display:none">0</span></div>
+  <div class="nav-tab"        data-onclick="showPage('settings')" data-page="settings">Settings <span class="badge" id="settings-badge" style="display:none">0</span></div>
 </div>
 
 <!-- CONTENT -->
@@ -1773,17 +1772,17 @@
   <div class="page active" id="page-chat">
     <div id="chat-messages"></div>
     <div id="suggestions">
-      <div class="chip" onclick="sendChip(this)">Check my connections</div>
-      <div class="chip" onclick="sendChip(this)">Any intrusions?</div>
-      <div class="chip" onclick="sendChip(this)">Scan my network</div>
-      <div class="chip" onclick="sendChip(this)">What's on my threat map?</div>
-      <div class="chip" onclick="sendChip(this)">Run a full check</div>
+      <div class="chip" data-onclick="sendChip(this)">Check my connections</div>
+      <div class="chip" data-onclick="sendChip(this)">Any intrusions?</div>
+      <div class="chip" data-onclick="sendChip(this)">Scan my network</div>
+      <div class="chip" data-onclick="sendChip(this)">What's on my threat map?</div>
+      <div class="chip" data-onclick="sendChip(this)">Run a full check</div>
     </div>
     <div id="chat-input-area">
       <div id="chat-input-wrap">
         <textarea id="chat-input" placeholder="Ask anything about your network..." rows="1"
-          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-        <button id="send-btn" onclick="sendMessage()" title="Send">
+          data-onkeydown="handleKey(event)" data-oninput="autoResize(this)"></textarea>
+        <button id="send-btn" data-onclick="sendMessage()" title="Send">
           <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
         </button>
       </div>
@@ -1882,7 +1881,7 @@
         <span class="card-title" style="margin:0;">Active Findings, this session</span>
         <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">limited to this run, newest 50</span>
         <span id="alerts-status" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);"></span>
-        <button class="btn danger" style="margin-left:auto;font-size:10px;" onclick="dismissAll()">Dismiss All</button>
+        <button class="btn danger" style="margin-left:auto;font-size:10px;" data-onclick="dismissAll()">Dismiss All</button>
       </div>
       <div id="findings-list"></div>
     </div>
@@ -1929,15 +1928,15 @@
         part for the sensor and the reason.
       </div>
       <div class="timeline-filters">
-        <div class="tfilter active" onclick="setTimeFilter(this,'2h')">2h</div>
-        <div class="tfilter" onclick="setTimeFilter(this,'6h')">6h</div>
-        <div class="tfilter" onclick="setTimeFilter(this,'24h')">24h</div>
-        <div class="tfilter" onclick="setTimeFilter(this,'48h')">48h</div>
-        <div class="tfilter" onclick="setTimeFilter(this,'7d')">7d</div>
+        <div class="tfilter active" data-onclick="setTimeFilter(this,'2h')">2h</div>
+        <div class="tfilter" data-onclick="setTimeFilter(this,'6h')">6h</div>
+        <div class="tfilter" data-onclick="setTimeFilter(this,'24h')">24h</div>
+        <div class="tfilter" data-onclick="setTimeFilter(this,'48h')">48h</div>
+        <div class="tfilter" data-onclick="setTimeFilter(this,'7d')">7d</div>
         <div data-tfilter-only style="margin-left:auto;display:flex;align-items:center;gap:6px;">
           <label class="tfilter" style="cursor:pointer;user-select:none;">
             <input type="checkbox" id="timeline-findings-only"
-                   onchange="loadTimeline()" style="vertical-align:-1px;">
+                   data-onchange="loadTimeline()" style="vertical-align:-1px;">
             findings and events only
           </label>
         </div>
@@ -1967,13 +1966,13 @@
         previous scan, and stays until the next one.
       </div>
       <div class="row" style="margin-bottom:14px;">
-        <button class="btn primary" onclick="triggerNetworkScan()">Scan Network</button>
+        <button class="btn primary" data-onclick="triggerNetworkScan()">Scan Network</button>
         <span id="scan-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
       <div id="devices-summary" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:4px;"></div>
       <div id="devices-identity" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:8px;"></div>
       <label style="font-size:11px;color:var(--text-dim);display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
-        <input type="checkbox" id="devices-show-retired" onchange="toggleRetiredDevices(this.checked)"> show retired devices
+        <input type="checkbox" id="devices-show-retired" data-onchange="toggleRetiredDevices(this.checked)"> show retired devices
       </label>
       <table class="data-table" id="devices-table">
         <thead><tr><th>IP</th><th>Label</th><th>Type</th><th>Identity</th><th>Basis</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Last Seen</th></tr></thead>
@@ -2011,10 +2010,10 @@
       </div>
       <div class="row" style="margin-bottom:14px;">
         <div id="router-toggle" title="Turn the router collector on or off">
-          <button id="router-btn-off" onclick="setRouterEnabled(false)">OFF</button>
-          <button id="router-btn-on"  onclick="setRouterEnabled(true)">ON</button>
+          <button id="router-btn-off" data-onclick="setRouterEnabled(false)">OFF</button>
+          <button id="router-btn-on"  data-onclick="setRouterEnabled(true)">ON</button>
         </div>
-        <button class="btn" id="router-collect-btn" onclick="collectRouterNow()">Collect Now</button>
+        <button class="btn" id="router-collect-btn" data-onclick="collectRouterNow()">Collect Now</button>
         <span id="router-note"></span>
       </div>
       <div id="router-summary" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
@@ -2079,8 +2078,8 @@
       <div id="enrollment-counts" class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:12px;"></div>
       <div id="enrollment-note" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:12px;"></div>
       <div class="row" style="margin-bottom:14px;">
-        <button class="btn primary" onclick="inventoryScan()">Scan Network</button>
-        <button class="btn" onclick="markEnrollmentDone()">Mark walkthrough done</button>
+        <button class="btn primary" data-onclick="inventoryScan()">Scan Network</button>
+        <button class="btn" data-onclick="markEnrollmentDone()">Mark walkthrough done</button>
         <span id="enrollment-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
       <table class="data-table" id="review-queue-table">
@@ -2121,7 +2120,7 @@
           <b>Same device, new address.</b> These rows share a hardware address,
           which is what happens after a router change. The newest address is
           kept, the older rows are merged into it.
-          <button class="btn primary" onclick="mergeSameMac(null, this)" style="margin-left:8px;">Merge all</button>
+          <button class="btn primary" data-onclick="mergeSameMac(null, this)" style="margin-left:8px;">Merge all</button>
         </div>
         <table class="data-table">
           <thead><tr><th>MAC</th><th>Keep</th><th>Merge into it</th><th></th></tr></thead>
@@ -2132,7 +2131,7 @@
         <input id="merge-source" class="input" placeholder="duplicate address" style="width:170px;">
         <span style="color:var(--text-dim);font-size:12px;">is the same device as</span>
         <input id="merge-target" class="input" placeholder="the real one" style="width:170px;">
-        <button class="btn primary" onclick="mergeDevices()">Merge</button>
+        <button class="btn primary" data-onclick="mergeDevices()">Merge</button>
         <span id="merge-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
       <div id="appearance-summary" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin:10px 0;"></div>
@@ -2224,15 +2223,15 @@
              and could not see which one that was. The names and the cost of
              each are read from the server, see loadPortSets. -->
         <div class="pset" id="port-set-picker" title="Which ports this scan will probe. The cost of each is on its label.">
-          <div class="pset-opt" data-set="common"   onclick="setPortSet(this,'common')">common</div>
-          <div class="pset-opt" data-set="extended" onclick="setPortSet(this,'extended')">extended</div>
-          <div class="pset-opt" data-set="all"      onclick="setPortSet(this,'all')">all</div>
+          <div class="pset-opt" data-set="common"   data-onclick="setPortSet(this,'common')">common</div>
+          <div class="pset-opt" data-set="extended" data-onclick="setPortSet(this,'extended')">extended</div>
+          <div class="pset-opt" data-set="all"      data-onclick="setPortSet(this,'all')">all</div>
           <span class="pset-count" id="port-set-count"></span>
         </div>
-        <button class="btn primary" id="port-scan-btn" onclick="triggerPortScan()">Scan Host</button>
+        <button class="btn primary" id="port-scan-btn" data-onclick="triggerPortScan()">Scan Host</button>
         <span id="port-scan-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
         <label style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="ports-show-all" onchange="togglePortHistory()"
+          <input type="checkbox" id="ports-show-all" data-onchange="togglePortHistory()"
                  style="accent-color:var(--green);cursor:pointer;">
           every scan
         </label>
@@ -2277,8 +2276,8 @@
       </div>
       <div class="row" style="margin-bottom:12px;">
         <input class="input" id="tls-filter" placeholder="filter by domain"
-               style="width:240px;" onkeyup="if(event.key==='Enter')loadTls()">
-        <button class="btn" onclick="loadTls()">Search</button>
+               style="width:240px;" data-onkeyup="tlsKeyup(event)">
+        <button class="btn" data-onclick="loadTls()">Search</button>
         <span id="tls-coverage" style="font-family:var(--mono);font-size:11px;"></span>
       </div>
       <table class="data-table" id="tls-table">
@@ -2293,7 +2292,7 @@
     <div class="card">
       <div class="card-title">Threat Map</div>
       <div class="row" style="gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
-        <select class="input" id="map-source" style="width:230px;" onchange="loadThreatMap()">
+        <select class="input" id="map-source" style="width:230px;" data-onchange="loadThreatMap()">
           <option value="">Whole home</option>
           <option value="this_machine">This machine only</option>
           <option value="router">Other devices (from the router)</option>
@@ -2304,7 +2303,7 @@
       <div id="map-wrap">
         <div id="threat-map"></div>
         <div id="map-panel" hidden>
-          <button class="map-x" onclick="closeMapPanel()" title="Close">&times;</button>
+          <button class="map-x" data-onclick="closeMapPanel()" title="Close">&times;</button>
           <div id="map-panel-body"></div>
         </div>
       </div>
@@ -2327,7 +2326,7 @@
 
   <!-- THIS COMPUTER. Background apps, running processes, and listening ports. -->
   <div class="page" id="page-computer">
-    <details class="card" id="bg-apps-card" ontoggle="if (this.open) loadBgApps()">
+    <details class="card" id="bg-apps-card" data-ontoggle="bgAppsToggled(this)">
       <summary style="cursor:pointer" class="card-title">Background apps you can switch off</summary>
       <div class="card-note">
         The services, timers and login apps on this machine that are worth acting on,
@@ -2359,7 +2358,7 @@
         </thead>
         <tbody id="bg-changes"><tr><td colspan="6">Nothing yet.</td></tr></tbody>
       </table>
-      <div style="margin-top:8px"><button class="btn" onclick="loadBgApps()">Refresh</button></div>
+      <div style="margin-top:8px"><button class="btn" data-onclick="loadBgApps()">Refresh</button></div>
     </details>
 
     <div class="card">
@@ -2396,11 +2395,11 @@
       <div class="trust-key" id="proc-key"></div>
       <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
         <input id="proc-filter" placeholder="filter by name, path or pid"
-               oninput="renderProcesses()"
+               data-oninput="renderProcesses()"
                style="flex:1;background:var(--bg3);border:1px solid var(--border);
                       color:var(--text);padding:7px 10px;border-radius:3px;
                       font-family:var(--mono);font-size:11px">
-        <button class="btn" onclick="loadProcesses()">Refresh</button>
+        <button class="btn" data-onclick="loadProcesses()">Refresh</button>
       </div>
     </div>
 
@@ -2424,7 +2423,7 @@
         from the network; one on 127.0.0.1 or ::1 only from this computer.
       </div>
       <div class="row" style="margin-bottom:10px;">
-        <button class="btn" onclick="loadListeners(true)">Check now</button>
+        <button class="btn" data-onclick="loadListeners(true)">Check now</button>
         <span id="listeners-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
       <table class="data-table">
@@ -2454,7 +2453,7 @@
       <div class="row" style="margin-bottom:14px;flex-wrap:wrap;">
         <input class="input" id="pcap-path" placeholder="/path/to/capture.pcap" style="width:340px;">
         <input class="input" id="pcap-origin" placeholder="Where it was captured (optional)" style="width:300px;">
-        <button class="btn primary" onclick="triggerPcap()">Analyze</button>
+        <button class="btn primary" data-onclick="triggerPcap()">Analyze</button>
       </div>
       <div id="pcap-result" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);">No analysis run yet.</div>
     </div>
@@ -2478,8 +2477,8 @@
         stays unreviewed, it does not become normal.
       </div>
       <div class="row" style="margin-bottom:14px;align-items:center;gap:12px;">
-        <input class="input" id="baseline-filter" placeholder="Filter by name, IP or program..." style="width:260px;" oninput="loadBaselines()">
-        <label style="font-size:12px;"><input type="checkbox" id="baseline-show-old" onchange="loadBaselines()"> show old addresses</label>
+        <input class="input" id="baseline-filter" placeholder="Filter by name, IP or program..." style="width:260px;" data-oninput="loadBaselines()">
+        <label style="font-size:12px;"><input type="checkbox" id="baseline-show-old" data-onchange="loadBaselines()"> show old addresses</label>
         <span class="lan-sub" id="baseline-summary"></span>
       </div>
       <div id="baseline-cards"></div>
@@ -2491,7 +2490,7 @@
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <span class="card-title" style="margin:0;">Traffic per device, per hour</span>
-        <select class="input" id="perf-hours" style="width:150px;" onchange="loadPerformance()">
+        <select class="input" id="perf-hours" style="width:150px;" data-onchange="loadPerformance()">
           <option value="24">Last 24 hours</option>
           <option value="48">Last 2 days</option>
           <option value="168">Last week</option>
@@ -2557,7 +2556,7 @@
       <div class="stat-grid" id="detection-tiles" style="margin-top:12px;"></div>
       <div id="detection-unstamped" class="det-note" style="margin-top:10px;"></div>
       <div class="row" style="margin-top:14px;gap:10px;align-items:center;">
-        <select class="input" id="detection-filter" style="width:260px;" onchange="renderDetections()">
+        <select class="input" id="detection-filter" style="width:260px;" data-onchange="renderDetections()">
           <option value="detection">Rules that watch for things</option>
           <option value="action_record">Records of what the app did</option>
           <option value="suppressed">Muted right now</option>
@@ -2608,7 +2607,7 @@
       </div>
       <div class="row" style="margin-bottom:14px;">
         <input class="input" id="runbook-search" placeholder="CVE ID, port, keyword..." style="width:240px;">
-        <select class="input" id="runbook-severity" style="width:130px;" onchange="searchRunbook()"
+        <select class="input" id="runbook-severity" style="width:130px;" data-onchange="searchRunbook()"
                 title="Show one severity. The rating is the fetched CVSS score when there is one, else the feed's own word.">
           <option value="">Every severity</option>
           <option value="critical">Critical</option>
@@ -2617,16 +2616,16 @@
           <option value="low">Low</option>
           <option value="unrated">Unrated</option>
         </select>
-        <button class="btn" onclick="searchRunbook()">Search</button>
+        <button class="btn" data-onclick="searchRunbook()">Search</button>
         <!-- The KEV sync used to run at boot and nowhere else, so refreshing
              the mirror meant restarting the app. PORTED 2026-09-21 with the
              /api/runbook/sync route, which had been landed with no way to
              press it. -->
-        <button class="btn" id="runbook-sync-btn" onclick="syncRunbook()">Sync CISA KEV</button>
+        <button class="btn" id="runbook-sync-btn" data-onclick="syncRunbook()">Sync CISA KEV</button>
         <!-- The feed carries no severity. The sync fetches CVSS for new rows
              itself; this button runs the full pass, retries and rechecks. -->
-        <button class="btn" id="cvss-btn" onclick="startCvssBackfill()">Fetch CVSS</button>
-        <button class="btn" id="cvss-stop-btn" onclick="stopCvssBackfill()" style="display:none;">Stop</button>
+        <button class="btn" id="cvss-btn" data-onclick="startCvssBackfill()">Fetch CVSS</button>
+        <button class="btn" id="cvss-stop-btn" data-onclick="stopCvssBackfill()" style="display:none;">Stop</button>
         <span id="runbook-sync-status" style="font-size:11px;color:var(--text-dim);"></span>
       </div>
       <div id="cvss-status" style="font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
@@ -2648,7 +2647,7 @@
           <div id="exp-sentence" class="exp-sentence">Reading the expectations...</div>
           <div id="exp-router-note" class="exp-note"></div>
           <div class="row" style="margin-top:12px;gap:10px;align-items:center;">
-            <button class="btn" id="exp-check-btn" onclick="checkExpectationsNow()">Check now</button>
+            <button class="btn" id="exp-check-btn" data-onclick="checkExpectationsNow()">Check now</button>
             <span id="exp-checked" class="exp-note" style="margin-top:0;"></span>
           </div>
           <details class="exp-legend">
@@ -2710,8 +2709,8 @@
       </div>
       <div id="fa-rules" class="fa-rules"></div>
       <div class="fa-bar"><span id="fa-showing"></span>
-        <span><button class="btn" id="fa-trial" style="display:none" onclick="openTrial()">Open its fix</button>
-        <button class="btn" id="fa-reset" onclick="resetFalseAlarms()">Show all</button></span></div>
+        <span><button class="btn" id="fa-trial" style="display:none" data-onclick="openTrial()">Open its fix</button>
+        <button class="btn" id="fa-reset" data-onclick="resetFalseAlarms()">Show all</button></span></div>
       <div id="fa-days"></div>
       <div class="card-title" style="margin-top:16px;">Needs your verdict</div>
       <div id="fa-todo"></div>
@@ -2768,14 +2767,14 @@
       <div id="prediction-reading" class="finding-desc" style="margin-top:8px;"></div>
       <div id="prediction-blind" style="margin-top:10px;"></div>
       <div class="row" style="margin-top:14px;gap:10px;align-items:center;">
-        <select class="input" id="prediction-filter" style="width:180px;" onchange="loadPredictions()">
+        <select class="input" id="prediction-filter" style="width:180px;" data-onchange="loadPredictions()">
           <option value="">Everything</option>
           <option value="pending">Still open</option>
           <option value="hit">Right</option>
           <option value="miss">Wrong</option>
           <option value="unverifiable">Could not check</option>
         </select>
-        <button class="btn" id="prediction-check-btn" onclick="checkPredictionsNow()">Check anything due</button>
+        <button class="btn" id="prediction-check-btn" data-onclick="checkPredictionsNow()">Check anything due</button>
         <span class="finding-desc" style="font-size:11px;">
           This only asks the checker to run early. Nothing here can decide an outcome,
           and a prediction whose deadline has not passed is left alone.
@@ -2911,14 +2910,14 @@
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <span class="card-title" style="margin:0;">Actions waiting on your decision</span>
-        <button class="btn" onclick="loadActions()" title="Re-read the queue.">refresh</button>
+        <button class="btn" data-onclick="loadActions()" title="Re-read the queue.">refresh</button>
       </div>
       <div id="actions-pending"></div>
     </div>
     <div class="card">
       <div class="row" style="justify-content:space-between;align-items:center;">
         <span class="card-title" style="margin:0;">Questions it wants to ask you</span>
-        <select class="input" id="question-filter" style="width:190px;" onchange="loadQuestions()">
+        <select class="input" id="question-filter" style="width:190px;" data-onchange="loadQuestions()">
           <option value="open">Waiting for you</option>
           <option value="">Everything</option>
           <option value="answered">You answered</option>
@@ -2940,7 +2939,7 @@
       </div>
       <div class="row" style="margin-bottom:10px;">
         <label style="font-size:12px;color:var(--text-dim);">
-          <input type="checkbox" id="review-include-all" onchange="loadReviewQueue()"> Include low/medium severity
+          <input type="checkbox" id="review-include-all" data-onchange="loadReviewQueue()"> Include low/medium severity
         </label>
       </div>
       <div id="review-list"></div>
@@ -2952,7 +2951,7 @@
       <div id="action-reading" class="finding-desc" style="margin-top:10px;"></div>
       <div class="row" style="margin:12px 0;">
         <select class="input" id="action-filter" style="width:200px;"
-                onchange="loadActions()">
+                data-onchange="loadActions()">
           <option value="">Everything</option>
           <option value="executed">Ran</option>
           <option value="failed">Did not run</option>
@@ -2960,7 +2959,7 @@
           <option value="expired">Nobody answered</option>
           <option value="approved">Approved, not run yet</option>
         </select>
-        <button class="btn" onclick="runApprovedNow()"
+        <button class="btn" data-onclick="runApprovedNow()"
                 title="Run approved requests now instead of waiting for the executor's poll.">run approved now</button>
         <span id="actions-run-status"
               style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
@@ -3004,15 +3003,15 @@
         <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
           <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
                  title="Reports are kept for 30 days and then deleted.">
-            <input type="checkbox" id="daily-show-older" onchange="loadDailyReports()">
+            <input type="checkbox" id="daily-show-older" data-onchange="loadDailyReports()">
             Show earlier reports (30 days)
           </label>
           <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
                  title="Dismissed reports are hidden, not deleted. Tick this to see them and bring any back.">
-            <input type="checkbox" id="daily-show-dismissed" onchange="loadDailyReports()">
+            <input type="checkbox" id="daily-show-dismissed" data-onchange="loadDailyReports()">
             Show dismissed
           </label>
-          <button class="btn" id="daily-dismiss-btn" onclick="dismissDailyReports()" disabled
+          <button class="btn" id="daily-dismiss-btn" data-onclick="dismissDailyReports()" disabled
                   title="Hide the ticked reports. Nothing is deleted; Show dismissed brings them back.">dismiss ticked</button>
         </div>
       </div>
@@ -3031,14 +3030,14 @@
         <span class="card-title" style="margin:0;">What the agent did while nobody was asking</span>
         <div class="row" style="gap:8px;">
           <select class="input" id="agent-filter" style="width:150px;"
-                  onchange="loadAgents()">
+                  data-onchange="loadAgents()">
             <option value="">Everything</option>
             <option value="incident">Incidents worked</option>
             <option value="regular">Regular reports</option>
           </select>
-          <button class="btn" onclick="loadAgents()"
+          <button class="btn" data-onclick="loadAgents()"
                   title="Re-read the record.">refresh</button>
-          <button class="btn" onclick="runAgentNow()"
+          <button class="btn" data-onclick="runAgentNow()"
                   title="Wake the agent now instead of waiting for a scheduled moment. It checks its budgets first and examines nothing if a cap is reached.">wake it now</button>
         </div>
       </div>
@@ -3073,18 +3072,18 @@
         <div class="row" style="gap:8px;flex-wrap:wrap;">
           <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
                  title="Dismissed reports are hidden from this list and are NOT deleted by the dismissal. Their verdict, evidence and coverage stay in the database until the report is a week old, and Show dismissed brings them back.">
-            <input type="checkbox" id="agent-show-dismissed" onchange="loadAgents()">
+            <input type="checkbox" id="agent-show-dismissed" data-onchange="loadAgents()">
             Show dismissed
           </label>
           <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
                  title="The list shows this run's reports. Tick to add the earlier runs of the past week; reports older than a week are deleted.">
-            <input type="checkbox" id="agent-show-earlier" onchange="loadAgents()">
+            <input type="checkbox" id="agent-show-earlier" data-onchange="loadAgents()">
             Show earlier runs
           </label>
-          <button class="btn" id="agent-dismiss-selected" onclick="dismissSelectedReports()"
+          <button class="btn" id="agent-dismiss-selected" data-onclick="dismissSelectedReports()"
                   disabled
                   title="Hide the ticked reports from this list. Nothing is deleted: the reports stay in the database with their verdicts and evidence, and the dismissal is recorded.">dismiss ticked</button>
-          <button class="btn danger" onclick="dismissAllReports()"
+          <button class="btn danger" data-onclick="dismissAllReports()"
                   title="Hide every report on this list. Nothing is deleted and nothing is silenced about the machine: this only stops this list showing them, and Show dismissed brings them all back.">dismiss all</button>
         </div>
       </div>
@@ -3102,8 +3101,8 @@
         <span id="agent-dismissed-count"></span>
       </div>
       <div class="row" id="agent-select-bar" style="gap:10px;align-items:center;margin-bottom:8px;display:none;">
-        <button class="btn" onclick="toggleAllReportChecks(true)">tick all on this page</button>
-        <button class="btn" onclick="toggleAllReportChecks(false)">untick</button>
+        <button class="btn" data-onclick="toggleAllReportChecks(true)">tick all on this page</button>
+        <button class="btn" data-onclick="toggleAllReportChecks(false)">untick</button>
         <span id="agent-select-count" class="finding-desc"></span>
       </div>
       <div id="agent-reports"></div>
@@ -3115,11 +3114,11 @@
         <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
           <label class="finding-desc" style="display:flex;align-items:center;gap:5px;cursor:pointer;"
                  title="Dismissed lines are hidden, not deleted. Tick this to see them and bring any back.">
-            <input type="checkbox" id="agent-runs-dismissed" onchange="RUN_TICKED.clear(); loadAgents()">
+            <input type="checkbox" id="agent-runs-dismissed" data-onchange="runFilterChanged()">
             Show dismissed
           </label>
-          <button class="btn" id="run-tick-all" onclick="tickAllRuns()">tick all on this page</button>
-          <button class="btn" id="run-dismiss-btn" onclick="dismissTickedRuns()" disabled
+          <button class="btn" id="run-tick-all" data-onclick="tickAllRuns()">tick all on this page</button>
+          <button class="btn" id="run-dismiss-btn" data-onclick="dismissTickedRuns()" disabled
                   title="Hide the ticked lines. Nothing is deleted; Show dismissed brings them back.">dismiss ticked</button>
         </div>
       </div>
@@ -3217,8 +3216,8 @@
         as the database catches accidents, not attackers.
       </div>
       <div class="row" style="margin-bottom:12px;">
-        <button class="btn primary" onclick="verifyIntegrity()">Verify chain</button>
-        <button class="btn" onclick="takeAnchor()"
+        <button class="btn primary" data-onclick="verifyIntegrity()">Verify chain</button>
+        <button class="btn" data-onclick="takeAnchor()"
                 title="Record the current head hash so a later verify has something to compare against.">Take an anchor</button>
         <span id="integrity-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
@@ -3249,7 +3248,7 @@
         <input class="input" id="ep-ip" placeholder="device address" style="width:150px;">
         <input class="input" id="ep-port" placeholder="port" style="width:90px;">
         <input class="input" id="ep-reason" placeholder="why is this normal here?" style="width:320px;">
-        <button class="btn" onclick="declareExpectedPort()">Declare</button>
+        <button class="btn" data-onclick="declareExpectedPort()">Declare</button>
       </div>
       <div id="ep-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:10px;"></div>
       <table class="data-table">
@@ -3282,7 +3281,7 @@
         when this page stops answering, not when the button greys out.
       </div>
       <div class="row" style="margin-bottom:6px;">
-        <button class="btn" onclick="stopApp()">Stop AgentalSec</button>
+        <button class="btn" data-onclick="stopApp()">Stop AgentalSec</button>
         <span id="shutdown-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
     </div>
@@ -3330,7 +3329,7 @@
         Refresh re-reads the page; it does not re-run anyone's poll.
       </div>
       <div class="row" style="margin-bottom:12px;">
-        <button class="btn" onclick="loadSettings()">Refresh</button>
+        <button class="btn" data-onclick="loadSettings()">Refresh</button>
         <span id="settings-summary" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
         <!-- WHEN the rows above were last read, and whether the refresh is
              still working. Without this the page is indistinguishable from a
@@ -3371,7 +3370,7 @@
       </div>
       <div class="row">
         <input class="input" id="settings-name" placeholder="a first name, a handle, anything" style="width:240px;" maxlength="40">
-        <button class="btn" onclick="saveDisplayName()">Save</button>
+        <button class="btn" data-onclick="saveDisplayName()">Save</button>
         <span id="settings-name-status" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
       </div>
     </div>
@@ -3399,7 +3398,6 @@
 <script>
 // STATE
 
-let API_KEY      = '';
 let isStreaming  = false;
 let currentPage  = 'chat';
 let timeFilter   = '2h';
@@ -3423,28 +3421,32 @@ async function init() {
   showLostCards();
 }
 
-// The key is injected into this page by GET / at render time (see the index
-// route in api/routes.py). It used to be fetched from /api/config/key, which
-// had to be unauthenticated to be usable, so anything that could reach
-// localhost could read the key and then drive every tool behind it.
-//
-// Reading it from the document instead of a URL removes the endpoint rather
-// than guarding it. Synchronous, so no await: it is already on the page
-// before this script runs.
+// The page holds no key. The app's one-time link stores a session token
+// in this port's own storage, and every API call sends it. Without one, or
+// once the server stops accepting it, the sign in box asks for the app key.
+const SESSION_KEY = 'agental_session';
+let SESSION = '';
+
 function loadApiKey() {
-  const boot = window.__AGENTAL_BOOTSTRAP__ || {};
-  API_KEY = boot.api_key || '';
-  if (!API_KEY) showKeyModal();
+  try { SESSION = localStorage.getItem(SESSION_KEY) || ''; } catch (e) { SESSION = ''; }
+  const plain = window.fetch.bind(window);
+  window.fetch = async (...a) => {
+    const r = await plain(...a);
+    if (r.status === 401 && String(a[0]).startsWith('/api/')) showKeyModal();
+    return r;
+  };
+  if (!SESSION) showKeyModal();
 }
 
 function showKeyModal() {
   document.getElementById('key-modal-overlay').style.display = 'flex';
 }
 
-// Holds the key for this tab only, nothing is written anywhere. The old
-// version claimed to save to config.json and did not, and asked for the
-// model provider key while setting the app key, so a user following it exactly got
-// 401s with no way to tell why.
+function hideKeyModal() {
+  document.getElementById('key-modal-overlay').style.display = 'none';
+}
+
+// The key goes to the server once and is not kept: the answer is a session.
 async function saveApiKey() {
   const key  = document.getElementById('key-input').value.trim();
   const err  = document.getElementById('key-modal-error');
@@ -3457,13 +3459,271 @@ async function saveApiKey() {
     err.style.display = 'block';
     return;
   }
-
-  API_KEY = key.toLowerCase();
-  document.getElementById('key-modal-overlay').style.display = 'none';
+  const r = await fetch('/open', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key })
+  });
+  if (!r.ok) {
+    err.textContent = r.status === 429
+      ? 'Too many wrong keys. Wait a minute and try again.'
+      : 'That key was refused.';
+    err.style.display = 'block';
+    return;
+  }
+  SESSION = (await r.json()).session || '';
+  try { localStorage.setItem(SESSION_KEY, SESSION); } catch (e) { /* this tab only */ }
+  document.getElementById('key-input').value = '';
+  hideKeyModal();
+  location.reload();
 }
 
 function authHeaders() {
-  return { 'Content-Type': 'application/json', 'X-API-Key': API_KEY };
+  return { 'Content-Type': 'application/json', 'X-Agental-Session': SESSION };
+}
+
+// UI HANDLERS
+//
+// The page's CSP allows no inline script, so markup names its handler in
+// data-on<event> instead of on<event>, and the listeners below run it. A
+// handler is only calls of functions in UI_ACTIONS with literal arguments
+// (strings, numbers, true, false, null, this, event, this.x, event.x and
+// arrays of those), optionally ending in "return false". Nothing is evaluated.
+const UI_ACTIONS = new Set([
+  'ackExpectation',
+  'answerQuestion',
+  'approveAction',
+  'approveQueued',
+  'autoResize',
+  'bgAppsToggled',
+  'bgAsk',
+  'bgCancel',
+  'bgConfirm',
+  'bgUndo',
+  'checkExpectationsNow',
+  'checkPredictionsNow',
+  'clearKey',
+  'closeMapPanel',
+  'collectRouterNow',
+  'declareExpectedPort',
+  'demoteFinding',
+  'denyAction',
+  'denyQueued',
+  'dismissAll',
+  'dismissAllReports',
+  'dismissDailyReports',
+  'dismissFinding',
+  'dismissOneReport',
+  'dismissQuestionPopup',
+  'dismissSelectedReports',
+  'dismissTickedRuns',
+  'generateAppKey',
+  'goToInbox',
+  'handleKey',
+  'hideKeyModal',
+  'inspectProcess',
+  'inventoryScan',
+  'loadActions',
+  'loadAgents',
+  'loadBaselines',
+  'loadBgApps',
+  'loadDailyReports',
+  'loadListeners',
+  'loadPerformance',
+  'loadPredictions',
+  'loadProcesses',
+  'loadQuestions',
+  'loadReviewQueue',
+  'loadSettings',
+  'loadThreatMap',
+  'loadTimeline',
+  'loadTls',
+  'mapBlock',
+  'mapChatClose',
+  'mapChatKeydown',
+  'mapChatMin',
+  'mapChatSend',
+  'mapCutDevice',
+  'mapSinkhole',
+  'markEnrollmentDone',
+  'mergeDevices',
+  'mergeSameMac',
+  'nameDevice',
+  'onAgentTick',
+  'openMapChat',
+  'openSensorWatch',
+  'openSettingsAt',
+  'openTrial',
+  'printDailyReport',
+  'promoteFinding',
+  'rejectFinding',
+  'renderDetections',
+  'renderProcesses',
+  'resetFalseAlarms',
+  'resolveReview',
+  'restoreDailyReport',
+  'restoreReport',
+  'restoreRun',
+  'revertSuppression',
+  'runAgentNow',
+  'runApprovedNow',
+  'runFilterChanged',
+  'saveApiKey',
+  'saveConfigField',
+  'saveDisplayName',
+  'saveKey',
+  'searchRunbook',
+  'sendChip',
+  'sendMessage',
+  'setAlwaysOn',
+  'setPermanent',
+  'setPortSet',
+  'setRetention',
+  'setRetentionOff',
+  'setRouterEnabled',
+  'setTimeFilter',
+  'showDetection',
+  'showMapEndpoint',
+  'showPage',
+  'silenceFinding',
+  'startCvssBackfill',
+  'stopApp',
+  'stopCvssBackfill',
+  'suppressDetection',
+  'syncRunbook',
+  'takeAnchor',
+  'testProvider',
+  'tickAllRuns',
+  'tickDailyReport',
+  'tickRun',
+  'tlsKeyup',
+  'toggleAllReportChecks',
+  'togglePortHistory',
+  'toggleRetiredDevices',
+  'toggleTrust',
+  'triggerNetworkScan',
+  'triggerPcap',
+  'triggerPortScan',
+  'undismissEntity',
+  'unmergeDevice',
+  'unsuppressDetection',
+  'verifyIntegrity',
+  'withdrawExpectedPort',
+]);
+const _uiHandlerCache = new Map();
+
+function parseUiHandler(src) {
+  let i = 0;
+  const fail = what => { throw new Error(`UI handler "${src}": ${what} at ${i}`); };
+  const ws = () => { while (i < src.length && /\s/.test(src[i])) i++; };
+  const word = () => {
+    const m = /^[A-Za-z_$][\w$]*/.exec(src.slice(i));
+    if (!m) fail('expected a name');
+    i += m[0].length;
+    return m[0];
+  };
+  function value() {
+    ws();
+    const c = src[i];
+    if (c === "'" || c === '"') {
+      let out = '';
+      i++;
+      while (i < src.length && src[i] !== c) {
+        if (src[i] === '\\' && i + 1 < src.length) {
+          const n = src[++i];
+          if (n === 'u' && /^[0-9a-fA-F]{4}$/.test(src.substr(i + 1, 4))) {
+            out += String.fromCharCode(parseInt(src.substr(i + 1, 4), 16));
+            i += 4;
+          } else out += n === 'n' ? '\n' : n === 't' ? '\t' : n;
+        } else out += src[i];
+        i++;
+      }
+      if (src[i] !== c) fail('unclosed string');
+      i++;
+      return () => out;
+    }
+    if (c === '[') {
+      i++;
+      const items = list(']');
+      return (el, ev) => items.map(f => f(el, ev));
+    }
+    const num = /^-?\d+(\.\d+)?/.exec(src.slice(i));
+    if (num) { i += num[0].length; const v = Number(num[0]); return () => v; }
+    const w = word();
+    if (w === 'true') return () => true;
+    if (w === 'false') return () => false;
+    if (w === 'null') return () => null;
+    if (w === 'undefined') return () => undefined;
+    if (w !== 'this' && w !== 'event') fail(`"${w}" is not a value`);
+    let prop = null;
+    if (src[i] === '.') { i++; prop = word(); }
+    return (el, ev) => {
+      const base = w === 'this' ? el : ev;
+      return prop ? base[prop] : base;
+    };
+  }
+  function list(close) {
+    const items = [];
+    ws();
+    if (src[i] === close) { i++; return items; }
+    for (;;) {
+      items.push(value());
+      ws();
+      if (src[i] === ',') { i++; continue; }
+      if (src[i] === close) { i++; return items; }
+      fail(`expected a comma or ${close}`);
+    }
+  }
+  const steps = [];
+  for (;;) {
+    ws();
+    if (i >= src.length) break;
+    const name = word();
+    ws();
+    if (name === 'return') {
+      if (word() !== 'false') fail('only "return false" is allowed');
+      steps.push({ stop: true });
+    } else {
+      if (!UI_ACTIONS.has(name)) fail(`"${name}" is not in UI_ACTIONS`);
+      if (src[i] !== '(') fail('expected (');
+      i++;
+      steps.push({ name, args: list(')') });
+    }
+    ws();
+    if (src[i] === ';') i++;
+    else if (i < src.length) fail('expected ;');
+  }
+  return steps;
+}
+
+function runUiHandlers(ev) {
+  const attr = 'data-on' + ev.type;
+  let el = ev.target && ev.target.nodeType === 1 ? ev.target : ev.target && ev.target.parentElement;
+  for (; el && el !== document; el = ev.bubbles ? el.parentElement : null) {
+    const src = el.getAttribute(attr);
+    if (src === null) continue;
+    let steps = _uiHandlerCache.get(src);
+    if (!steps) {
+      try { steps = parseUiHandler(src); }
+      catch (e) { console.error(e.message); continue; }
+      _uiHandlerCache.set(src, steps);
+    }
+    for (const s of steps) {
+      if (s.stop) { ev.preventDefault(); continue; }
+      window[s.name].apply(el, s.args.map(f => f(el, ev)));
+    }
+  }
+}
+
+// Capture, so these run before any listener further down, as inline
+// handlers did. toggle does not bubble, capture still sees it.
+for (const t of ['click', 'change', 'input', 'keydown', 'keyup', 'submit', 'toggle'])
+  document.addEventListener(t, runUiHandlers, true);
+
+function runFilterChanged() { RUN_TICKED.clear(); loadAgents(); }
+function bgAppsToggled(el) { if (el.open) loadBgApps(); }
+function tlsKeyup(ev) { if (ev.key === 'Enter') loadTls(); }
+function mapChatKeydown(ev) {
+  if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); mapChatSend(); }
 }
 
 // STOP THE APP
@@ -3950,7 +4210,7 @@ function updateModuleGrid(modules, ms) {
   if (pend) {
     pend.innerHTML = waiting.length
       ? 'Saved in Settings, waiting for a restart: '
-        + waiting.map(p => `<button class="set-link" onclick="openSettingsAt('${escJs(p.anchor)}')">${esc(p.label)}</button>`).join(', ')
+        + waiting.map(p => `<button class="set-link" data-onclick="openSettingsAt('${escJs(p.anchor)}')">${esc(p.label)}</button>`).join(', ')
         + '. Restart AgentalSec to use the new values.'
       : '';
   }
@@ -3992,7 +4252,7 @@ function updateModuleGrid(modules, ms) {
     const waits = (link && link.pending && link.pending.length)
       ? `<div class="module-pending">changed in Settings, waits for a restart</div>` : '';
     const setBtn = link
-      ? `<button class="set-link" onclick="openSettingsAt('${escJs(link.anchor)}')">${off ? 'turn on in Settings' : 'Settings'}</button>`
+      ? `<button class="set-link" data-onclick="openSettingsAt('${escJs(link.anchor)}')">${off ? 'turn on in Settings' : 'Settings'}</button>`
       : '';
     return `<div class="module-tile">
       <span class="dot" style="background:${dot};animation:none;"></span>
@@ -4058,7 +4318,7 @@ async function renderKnownSources() {
   // with a link to the Settings field for any row that takes a key.
   const groups = (_srcCatalog.contacts && _srcCatalog.contacts.groups) || [];
   const setLink = (r, text) => r.settings
-    ? `<button class="set-link" onclick="openSettingsAt('${escJs(r.settings.id)}')">${esc(text)}</button>`
+    ? `<button class="set-link" data-onclick="openSettingsAt('${escJs(r.settings.id)}')">${esc(text)}</button>`
     : '';
   const rows = groups.map(g => {
     const head = `<tr class="grp"><td colspan="5">${esc(g.title)}</td></tr>`;
@@ -4224,9 +4484,9 @@ async function loadImportant() {
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;">
           <button class="btn-approve" style="font-size:10px;"
-                  onclick="promoteFinding(${f.id},this)">Confirm</button>
+                  data-onclick="promoteFinding(${f.id},this)">Confirm</button>
           <button class="btn-deny" style="font-size:10px;"
-                  onclick="rejectFinding(${f.id},this)">Not important</button>
+                  data-onclick="rejectFinding(${f.id},this)">Not important</button>
         </div>
       </div>`).join('');
 
@@ -4251,7 +4511,7 @@ async function loadImportant() {
           </div>
         </div>
         <div class="finding-time">${fmtTime(f.promoted_at||f.found_at)}</div>
-        <button class="btn-dismiss" onclick="demoteFinding(${f.id},this)">remove</button>
+        <button class="btn-dismiss" data-onclick="demoteFinding(${f.id},this)">remove</button>
       </div>`).join('');
 
     list.innerHTML = askBlock + done;
@@ -4308,11 +4568,11 @@ async function loadFindings() {
         <div class="finding-time">${fmtTime(f.found_at)}</div>
         ${f.detection_id ? `<button class="btn-dismiss"
                 title="Mute rule ${esc(f.detection_id)} for ${esc(f.entity_value)} only, with a reason you write. Other rules about it keep reporting. Unmute it on the Detections tab."
-                onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">mute</button>` : ''}
+                data-onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">mute</button>` : ''}
         <button class="btn-dismiss"
                 title="Hide the alerts about ${esc(f.entity_value)}. The same rule will not raise it about this again; other rules still can. Bring it back with Show dismissed."
                 data-type="${esc(f.entity_type)}" data-value="${esc(f.entity_value)}"
-                onclick="dismissFinding('${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">dismiss</button>
+                data-onclick="dismissFinding('${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">dismiss</button>
       </div>`).join('');
   } catch(e) {}
 }
@@ -4399,7 +4659,7 @@ let dismissAllArmed = false;
 let dismissAllTimer = null;
 
 async function dismissAll() {
-  const btn  = document.querySelector('button[onclick="dismissAll()"]');
+  const btn  = document.querySelector('button[data-onclick="dismissAll()"]');
   // Only the Active Findings list; other cards and tabs use .finding-row too.
   const rows = document.querySelectorAll('#findings-list .finding-row');
 
@@ -4680,7 +4940,7 @@ async function loadTimeline() {
       // many times it has fired and whether anybody silenced it.
       badge = `<a href="#" class="tl-jump"
                     title="What ${esc(r.detection_id)} is, and how often it has fired"
-                    onclick="showDetection('${escJs(r.detection_id)}'); return false;"
+                    data-onclick="showDetection('${escJs(r.detection_id)}'); return false;"
                  >${esc(r.detection_id)} →</a>`;
     } else if (r.rule_note) {
       badge = `<span class="tl-nolink" title="${esc(r.rule_note)}">rule unknown</span>`;
@@ -4688,7 +4948,7 @@ async function loadTimeline() {
     if (r.map_target) {
       badge += `<a href="#" class="tl-jump tl-jump-map"
                     title="This address on the Threat Map"
-                    onclick="showMapEndpoint('${escJs(r.map_target)}'); return false;"
+                    data-onclick="showMapEndpoint('${escJs(r.map_target)}'); return false;"
                  >map →</a>`;
     } else if (r.map_note) {
       badge += `<span class="tl-nolink" title="${esc(r.map_note)}">no map</span>`;
@@ -5490,7 +5750,7 @@ async function loadAppearances() {
         <td>${esc(x.known_as || '')}</td>
         <td>${(x.appearances || []).map(a => `<code>${esc(a)}</code>`).join(', ')}</td>
         <td>${(x.appearances || []).map(a =>
-              `<button class="btn" onclick="unmergeDevice('${escJs(a)}',this)">`
+              `<button class="btn" data-onclick="unmergeDevice('${escJs(a)}',this)">`
               + `Unmerge ${esc(a)}</button>`).join(' ')}</td>
       </tr>`).join('');
   } catch (e) {
@@ -5519,7 +5779,7 @@ async function loadSameMac() {
         <td><code>${esc(g.mac)}</code></td>
         <td>${row(g.keep)}</td>
         <td>${g.merge.map(row).join('<br>')}</td>
-        <td><button class="btn" onclick="mergeSameMac(['${escJs(g.mac)}'], this)">Merge</button></td>
+        <td><button class="btn" data-onclick="mergeSameMac(['${escJs(g.mac)}'], this)">Merge</button></td>
       </tr>`).join('');
   } catch (e) {
     box.style.display = 'none';
@@ -5656,8 +5916,8 @@ async function loadEnrollment() {
         <td>${esc(d.hostname || '')}</td>
         <td><input id="name-${escJs(d.ip)}" value="${esc(label)}" placeholder="what is it?"
                    style="width:150px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 6px;font-size:12px">
-            <button class="btn" onclick="nameDevice('${escJs(d.ip)}')">Save</button></td>
-        <td><button class="btn" onclick="setPermanent('${escJs(d.ip)}', true)"
+            <button class="btn" data-onclick="nameDevice('${escJs(d.ip)}')">Save</button></td>
+        <td><button class="btn" data-onclick="setPermanent('${escJs(d.ip)}', true)"
                     title="Say this device should always be present. Only then can its absence mean anything.">Mark permanent</button></td>
       </tr>`;
     }).join('');
@@ -5788,7 +6048,7 @@ async function loadPermanent() {
       const seg = (val, label) => {
         const cur = (on === val);
         return `<button class="btn aon-opt${cur ? ' aon-cur' : ''}"
-          ${cur ? 'disabled aria-pressed="true"' : `onclick="setAlwaysOn('${escJs(d.ip)}', ${val})"`}
+          ${cur ? 'disabled aria-pressed="true"' : `data-onclick="setAlwaysOn('${escJs(d.ip)}', ${val})"`}
           title="${val
             ? (cur ? 'You said this one should be awake, so its absence is a question.'
                    : 'Expect this device awake. Its absence becomes something to explain.')
@@ -5808,7 +6068,7 @@ async function loadPermanent() {
           (p.answered_by_appearances || []).length
             ? `<br><span style="color:var(--text-dim)">as ${p.answered_by_appearances.map(esc).join(', ')}</span>` : ''}</td>
         <td>${driftCell}</td>
-        <td><button class="btn" onclick="setPermanent('${escJs(d.ip)}', false)"
+        <td><button class="btn" data-onclick="setPermanent('${escJs(d.ip)}', false)"
                     title="Stop expecting this device. Its record and fingerprint are kept.">Stand down</button></td>
       </tr>`;
     }).join('');
@@ -6189,14 +6449,14 @@ function renderMapPanel(p) {
                           ? ' (no ASN database installed)' : '') + '.</div>');
 
   h += '<div class="mp-btns">'
-     + '<button class="mp-btn chat" onclick="openMapChat(\'' + escJs(ip) + '\')">Chat about this</button>'
-     + '<button class="mp-btn" onclick="mapBlock(\'' + escJs(ip) + '\', true)" title="'
+     + '<button class="mp-btn chat" data-onclick="openMapChat(\'' + escJs(ip) + '\')">Chat about this</button>'
+     + '<button class="mp-btn" data-onclick="mapBlock(\'' + escJs(ip) + '\', true)" title="'
      + (a.block_address === 'router'
          ? 'Blocks this address at the router, for every device in the home.'
          : 'Blocks this address on this machine only. ' + routerOff) + '">'
      + (a.block_address === 'router' ? 'Block for the whole home' : 'Block on this machine')
      + '</button>'
-     + '<button class="mp-btn" onclick="mapBlock(\'' + escJs(ip) + '\', false)">Unblock</button>'
+     + '<button class="mp-btn" data-onclick="mapBlock(\'' + escJs(ip) + '\', false)">Unblock</button>'
      + '</div>';
 
   const names = p.names || [];
@@ -6205,10 +6465,10 @@ function renderMapPanel(p) {
       '<div class="mp-row">' + esc(n)
       + '<div class="mp-btns"><button class="mp-btn" '
       + (a.block_domain ? '' : 'disabled title="' + routerOff + '" ')
-      + 'onclick="mapSinkhole(\'' + escJs(n) + '\', true)">Block this domain</button>'
+      + 'data-onclick="mapSinkhole(\'' + escJs(n) + '\', true)">Block this domain</button>'
       + '<button class="mp-btn" '
       + (a.block_domain ? '' : 'disabled title="' + routerOff + '" ')
-      + 'onclick="mapSinkhole(\'' + escJs(n) + '\', false)">Unblock</button></div></div>'
+      + 'data-onclick="mapSinkhole(\'' + escJs(n) + '\', false)">Unblock</button></div></div>'
     ).join('')
     : '<div class="mp-sub">No name was seen for this address.</div>';
 
@@ -6227,7 +6487,7 @@ function renderMapPanel(p) {
        + '</div>' + _usualNote(p, key)
        + '<div class="mp-btns"><button class="mp-btn" '
        + (a.cut_device ? '' : 'disabled title="' + routerOff + '" ')
-       + 'onclick="mapCutDevice(\'' + escJs(x.mac || '') + '\', \'' + escJs(x.ip) + '\', \''
+       + 'data-onclick="mapCutDevice(\'' + escJs(x.mac || '') + '\', \'' + escJs(x.ip) + '\', \''
        + escJs(x.name || x.ip) + '\')">Cut off this device</button></div></div>';
   });
   if (!procs.length && !devs.length) {
@@ -7042,8 +7302,8 @@ async function loadQuestions() {
         : `
           <div class="row" style="gap:8px;margin-top:10px;">
             <input class="input" id="qa-${q.id}" placeholder="What is it?" style="flex:1;">
-            <button class="btn" onclick="answerQuestion(${q.id}, false)">Tell it</button>
-            <button class="btn" onclick="answerQuestion(${q.id}, true)">I do not know either</button>
+            <button class="btn" data-onclick="answerQuestion(${q.id}, false)">Tell it</button>
+            <button class="btn" data-onclick="answerQuestion(${q.id}, true)">I do not know either</button>
           </div>
           <div class="q-block" style="margin-top:6px;font-size:11px;">
             "I do not know either" is a real answer. It stops the question for
@@ -7385,8 +7645,8 @@ function renderQueueCard(container, r) {
     + '</div>'
     + APPROVAL_WARNING
     + '<div class="perm-btns">'
-      + '<button class="btn-approve" onclick="approveQueued(' + r.id + ',this)">Approve and run</button>'
-      + '<button class="btn-deny"    onclick="denyQueued(' + r.id + ',this)">Deny</button>'
+      + '<button class="btn-approve" data-onclick="approveQueued(' + r.id + ',this)">Approve and run</button>'
+      + '<button class="btn-deny"    data-onclick="denyQueued(' + r.id + ',this)">Deny</button>'
     + '</div>';
 
   wrap.appendChild(div);
@@ -7526,11 +7786,11 @@ async function loadDailyReports() {
       { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const colour = DAILY_COLOURS[r.status] || 'var(--text-dim)';
     const pick = dismissedView
-      ? '<button class="btn" onclick="restoreDailyReport(' + r.id + ')" '
+      ? '<button class="btn" data-onclick="restoreDailyReport(' + r.id + ')" '
         + 'title="Show this report in the list again.">restore</button>'
       : '<input type="checkbox" class="daily-tick" data-id="' + r.id + '"'
         + (DAILY_TICKED.has(r.id) ? ' checked' : '')
-        + ' onchange="tickDailyReport(' + r.id + ', this.checked)" '
+        + ' data-onchange="tickDailyReport(' + r.id + ', this.checked)" '
         + 'title="Tick to dismiss this report with the button above.">';
     return '<div class="row" style="gap:8px;align-items:flex-start;margin:8px 0;">'
       + '<div style="padding-top:2px;">' + pick + '</div>'
@@ -7542,7 +7802,7 @@ async function loadDailyReports() {
       + '</span><span class="finding-desc">' + esc(r.headline || '') + '</span>'
       + '</summary>'
       + '<div class="row" style="margin:8px 0;"><button class="btn" '
-      + 'onclick="printDailyReport(' + r.id + ')" title="Opens the print dialog; '
+      + 'data-onclick="printDailyReport(' + r.id + ')" title="Opens the print dialog; '
       + 'choose Save as PDF there for a file.">Print / Save as PDF</button></div>'
       + '<iframe id="daily-frame-' + r.id + '" sandbox="allow-same-origin allow-modals" '
       + 'style="width:100%;height:600px;border:0;border-radius:6px;background:#fff;"></iframe>'
@@ -8115,7 +8375,7 @@ function reportCard(r) {
       + '<label style="display:inline-flex;align-items:center;gap:6px;margin-right:10px;cursor:pointer;" '
       + 'title="Tick to dismiss this report. Nothing is deleted.">'
       + '<input type="checkbox" class="agent-tick" value="' + esc(String(r.id))
-      + '"' + ticked + ' onchange="onAgentTick(this)"></label>'
+      + '"' + ticked + ' data-onchange="onAgentTick(this)"></label>'
       + '<span style="color:' + colour + ';">' + esc(r.verdict || 'no verdict')
       + '</span>'
       + ' <span style="color:var(--text-dim);">#' + esc(String(r.id))
@@ -8128,7 +8388,7 @@ function reportCard(r) {
             + esc(r.dismissed_at ? fmtTime(r.dismissed_at) : '')
             + (r.dismissed_by ? ' by ' + esc(r.dismissed_by) : '')
             + '</span> <button class="btn" style="padding:1px 7px;font-size:11px;" '
-            + 'onclick="restoreReport(' + Number(r.id) + ')" '
+            + 'data-onclick="restoreReport(' + Number(r.id) + ')" '
             + 'title="Put this report back on the list. It was never deleted.">restore</button>'
           : '')
       // THE PER-ROW DISMISS BUTTON AS WELL AS THE CHECKBOX, because the owner
@@ -8137,7 +8397,7 @@ function reportCard(r) {
       // finished reading. Both call the same endpoint.
       + (dismissed ? '' :
             ' <button class="btn" style="padding:1px 7px;font-size:11px;" '
-            + 'onclick="dismissOneReport(' + Number(r.id) + ')" '
+            + 'data-onclick="dismissOneReport(' + Number(r.id) + ')" '
             + 'title="Hide this one report from the list. Nothing is deleted: '
             + 'the row, its verdict, its evidence and its coverage note all '
             + 'stay, and the dismissal is recorded.">dismiss</button>')
@@ -8238,10 +8498,10 @@ function runRow(r, showingDismissed) {
   const id = Number(r.id);
   const pick = showingDismissed
     ? '<button class="btn" style="padding:1px 7px;font-size:11px;margin-right:8px;" '
-      + 'onclick="restoreRun(' + id + ')" title="Show this line again.">restore</button>'
+      + 'data-onclick="restoreRun(' + id + ')" title="Show this line again.">restore</button>'
     : '<input type="checkbox" class="run-tick" value="' + id + '"'
       + (RUN_TICKED.has(id) ? ' checked' : '')
-      + ' onchange="tickRun(' + id + ', this.checked)" style="margin-right:8px;" '
+      + ' data-onchange="tickRun(' + id + ', this.checked)" style="margin-right:8px;" '
       + 'title="Tick to dismiss this line. Nothing is deleted.">';
   return '<div class="q-card" style="margin-bottom:8px;">'
     + '<div style="font-size:12px;line-height:1.6;">' + pick
@@ -8359,7 +8619,7 @@ function renderDetections() {
           '<div class="det-muted">Muted for '
           + esc(x.entity_value === '*' ? 'every address' : x.entity_value)
           + (x.reason ? ', because: ' + esc(x.reason) : '')
-          + '<br><button class="btn-unmute" onclick="unsuppressDetection('
+          + '<br><button class="btn-unmute" data-onclick="unsuppressDetection('
           + "'" + esc(r.detection_id) + "','" + esc(x.entity_type) + "','"
           + esc(x.entity_value) + "'" + ')">Unmute</button></div>'
         ).join('')
@@ -8367,7 +8627,7 @@ function renderDetections() {
       : (r.kind === 'action_record' || r.retired
           ? '<span class="det-off">Cannot be muted</span>'
           : '<span class="det-off">Not muted</span> '
-            + '<button class="btn-mute" onclick="suppressDetection('
+            + '<button class="btn-mute" data-onclick="suppressDetection('
             + "'" + esc(r.detection_id) + "'" + ')">Mute</button>');
 
     // A page that could not count shows "-" rather than a zero it cannot back.
@@ -8574,7 +8834,7 @@ function renderExpTickets(list) {
           + ` stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 26 26)"/>`;
     const seen = e.broken_at && !(e.acknowledged_at && e.acknowledged_at >= e.broken_at);
     const ack = seen
-      ? `<button class="btn" style="margin-top:8px;" onclick="ackExpectation(${Number(e.id)})">I have seen this</button>` : '';
+      ? `<button class="btn" style="margin-top:8px;" data-onclick="ackExpectation(${Number(e.id)})">I have seen this</button>` : '';
     // A second DHCP server after a router swap: the owner can trust the new one.
     const dhcp = e.kind === 'same_gateway' && e.state === 'broken'
       ? [...new Set(((e.evidence || {}).findings || [])
@@ -9280,7 +9540,7 @@ async function loadSuppressions() {
         <td${unearned ? ' style="color:var(--red,#e5534b);font-weight:600;" title="Suppressed on fewer distinct sessions than the confidence rule requires"' : ''}>${sessions}${unearned ? ' &#9888;' : ''}</td>
         <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.model_notes||'')}">${esc((r.model_notes||'').substring(0,70))}</td>
         <td>${fmtTime(r.last_updated)}</td>
-        <td><button class="btn" onclick="revertSuppression('${escJs(r.entity_type)}','${escJs(r.entity_value)}','${escJs(r.behavior_key)}',this)">Resume alerts</button></td>
+        <td><button class="btn" data-onclick="revertSuppression('${escJs(r.entity_type)}','${escJs(r.entity_value)}','${escJs(r.behavior_key)}',this)">Resume alerts</button></td>
       </tr>`;
     }).join('');
   } catch(e) {}
@@ -9314,7 +9574,7 @@ async function loadDismissed() {
         <td style="max-width:260px;font-size:11px;">${esc(r.reason||'no reason recorded')}</td>
         <td${byModel ? ' style="color:var(--red)"' : ''}>${esc(r.dismissed_by||'unknown')}</td>
         <td>${fmtTime(r.dismissed_at)}</td>
-        <td><button class="btn" onclick="undismissEntity('${escJs(r.entity_type)}','${escJs(r.entity_value)}',this)">Resume monitoring</button></td>
+        <td><button class="btn" data-onclick="undismissEntity('${escJs(r.entity_type)}','${escJs(r.entity_value)}',this)">Resume monitoring</button></td>
       </tr>`;
     }).join('');
   } catch(e) {}
@@ -9506,10 +9766,10 @@ async function loadRetention() {
     // tool descriptions did in 27.3.
     const presets = (p && p.presets) || [];
     btns.innerHTML = presets.map(x =>
-      `<button class="btn" onclick="setRetention('${escJs(x.key)}')"
+      `<button class="btn" data-onclick="setRetention('${escJs(x.key)}')"
          title="${esc(x.label)}. ${esc(x.roughly)}">${esc(x.trigger_human)}</button>`
     ).join('') +
-      `<button class="btn" onclick="setRetentionOff()"
+      `<button class="btn" data-onclick="setRetentionOff()"
          title="Never prune automatically. Nothing is deleted until you run prune_db.py yourself.">Never prune</button>`;
   } catch (e) {
     sum.textContent = 'Could not read the database size: ' + e;
@@ -9564,7 +9824,7 @@ async function loadExpectedPorts() {
         <td>${esc(r.reason || 'no reason recorded')}</td>
         <td style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">
           ${esc((r.declared_by || 'unknown'))}, ${esc(String(r.declared_at || '').slice(0, 19))}</td>
-        <td><button class="btn-dismiss" onclick="withdrawExpectedPort('${escJs(r.ip)}', ${Number(r.port)})"
+        <td><button class="btn-dismiss" data-onclick="withdrawExpectedPort('${escJs(r.ip)}', ${Number(r.port)})"
               title="This port raises findings again. Findings already cleared stay cleared.">Withdraw</button></td>
       </tr>`).join('');
   } catch (e) {
@@ -9807,11 +10067,11 @@ function renderKeys() {
           <input class="input" type="password" id="key-${esc(k.env)}"
                  placeholder="${k.present ? 'paste a new value to replace it' : 'paste the key'}"
                  style="width:340px;" autocomplete="off">
-          <button class="btn" onclick="saveKey('${escJs(k.env)}')">Save</button>
-          ${k.generate ? `<button class="btn" onclick="generateAppKey()"
+          <button class="btn" data-onclick="saveKey('${escJs(k.env)}')">Save</button>
+          ${k.generate ? `<button class="btn" data-onclick="generateAppKey()"
                             title="64 random hex characters. A person asked to invent one invents a bad one.">Generate one</button>` : ''}
           ${k.present ? `<button class="btn danger" id="clear-${esc(k.env)}"
-                            onclick="clearKey('${escJs(k.env)}')"
+                            data-onclick="clearKey('${escJs(k.env)}')"
                             title="Remove it from .env. Revoking should not need a text editor, and it takes two clicks so it is not one.">Clear</button>` : ''}
           <span style="font-family:var(--mono);font-size:10px;">${effect}</span>
         </div>
@@ -9950,8 +10210,8 @@ function renderConfigFields() {
            </div>` : ''}
         <div class="row">
           ${control}
-          <button class="btn" onclick="saveConfigField('${escJs(f.path)}','${escJs(f.type)}')">Save</button>
-          ${f.testable ? `<button class="btn" onclick="testProvider()">Test</button>` : ''}
+          <button class="btn" data-onclick="saveConfigField('${escJs(f.path)}','${escJs(f.type)}')">Save</button>
+          ${f.testable ? `<button class="btn" data-onclick="testProvider()">Test</button>` : ''}
           ${f.effect === 'live'
               ? `<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">applies straight away</span>`
               : ''}
@@ -10063,8 +10323,8 @@ async function loadReviewQueue() {
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
           <div class="finding-time">${fmtTime(r.detected_at)}</div>
           <div class="row" style="gap:6px;">
-            <button class="btn" onclick="resolveReview(${Number(r.id)},'normal',this)">Normal</button>
-            <button class="btn primary" onclick="resolveReview(${Number(r.id)},'threat',this)">Threat</button>
+            <button class="btn" data-onclick="resolveReview(${Number(r.id)},'normal',this)">Normal</button>
+            <button class="btn primary" data-onclick="resolveReview(${Number(r.id)},'threat',this)">Threat</button>
           </div>
         </div>
       </div>`).join('');
@@ -10555,7 +10815,7 @@ function renderBgApps() {
   rows.innerHTML = act.map((a, i) => {
     const tierCls = a.tier === 'safe_to_block' ? 'k-green' : 'k-amber';
     const btns = (a.allowed || []).map(x =>
-      '<button class="btn" onclick="bgAsk(' + i + ',\'' + x + '\')">' +
+      '<button class="btn" data-onclick="bgAsk(' + i + ',\'' + x + '\')">' +
       (x === 'block' ? 'Block' : 'Disable') + '</button>').join(' ');
     const wn = a.why_not || {};
     const why = [wn.disable && ('Disable: ' + wn.disable), wn.block && a.tier !== 'safe_to_block' && ('Block: ' + wn.block)]
@@ -10593,8 +10853,8 @@ async function bgAsk(i, action) {
   bgPending = { action: action, owner_kind: a.owner_kind, owner_name: a.owner_name };
   box.innerHTML = '<b>' + (action === 'block' ? 'Block ' : 'Disable ') + esc(a.display_name || a.owner_name) + '?</b>' +
     '<pre style="white-space:pre-wrap;margin:8px 0">' + esc(p.effect) + '</pre>' +
-    '<button class="btn primary" onclick="bgConfirm()">Yes, do it</button> ' +
-    '<button class="btn" onclick="bgCancel()">Cancel</button>';
+    '<button class="btn primary" data-onclick="bgConfirm()">Yes, do it</button> ' +
+    '<button class="btn" data-onclick="bgCancel()">Cancel</button>';
 }
 
 function bgCancel() {
@@ -10640,7 +10900,7 @@ async function loadBgChanges() {
       (c.undo_error ? '<br><span style="color:var(--red)">' + esc(c.undo_error) + '</span>' : '') +
       (c.note ? '<br><span style="color:var(--amber)">' + esc(c.note) + '</span>' : '') + '</td>' +
     '<td>' + esc(c.state) + '</td>' +
-    '<td>' + (c.can_undo ? '<button class="btn" onclick="bgUndo(' + Number(c.id) + ')">Undo</button>' : '') + '</td>' +
+    '<td>' + (c.can_undo ? '<button class="btn" data-onclick="bgUndo(' + Number(c.id) + ')">Undo</button>' : '') + '</td>' +
     '</tr>').join('');
 }
 
@@ -10693,13 +10953,13 @@ function renderProcessBar() {
     const pct = (n / total) * 100;
     return `<div class="t-${level}" style="width:${pct}%"
                  title="${esc(TRUST_LABEL[level])}"
-                 onclick="toggleTrust('${level}')">${pct > 6 ? n : ''}</div>`;
+                 data-onclick="toggleTrust('${level}')">${pct > 6 ? n : ''}</div>`;
   }).join('');
 
   document.getElementById('proc-key').innerHTML = order.map(level => {
     const n = counts[level] || 0;
     const off = procHidden[level] ? ' off' : '';
-    return `<span class="${off}" onclick="toggleTrust('${level}')">
+    return `<span class="${off}" data-onclick="toggleTrust('${level}')">
               <i class="p-${level}"></i>${n} ${esc(TRUST_LABEL[level])}
             </span>`;
   }).join('');
@@ -10784,7 +11044,7 @@ function renderProcesses() {
         <td>${esc(p.username || '')}</td>
         <td>${sigText}</td>
         <td>${pathCell}<br><span class="p-cmd">${esc((p.cmdline || '').slice(0, 300))}</span></td>
-        <td><button class="btn" onclick="inspectProcess(${p.pid}, this)">inspect</button></td>
+        <td><button class="btn" data-onclick="inspectProcess(${p.pid}, this)">inspect</button></td>
       </tr>
       <tr id="pdet-${p.pid}" style="display:none"><td colspan="6" class="p-detail"></td></tr>`;
   }).join('');
@@ -10875,8 +11135,8 @@ function renderPermissionCard(container, card, lost) {
        </span></div>`
     : `${APPROVAL_WARNING}
     <div class="perm-btns">
-      <button class="btn-approve" onclick="approveAction('${escJs(card.call_id)}',this)">Approve</button>
-      <button class="btn-deny"    onclick="denyAction('${escJs(card.call_id)}',this)">Deny</button>
+      <button class="btn-approve" data-onclick="approveAction('${escJs(card.call_id)}',this)">Approve</button>
+      <button class="btn-deny"    data-onclick="denyAction('${escJs(card.call_id)}',this)">Deny</button>
     </div>`;
   div.innerHTML = `
     <div class="perm-title">${title}</div>
@@ -10984,14 +11244,9 @@ async function denyAction(callId, btn) {
 // The fix belongs here, at the point of interpolation, in the escape that
 // matches the context being interpolated into.
 //
-// The payload this closes reads window.__AGENTAL_BOOTSTRAP__.api_key, which
-// unlocks every /api/* route including the whole tool surface. The permission
-// dialog is no defence once the page rendering it is controlled.
-//
-// This is still only the tactical half. S1(b), removing the inline onclick
-// handlers and adding a CSP, is the structural fix and is outstanding. Until
-// it lands, ANY new value interpolated into a handler attribute must use
-// escJs(), and any new inline handler is a new instance of this bug.
+// Handlers now sit in data-on* attributes that are parsed, never run as
+// code, and the CSP forbids inline script, so escJs() is the second line of
+// defence here, not the only one. Keep using it for handler arguments.
 
 // LIVE LAN TAB. Reads /api/lan/live every 5 seconds while the tab is open,
 // and the selected device's detail with it. The app reads the router every 30. Handlers are attached with
@@ -11426,13 +11681,13 @@ init();
 <div id="map-chat" hidden role="dialog" aria-label="Chat about a destination">
   <div id="map-chat-head" title="Drag to move. Drag the bottom right corner to resize.">
     <span id="map-chat-title">Chat</span>
-    <button onclick="mapChatMin()" title="Minimise">&minus;</button>
-    <button onclick="mapChatClose()" title="Close">&times;</button>
+    <button data-onclick="mapChatMin()" title="Minimise">&minus;</button>
+    <button data-onclick="mapChatClose()" title="Close">&times;</button>
   </div>
   <div id="map-chat-log"></div>
-  <form id="map-chat-form" onsubmit="mapChatSend(); return false;">
+  <form id="map-chat-form" data-onsubmit="mapChatSend(); return false;">
     <textarea id="map-chat-input" placeholder="Ask about this destination"
-      onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); mapChatSend(); }"></textarea>
+      data-onkeydown="mapChatKeydown(event)"></textarea>
     <button class="mp-btn chat" id="map-chat-send" type="submit">Send</button>
   </form>
 </div>

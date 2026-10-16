@@ -1,6 +1,7 @@
 # api/server.py
 # AgentalSec V2, Flask app factory
 
+import ipaddress
 import logging
 
 from flask import Flask
@@ -52,6 +53,15 @@ def max_body_bytes(config: dict) -> int:
     return int(mb * 1024 * 1024)
 
 
+def _is_loopback(bind: str) -> bool:
+    if bind == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(bind.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
 def allowed_hosts(config: dict) -> set:
     """
     The Host header values this server will answer to.
@@ -76,45 +86,48 @@ def allowed_hosts(config: dict) -> set:
         "host_check_disabled_behind_proxy": true
     }
 
-    One setting was not enough. `allowed_hosts: null` is reachable by
-    accident, a JSON template with a null in it, a config generator that
-    writes null for "unset", an editor that helpfully empties a field, and
-    the Host check is the only control that makes embedding the dashboard's
-    API key in the page safe. A silent failure whose consequence is the key
-    should not be one keystroke away from the default. The second flag has no
-    other purpose and no plausible accidental value, so setting it is a
-    statement of intent rather than a side effect.
+    One setting was not enough: `allowed_hosts: null` is reachable by
+    accident, a template or an editor that writes null for "unset". The
+    second flag has no other purpose, so setting it is a statement of intent.
 
-    null WITHOUT the flag is treated as a mistake: the check stays on, derived
-    as normal, and the reason is logged at error level.
+    And the server must listen on loopback only, so the proxy on this machine
+    is the only way in. Bound wider, clients could reach it around the proxy
+    with the check off, so the check stays on and that is logged as an error.
+    null WITHOUT the flag is treated as a mistake the same way.
     """
     flask_cfg = config.get("flask") or {}
+    bind = str(flask_cfg.get("host", "127.0.0.1")).strip().lower()
 
     if "allowed_hosts" in flask_cfg and flask_cfg["allowed_hosts"] is None:
         # `is True` on purpose. A truthy string or a 1 is exactly the kind of
         # near-miss this branch exists to refuse.
         if flask_cfg.get("host_check_disabled_behind_proxy") is True:
-            logger.warning(
-                "flask.allowed_hosts is null and "
-                "flask.host_check_disabled_behind_proxy is true, Host header "
-                "checking is OFF. The dashboard's API key is embedded in the "
-                "page, so a rebinding attack can read it. This is only safe "
-                "behind a proxy that validates Host itself."
+            if _is_loopback(bind):
+                logger.warning(
+                    "flask.allowed_hosts is null and "
+                    "flask.host_check_disabled_behind_proxy is true, Host "
+                    "header checking is OFF. This is only safe behind a proxy "
+                    "on this machine that validates Host itself."
+                )
+                return set()
+            logger.error(
+                f"flask.allowed_hosts is null and the proxy flag is set, but "
+                f"Flask binds to {bind}, so clients can reach it without the "
+                f"proxy. Host header checking stays ON. Bind to 127.0.0.1 "
+                f"behind the proxy to turn it off."
             )
-            return set()
-
-        logger.error(
-            "flask.allowed_hosts is null but "
-            "flask.host_check_disabled_behind_proxy is not true, so Host "
-            "header checking stays ON and the names below are derived as "
-            "usual. Disabling the check needs both settings. If the dashboard "
-            "returns 403, add the name you browse to under allowed_hosts "
-            "rather than turning the check off."
-        )
+        else:
+            logger.error(
+                "flask.allowed_hosts is null but "
+                "flask.host_check_disabled_behind_proxy is not true, so Host "
+                "header checking stays ON and the names below are derived as "
+                "usual. Disabling the check needs both settings. If the "
+                "dashboard returns 403, add the name you browse to under "
+                "allowed_hosts rather than turning the check off."
+            )
 
     hosts = set(LOOPBACK_NAMES)
 
-    bind = str(flask_cfg.get("host", "127.0.0.1")).strip().lower()
     # 0.0.0.0 / :: are bind wildcards, not names a client ever sends.
     if bind and bind not in {"0.0.0.0", "::", ""}:
         hosts.add(bind)

@@ -282,13 +282,15 @@ check("boot never calls the pruner",
 # retention and nothing on screen would say so.
 check("Ctrl+C goes through it", "_clean_shutdown(" in main_src.split(
       "def handle_shutdown", 1)[-1], True)
+check("and so does closing the launcher's terminal",
+      "signal.signal(signal.SIGHUP, handle_shutdown)" in main_src, True)
 # PROC-14. A second signal must not exit through the first one's cleanup.
 handler = main_src.split("def handle_shutdown", 1)[-1].split("\n    def ", 1)[0]
 check("only the call that ran the shutdown exits",
       'if _clean_shutdown("Shutdown signal received"):' in handler, True)
 check("and the second ask returns False",
       "return False" in main_src.split("def _clean_shutdown", 1)[-1].split(
-          "Running final rollup", 1)[0], True)
+          "Stopping the writers", 1)[0], True)
 check("and so does the dashboard Stop button",
       "_clean_shutdown(" in main_src.split(
           "def _shutdown_from_dashboard", 1)[-1], True)
@@ -302,6 +304,17 @@ check("every writer is stopped before the prune",
 for stop in ("_inc.stop()", "_acts.stop()", "_duty.stop()"):
     check(f"{stop} comes before the prune",
           shutdown.index(stop) < shutdown.index("retention.run_if_due"), True)
+check("and before the final rollup, which lost its writes to them",
+      shutdown.index("_quiet_writers()") < shutdown.index("shutdown_rollup"),
+      True)
+quiet = main_src.split("def _quiet_writers", 1)[-1].split("def _clean_shutdown", 1)[0]
+check("the loops main.py owns are told to stop", "_LOOPS_STOP.set()" in quiet, True)
+for name in ("presence-sweeper", "port-owner-sweeper", "port-scanner-clock",
+             "dns-importer"):
+    body = main_src.split(f'name="{name}"', 1)[0].rsplit("def loop():", 1)[-1]
+    check(f"{name} waits on the stop signal, not a bare sleep",
+          "while not _LOOPS_STOP.is_set():" in body
+          and "time.sleep(" not in body, True)
 check("the live LAN monitor is one of them",
       "lan_live" in main_src.split("def _quiet_writers", 1)[-1].split(
           "def _clean_shutdown", 1)[0], True)

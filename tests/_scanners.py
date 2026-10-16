@@ -143,6 +143,25 @@ def _closure(names: list) -> set:
     return seen
 
 
+def _install_paths() -> list:
+    """Every site directory holding one of the app's packages. The user site
+    alone missed the copies the distribution installs under /usr/lib."""
+    paths = set()
+    for n in _closure(_requirement_names()):
+        try:
+            paths.add(str(importlib.metadata.distribution(n).locate_file("")))
+        except importlib.metadata.PackageNotFoundError:
+            pass
+    return sorted(paths) or [site.getusersitepackages()]
+
+
+def _loaded_version(name: str):
+    try:
+        return importlib.metadata.distribution(name).version
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
 def pip_audit(installed: bool = False) -> list:
     """requirements.txt as pip would install it today, or with installed=True
     the versions on this machine, limited to what the app needs."""
@@ -150,7 +169,9 @@ def pip_audit(installed: bool = False) -> list:
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "a.json")
         if installed:
-            cmd = [exe, "--path", site.getusersitepackages()]
+            cmd = [exe]
+            for path in _install_paths():
+                cmd += ["--path", path]
         else:
             cmd = [exe, "-r", "requirements.txt"]
         p = _run(cmd + ["-f", "json", "-o", out, "--progress-spinner", "off"],
@@ -163,6 +184,10 @@ def pip_audit(installed: bool = False) -> list:
     for dep in data.get("dependencies", []):
         name = re.sub(r"[-_.]+", "-", dep["name"].lower())
         if keep is not None and name not in keep:
+            continue
+        # A second, shadowed copy in another site directory is never
+        # imported, so only the version Python loads counts.
+        if keep is not None and dep.get("version") != _loaded_version(name):
             continue
         for v in dep.get("vulns", []):
             found.append({"tool": "pip-audit", "rule": v["id"], "path": name,

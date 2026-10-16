@@ -1016,6 +1016,11 @@ def _linux_targets(config: dict) -> list[dict]:
     return normalized
 
 
+# Set at shutdown. The loops below wait on it instead of sleeping, so they
+# stop writing before the final rollup and retention need the database.
+_LOOPS_STOP = threading.Event()
+
+
 def _start_presence_sweeper(config: dict, network_scanner, session_id: str) -> None:
     """
     Sweep on a fixed tick, on a daemon thread, for as long as the app runs.
@@ -1043,12 +1048,12 @@ def _start_presence_sweeper(config: dict, network_scanner, session_id: str) -> N
     interval, interval_key = ns.sweep_interval_seconds(config)
 
     def loop():
-        while True:
+        while not _LOOPS_STOP.is_set():
             try:
                 network_scanner.sweep_presence(session_id)
             except Exception as e:
                 logger.error(f"Presence sweep error: {e}")
-            time.sleep(interval)
+            _LOOPS_STOP.wait(interval)
 
     threading.Thread(target=loop, name="presence-sweeper", daemon=True).start()
     logger.info(f"Presence sweeper started, every {interval // 60} minute(s) "
@@ -1115,7 +1120,7 @@ def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
 
     def loop():
         first = True
-        while True:
+        while not _LOOPS_STOP.is_set():
             try:
                 result = port_owner.sweep_now(
                     session_id,
@@ -1138,7 +1143,7 @@ def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
             except Exception as e:                           # noqa: BLE001
                 logger.error(f"Portless listener check error: {e}")
             first = False
-            time.sleep(interval)
+            _LOOPS_STOP.wait(interval)
 
     t = threading.Thread(target=loop, name="port-owner-sweeper", daemon=True)
     t.start()
@@ -1228,7 +1233,7 @@ def _start_port_scanner_clock(config: dict, modules: dict,
 
     def loop():
         first = True
-        while True:
+        while not _LOOPS_STOP.is_set():
             try:
                 last = ps.last_self_scan_at(ps.SELF_SCAN_TARGET)
                 due, waited = ps.clock_due(last, interval)
@@ -1240,7 +1245,7 @@ def _start_port_scanner_clock(config: dict, modules: dict,
             except Exception as e:                           # noqa: BLE001
                 logger.error(f"Port scanner clock error: {e}")
             first = False
-            time.sleep(wake)
+            _LOOPS_STOP.wait(wake)
 
     threading.Thread(target=loop, name="port-scanner-clock",
                      daemon=True).start()
@@ -1299,7 +1304,7 @@ def _start_dns_importer(config: dict, dns_monitor, session_id: str) -> None:
     def loop():
         catchup = 0
         waiting_said = False
-        while True:
+        while not _LOOPS_STOP.is_set():
             try:
                 # Waiting for a router or a resolver file is not a failure.
                 why = idle()
@@ -1307,7 +1312,7 @@ def _start_dns_importer(config: dict, dns_monitor, session_id: str) -> None:
                     if not waiting_said:
                         logger.info(f"DNS importer: {why}.")
                         waiting_said = True
-                    time.sleep(interval)
+                    _LOOPS_STOP.wait(interval)
                     continue
                 waiting_said = False
                 result = dns_monitor.import_once(config)
@@ -1343,7 +1348,7 @@ def _start_dns_importer(config: dict, dns_monitor, session_id: str) -> None:
             except Exception as e:
                 live.failed(e)
                 logger.error(f"DNS import error: {e}")
-            time.sleep(interval)
+            _LOOPS_STOP.wait(interval)
 
     t = threading.Thread(target=loop, name="dns-importer", daemon=True)
     t.start()
@@ -1673,7 +1678,7 @@ def _launch_browser(url: str) -> None:
         f"Open {url} yourself.")
 
 
-def _open_browser_when_ready(host: str, port: int) -> None:
+def _open_browser_when_ready(host: str, port: int, api_key: str = "") -> None:
     """
     Open the dashboard once it actually answers, not after a fixed sleep.
 
@@ -1700,7 +1705,22 @@ def _open_browser_when_ready(host: str, port: int) -> None:
             f"http://{host}:{port} yourself to check.")
         return
 
-    _launch_browser(f"http://{host}:{port}")
+    url = f"http://{host}:{port}"
+    if api_key:
+        # A one-time link that signs the browser in, passed through a private
+        # page so it is not on the browser's command line for every account
+        # here to read.
+        from api import dashboard_session as ds
+        account = _real_user_account()
+        try:
+            url = "file://" + ds.write_opener(
+                f"{url}/open?t={ds.open_link_token(api_key)}",
+                owner_uid=account[3] if account else None)
+        except OSError as e:
+            logger.warning(f"Could not write the opening page ({e}). Open "
+                           f"{url} and paste the app key there.")
+    _launch_browser(url)
+
 
 
 def _socket_inodes_for_port(port: int) -> list:
@@ -2431,6 +2451,7 @@ def main(argv=None):
             sensor_watch.stop()
         except Exception as e:
             logger.warning(f"Sensor watch did not stop cleanly: {e}")
+        _LOOPS_STOP.set()
         try:
             from tools import lan_live
             if lan_live.get() is not None:
@@ -2474,7 +2495,7 @@ def main(argv=None):
                 return False
             _shutdown_done[0] = True
 
-        logger.info(f"{reason}. Running final rollup...")
+        logger.info(f"{reason}. Stopping the writers, then the final rollup and retention...")
 
         # FIRST, before anything slow. Approval cards have no time cap, so a
         # card left open on a screen would otherwise hold its chat thread in
@@ -2484,11 +2505,6 @@ def main(argv=None):
             _al.begin_shutdown()
         except Exception as e:
             logger.warning(f"Could not release open permission cards: {e}")
-
-        try:
-            rollup_engine.shutdown_rollup()
-        except Exception as e:
-            logger.error(f"Final rollup failed: {e}")
 
         # The enrichment worker holds a write handle between jobs, so it stops
         # before retention touches the file.
@@ -2541,9 +2557,14 @@ def main(argv=None):
         except Exception as e:
             logger.warning(f"Duty loop did not stop cleanly: {e}")
 
-        # Every writer stops before retention, or its saves fail with
-        # "database is locked" while the prune and VACUUM hold the file.
+        # Every writer stops before the final rollup and retention, or they
+        # and the writers fail with "database is locked" on each other.
         _quiet_writers()
+
+        try:
+            rollup_engine.shutdown_rollup()
+        except Exception as e:
+            logger.error(f"Final rollup failed: {e}")
 
         # RETENTION RUNS HERE AND NOWHERE ELSE, once nothing else writes.
         # Payload rows are pruned first so the VACUUM reclaims their space
@@ -2596,6 +2617,9 @@ def main(argv=None):
 
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
+    # Closing the launcher's terminal sends SIGHUP. Unhandled, it killed the
+    # app in the middle of a shutdown, before retention ran.
+    signal.signal(signal.SIGHUP, handle_shutdown)
 
     # the dashboard.
     from api.server import create_app
@@ -2615,7 +2639,8 @@ def main(argv=None):
 
     if auto_browser:
         threading.Thread(target=_open_browser_when_ready,
-                         args=(host, port), name="open-browser",
+                         args=(host, port, resolved["app_api_key"]),
+                         name="open-browser",
                          daemon=True).start()
 
     # Heartbeat. A run that lasts hours has to leave something behind to read.

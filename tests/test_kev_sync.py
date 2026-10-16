@@ -322,7 +322,7 @@ for cls in ("critical", "high", "medium", "low", "info", "unknown"):
     check_true(f"CSS exists for sev-{cls}", f".sev-{cls}" in ui)
 
 print("\n[10] the sync button is wired end to end")
-check_true("the button is on the Runbook tab", 'onclick="syncRunbook()"' in ui)
+check_true("the button is on the Runbook tab", 'data-onclick="syncRunbook()"' in ui)
 check_true("it posts to the sync route", "'/api/runbook/sync'" in ui)
 check_true("the route exists", '@app.route("/api/runbook/sync", methods=["POST"])' in routes)
 # It disables while running, because the call fetches the whole feed and

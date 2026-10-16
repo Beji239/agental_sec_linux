@@ -1,20 +1,27 @@
 # api/routes.py
 # AgentalSec V2, all Flask endpoints
 # Thin layer. No logic here, agent_loop and memory_engine do the work.
-# Every endpoint requiring auth checks X-API-Key header.
+# Every endpoint requiring auth checks the X-API-Key header, or the
+# dashboard's session header (api/dashboard_session.py).
+
 
 import asyncio
 import hmac
 import ipaddress
 import json
 import logging
+import secrets
 import threading
 import time
 from collections import deque
 from functools import wraps
 from pathlib import Path
 
-from flask import Response, current_app, jsonify, request, send_from_directory
+from flask import (Response, current_app, jsonify, redirect, request,
+                   send_from_directory)
+
+from api import dashboard_session as ds
+
 
 from core import agent_loop, memory_engine as me
 from core.tool_registry import execute_tool
@@ -30,64 +37,34 @@ logger = logging.getLogger(__name__)
 # too. That is why the anchor response tells you to copy the hash elsewhere.
 _ANCHOR_PATH = Path(__file__).resolve().parent.parent / "integrity_anchor.json"
 
-# Injected into index.html at render time. The dashboard reads the key from
-# here instead of fetching it, so the key never exists at a URL.
-_BOOTSTRAP_TEMPLATE = (
-    "<script>window.__AGENTAL_BOOTSTRAP__=Object.freeze({{api_key:{key}}});</script>\n"
-)
-
-
 # CONTENT SECURITY POLICY FOR THE DASHBOARD PAGE
 #
-# The page carries the API key now, so it is the most valuable thing in the
-# browser. Every value the dashboard renders goes through esc() today and I
-# checked all 58 innerHTML sites, they are clean. But that is a promise about
-# the code as it is this week. CSP is the layer that still holds the week
-# somebody forgets one esc() call.
+# No inline script: the one <script> block carries a per-request nonce and the
+# handlers sit in data-on* attributes that the page parses, never runs as code
+# (see UI HANDLERS in ui/index.html). Styles still allow inline, the page has
+# hundreds of style attributes and a style cannot run anything.
 #
-# WHAT THIS ACTUALLY BUYS, said plainly, because the header looks stricter
-# than it is:
-#
-#   connect-src 'self'   is the real win. Injected script can still read the
-#                        key, it just cannot fetch or XHR it anywhere off this
-#                        machine. Reading a secret you cannot send is a much
-#                        smaller problem.
-#   object-src 'none'    no flash style plugin content
-#   base-uri 'none'      no <base> tag rewriting every relative URL on the page
-#   frame-ancestors      nothing can put this dashboard in an iframe
-#   form-action 'none'   no form can post the page anywhere
-#
-# WHAT IT DOES NOT BUY, and I would rather write it down than let the header
-# imply otherwise. 'unsafe-inline' is still in script-src, because the page
-# has 57 inline onclick/onchange handlers and one big inline <script>. A
-# nonce makes the browser ignore 'unsafe-inline' entirely, which would break
-# every button. Removing the inline handlers is a real job, not a header
-# change, so it is a separate item rather than something half done here.
-#
-# EVERY REMOTE HOST IS GONE AS OF 2026-09-03. This used to list unpkg, Google
-# Fonts and the OpenStreetMap tile servers, because that is what the page
-# really did load. A tool whose front page says nothing leaves your machine
-# should not be telling three companies every time you open its own dashboard,
-# and the tiles were the worst of the three: a tile request names the square
-# of the world you are looking at, and on the threat map that square is where
-# your traffic went.
-#
-# Leaflet, the two fonts and a country outline ship in ui/vendor now, so the
-# policy is plain 'self' and should stay that way. Adding a host back is a
-# decision worth arguing about in a commit message, not a quiet edit here.
-# tests/test_ui_wiring.py section 12 fails if one creeps in.
-_CSP = "; ".join([
-    "default-src 'self'",
-    "base-uri 'none'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'none'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
-    "font-src 'self'",
-    "img-src 'self' data:",
-    "connect-src 'self'",
-])
+# Every remote host is gone since 2026-09-03: Leaflet, the fonts and the map
+# outline ship in ui/vendor. Adding a host back is a decision for a commit
+# message, not a quiet edit here. tests/test_ui_wiring.py section 12 fails if
+# one creeps in.
+def _csp(nonce: str) -> str:
+    return "; ".join([
+        "default-src 'self'",
+        "base-uri 'none'",
+        "object-src 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'none'",
+        f"script-src 'self' 'nonce-{nonce}'",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self'",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+    ])
+
+
+# The answer to a one-time link: a few bytes of script that store the session.
+_HANDOFF_CSP = "default-src 'none'; script-src 'nonce-{}'; base-uri 'none'; frame-ancestors 'none'"
 
 
 # FAILED AUTH THROTTLE
@@ -153,28 +130,15 @@ def _throttle_record_failure(caller: str) -> None:
                 _auth_locked.pop(key, None)
 
 
-def _inject_bootstrap(html: str, api_key: str) -> str:
-    """
-    Put the API key into the page as a frozen global, immediately before
-    </head> so it is defined before the body script runs.
+def _with_nonce(html: str, nonce: str) -> str:
+    """The page's own <script> blocks get the nonce. Only bare tags: a
+    <script src=...> is covered by 'self' already."""
+    return html.replace("<script>", f'<script nonce="{nonce}">')
 
-    json.dumps gives correct JS string escaping. The </ replacement is
-    separate and not optional: a value containing the literal characters
-    "</script>" would close the tag early and render the rest of the key as
-    page text. The key is hex today, but a defence that only holds for the
-    current value is not a defence.
-    """
-    literal = json.dumps(api_key).replace("</", "<\\/")
-    tag = _BOOTSTRAP_TEMPLATE.format(key=literal)
 
-    idx = html.lower().find("</head>")
-    if idx != -1:
-        return html[:idx] + tag + html[idx:]
-
-    # No </head>, prepend rather than serve a page with no key, which would
-    # look to the user like a broken dashboard with no explanation.
-    logger.warning("index.html has no </head>; bootstrap prepended instead.")
-    return tag + html
+def _session_ok(api_key: str) -> bool:
+    """A dashboard session, sent by the page in its own header."""
+    return ds.session_valid(api_key, request.headers.get(ds.HEADER))
 
 
 def _int_arg(name: str, default: int, low: int = 1, high: int = 1000) -> int:
@@ -311,6 +275,8 @@ def register_routes(app):
                 ok = bool(expected) and hmac.compare_digest(supplied, wanted)
             except Exception:
                 ok = False
+            if not ok and not key:
+                ok = _session_ok(expected)
 
             if ok:
                 return f(*args, **kwargs)
@@ -328,8 +294,9 @@ def register_routes(app):
                 return resp, 429
 
             # A missing key on the server side is our fault, not the caller's,
-            # so it is not counted as a guess.
-            if expected:
+            # so it is not counted as a guess. Neither is a request that sent
+            # nothing: a signed out dashboard keeps polling.
+            if expected and (key or request.headers.get(ds.HEADER)):
                 _throttle_record_failure(caller)
             return jsonify({"error": "Unauthorized"}), 401
         return decorated
@@ -346,12 +313,10 @@ def register_routes(app):
     # a webpage the user is already browsing: an attacker re-points evil.com
     # at 127.0.0.1 after their page has loaded, and the browser then treats
     # http://evil.com:5000/ as same-origin with this server. CORS never
-    # applies to same-origin, so the page can read the response body,
-    # including the key now injected into it.
+    # applies to same-origin, so the page can read the response body.
     #
     # The browser still sends "Host: evil.com". This server knows the names it
-    # is legitimately reachable at, so it refuses the rest. This check is what
-    # makes embedding the key in the page safe.
+    # is legitimately reachable at, so it refuses the rest.
     @app.before_request
     def _block_foreign_host():
         allowed = current_app.config.get("AGENTAL_ALLOWED_HOSTS") or set()
@@ -395,24 +360,12 @@ def register_routes(app):
     @app.route("/")
     def index():
         """
-        Serve the dashboard with the API key already embedded.
-
-        Replaces GET /api/config/key, which handed the key to any
-        unauthenticated caller and so gated all 34 tools, kill_process and
-        block_port included, behind nothing but "we are on localhost". Any
-        process on the box could ask for it, as could any page the browser
-        had been tricked into rebinding.
-
-        Adding @require_api_key to that endpoint was not an option: it is
-        where the dashboard gets the key in the first place, so requiring the
-        key to fetch the key leaves the UI unable to start. Injection removes
-        the endpoint rather than guarding it, there is no longer a URL that
-        returns the key, so there is nothing to guess, scrape or replay.
+        The dashboard. It carries no key and needs no session to load:
+        anything on this machine can fetch it, so it holds nothing worth
+        taking. The page signs in with the session from /open.
         """
-        # Resolved against root_path, not the process CWD. template_folder is
-        # the relative string "../ui", so the old send_from_directory call
-        # only found the file when main.py happened to be launched from the
-        # project root, start it from anywhere else and the dashboard 404s.
+        # Resolved against root_path, not the process CWD, so the page is
+        # found wherever main.py was started from.
         path = Path(app.root_path) / app.template_folder / "index.html"
         try:
             html = path.read_text(encoding="utf-8")
@@ -420,19 +373,53 @@ def register_routes(app):
             logger.error(f"Could not read index.html: {e}")
             return jsonify({"error": "Dashboard not found"}), 500
 
-        resp = Response(
-            _inject_bootstrap(html, current_app.config["AGENTAL_API_KEY"]),
-            mimetype="text/html",
-        )
-        # The page now carries a credential, so it must not reach a disk cache
-        # or an intermediary.
+        nonce = secrets.token_urlsafe(18)
+        resp = Response(_with_nonce(html, nonce), mimetype="text/html")
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "no-referrer"
-        # See the note above _CSP for what this does and does not cover.
-        resp.headers["Content-Security-Policy"] = _CSP
+        resp.headers["Content-Security-Policy"] = _csp(nonce)
         return resp
+
+    @app.route("/open", methods=["GET"])
+    def open_link():
+        """The app's one-time link: a session for this browser, then the
+        dashboard. A spent or forged link just lands on the sign in box."""
+        api_key = current_app.config["AGENTAL_API_KEY"]
+        if not ds.redeem_link(api_key, request.args.get("t", "")):
+            return redirect("/", code=303)
+        nonce = secrets.token_urlsafe(18)
+        resp = Response(ds.handoff_page(ds.new_session(api_key), nonce),
+                        mimetype="text/html")
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["Content-Security-Policy"] = _HANDOFF_CSP.format(nonce)
+        return resp
+
+    @app.route("/open", methods=["POST"])
+    def open_with_key():
+        """The app key, pasted into the sign in box, for a session. Wrong
+        keys count towards the same throttle as the API, and as there a
+        correct key works even during a lockout."""
+        api_key = current_app.config["AGENTAL_API_KEY"]
+        caller = request.remote_addr or "unknown"
+        body = request.get_json(silent=True) or {}
+        supplied = str(body.get("key") or "").strip().lower()
+
+        ok = bool(api_key) and hmac.compare_digest(
+            supplied.encode("utf-8", "surrogateescape"),
+            api_key.lower().encode("utf-8", "surrogateescape"))
+        if not ok:
+            wait = _throttle_retry_after(caller)
+            if wait is not None:
+                resp = jsonify({"error": "Too many failed keys"})
+                resp.headers["Retry-After"] = str(wait)
+                return resp, 429
+            if api_key:
+                _throttle_record_failure(caller)
+            return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"session": ds.new_session(api_key)})
 
     @app.route("/api/model", methods=["GET"])
     @require_api_key

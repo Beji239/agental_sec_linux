@@ -316,10 +316,15 @@ MAX_SILENCE_CONFIDENCE = "medium"
 
 # CONNECTION HELPERS
 
+# How long a writer waits for another writer's transaction before "database
+# is locked". The default 5 s lost sensor polls behind an hourly rollup.
+LOCK_WAIT_SECONDS = 30
+
+
 @contextmanager
 def _get_conn():
     """Context manager, always returns dicts, always closes cleanly."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=LOCK_WAIT_SECONDS)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

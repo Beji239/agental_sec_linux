@@ -281,6 +281,57 @@ check("the query tool lists it", a.query("sinkholes")["sinkholed"], ["evil.examp
 check("and the capabilities read as sentences",
       len(a.query("capabilities")["can_do"]), 4)
 
+print("\n[F] a locked database is not a blind router")
+import threading  # noqa: E402
+from core import sensor_watch  # noqa: E402
+
+
+def one_pass(adapter):
+    """One turn of the real poll loop, failure accounting included."""
+    adapter._running = True
+    adapter._wait_for_next_poll = lambda: setattr(adapter, "_running", False)
+    adapter._loop()
+    adapter._running = True     # as the live loop would be, between polls
+
+
+a._thread, a._started_at = threading.current_thread(), a._started_at or 0
+a._last_ok_at = __import__("time").time()
+real_save = me.save_router_clients
+
+
+def locked(*args, **kwargs):
+    raise sqlite3.OperationalError("database is locked")
+
+
+me.save_router_clients = locked
+one_pass(a)
+st = a.status()
+check("one failed save is not reported as a blind router", st["blind"], False)
+check("but the failure is still on record", a._consecutive_failures, 1)
+check("and the watch does not call the sensor quiet for it",
+      sensor_watch.assess("gateway", a)["state"], "ok")
+one_pass(a)
+one_pass(a)
+verdict = sensor_watch.assess("gateway", a)
+check("three in a row still make it quiet, with the real reason",
+      (verdict["state"], "database is locked" in verdict["reason"]),
+      ("quiet", True))
+me.save_router_clients = real_save
+one_pass(a)
+check("a good poll clears it", (a._consecutive_failures, a.status()["blind"]),
+      (0, False))
+
+
+def unreachable(cmd):
+    raise gw.GatewayError("ssh: connect to host 192.0.2.1 port 22: timed out")
+
+
+a._gw = gw.Gateway(cfg, transport=unreachable)
+one_pass(a)
+st = a.status()
+check("a router that cannot be read is blind at once",
+      (st["blind"], "timed out" in st.get("blind_reason", "")), (True, True))
+
 shutil.rmtree(tmp, ignore_errors=True)
 print()
 if fails:

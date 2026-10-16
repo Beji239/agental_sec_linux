@@ -366,7 +366,7 @@ async function main() {
   });
   await page.loadTimeline();
   html = els['timeline-list'].innerHTML;
-  ok(/onclick="showDetection\('LNX-3001'\)/.test(html),
+  ok(/data-onclick="showDetection\('LNX-3001'\)/.test(html),
      'the finding carries a link to LNX-3001', html.slice(0, 400));
   ok(/class="tl-jump"/.test(html), 'and it is rendered as a link');
 
@@ -399,7 +399,7 @@ async function main() {
   // into an onclick attribute inside a single-quoted JS string, and escJs is
   // what makes a value with a quote in it safe to put there. Asserting on the
   // raw address would pass against a renderer that forgot to escape it.
-  ok(/onclick="showMapEndpoint\('11\.22\.35\.15'\)"/.test(html)
+  ok(/data-onclick="showMapEndpoint\('11\.22\.35\.15'\)"/.test(html)
      || /class="tl-jump tl-jump-map"/.test(html),
      'a public endpoint gets a map link', html.slice(0, 500));
   ok(/tl-jump-map/.test(html),

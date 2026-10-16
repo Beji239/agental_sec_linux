@@ -145,22 +145,80 @@ res = pa.analyze(str(big))
 check("an oversized capture is refused before it is parsed",
       "over the" in res.get("error", ""), True)
 
-print("\n[8] CSP: the page that carries the key says what may run on it")
-r = client.get("/", environ_overrides={"HTTP_HOST": "127.0.0.1:5000"})
+print("\n[8] the dashboard page: no key in it, no inline script allowed")
+from api import dashboard_session as ds   # noqa: E402
+LOCAL = {"HTTP_HOST": "127.0.0.1:5000"}
+
+r = client.get("/", environ_overrides=LOCAL)
+html = r.get_data(as_text=True)
+check("the page is served to anyone", r.status_code, 200)
+check("and it carries no key", API_KEY in html, False)
+check("and sets no cookie", r.headers.get("Set-Cookie"), None)
 csp = r.headers.get("Content-Security-Policy", "")
 check("the header is there", bool(csp), True)
-# connect-src is the one that matters. Injected script could still read the
-# key, it just has nowhere off this machine to send it.
 check("connect-src is self only", "connect-src 'self'" in csp, True)
 check("no plugin content", "object-src 'none'" in csp, True)
 check("cannot be framed", "frame-ancestors 'none'" in csp, True)
 check("no base tag rewriting", "base-uri 'none'" in csp, True)
-# Honest negative. 'unsafe-inline' is still in script-src because the page has
-# inline onclick handlers. This asserts the CURRENT state, so the day somebody
-# removes those handlers this test fails and gets updated on purpose, rather
-# than the policy quietly staying weaker than it needs to be.
-check("script-src still allows inline, and we know it",
-      "'unsafe-inline'" in csp.split("script-src")[1].split(";")[0], True)
+script_src = csp.split("script-src")[1].split(";")[0]
+check("script-src allows no inline script", "'unsafe-inline'" in script_src, False)
+nonce = script_src.split("'nonce-")[1].split("'")[0]
+check("the page's script carries the nonce", f'<script nonce="{nonce}">' in html, True)
+check("a second load gets a new nonce",
+      nonce in client.get("/", environ_overrides=LOCAL).headers["Content-Security-Policy"],
+      False)
+
+link = ds.open_link_token(API_KEY)
+r = client.get("/open?t=" + link, environ_overrides=LOCAL)
+handoff = r.get_data(as_text=True)
+check("the app's link answers with a session", r.status_code, 200)
+check("kept in the page's own storage, not a cookie",
+      ds.STORAGE_KEY in handoff and r.headers.get("Set-Cookie") is None, True)
+check("and that page's one script carries its nonce",
+      r.headers["Content-Security-Policy"].split("'nonce-")[1].split("'")[0]
+      in handoff, True)
+session = handoff.split(f'"{ds.STORAGE_KEY}", "')[1].split('"')[0]
+check("the session it hands over is valid", ds.session_valid(API_KEY, session), True)
+check("a link works once",
+      client.get("/open?t=" + link, environ_overrides=LOCAL).status_code, 303)
+old = ds.open_link_token(API_KEY, now=1_000_000)
+check("an old link does not work",
+      client.get("/open?t=" + old, environ_overrides=LOCAL).status_code, 303)
+forged = link.rsplit(".", 1)[0] + "." + "0" * 64
+check("a forged link does not work",
+      client.get("/open?t=" + forged, environ_overrides=LOCAL).status_code, 303)
+check("a session made with another key does not work",
+      ds.session_valid(API_KEY, ds.new_session("1" * 64)), False)
+check("an expired session does not work",
+      ds.session_valid(API_KEY, ds.new_session(API_KEY, now=1_000_000)), False)
+
+check("the session reaches the API in the page's header",
+      client.get("/api/findings", environ_overrides=LOCAL,
+                 headers={ds.HEADER: session}).status_code, 200)
+check("and nothing reaches it without one",
+      client.get("/api/findings", environ_overrides=LOCAL).status_code, 401)
+_routes_mod = sys.modules["api.routes"]
+_routes_mod._auth_fails.clear(); _routes_mod._auth_locked.clear()
+for _ in range(_routes_mod._AUTH_FAIL_MAX + 2):
+    client.get("/api/findings", environ_overrides=LOCAL)
+check("a signed out page polling is not taken for guessing",
+      client.get("/api/findings", environ_overrides=LOCAL).status_code, 401)
+_routes_mod = sys.modules["api.routes"]
+_routes_mod._auth_fails.clear(); _routes_mod._auth_locked.clear()
+
+r = client.post("/open", json={"key": "f" * 64}, environ_overrides=LOCAL)
+check("a wrong pasted key is refused", r.status_code, 401)
+r = client.post("/open", json={"key": API_KEY}, environ_overrides=LOCAL)
+check("the right pasted key gets a session",
+      ds.session_valid(API_KEY, (r.get_json() or {}).get("session")), True)
+_routes_mod._auth_fails.clear(); _routes_mod._auth_locked.clear()
+
+import os, stat   # noqa: E402
+opener = ds.write_opener("http://127.0.0.1:5000/open?t=" + link)
+check("the opener page only its owner can read",
+      stat.S_IMODE(os.stat(opener).st_mode), 0o600)
+check("and it forwards to the link", link in open(opener).read(), True)
+os.unlink(opener)
 
 check("api answers are not cached",
       client.get("/api/findings", headers=H).headers.get("Cache-Control"), "no-store")
@@ -290,6 +348,21 @@ check("an empty message is still refused",
 check("the cap is the raised one, not the old 2000", MAX_CHAT_CHARS, 16000)
 check("and it is still far below the context budget",
       MAX_CHAT_CHARS < 128000, True)
+
+
+print("\n[12] the Host check only turns off behind a proxy on this machine")
+OFF = {"allowed_hosts": None, "host_check_disabled_behind_proxy": True}
+check("loopback bind with both settings turns it off",
+      allowed_hosts({"flask": dict(OFF, host="127.0.0.1")}), set())
+check("so does localhost",
+      allowed_hosts({"flask": dict(OFF, host="localhost")}), set())
+check("a wildcard bind keeps it on",
+      bool(allowed_hosts({"flask": dict(OFF, host="0.0.0.0")})), True)
+check("a LAN bind keeps it on",
+      "192.0.2.10" in allowed_hosts({"flask": dict(OFF, host="192.0.2.10")}), True)
+check("null without the flag keeps it on",
+      bool(allowed_hosts({"flask": {"host": "127.0.0.1", "allowed_hosts": None}})),
+      True)
 
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
