@@ -8,8 +8,8 @@ import re
 
 # C0 controls except tab, DEL, NEL, the Unicode line and paragraph
 # separators, and the bidirectional overrides that make text read backwards.
-_UNSAFE = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85  "
-                     "‪-‮⁦-⁩]")
+_UNSAFE = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029"
+                     "\u202a-\u202e\u2066-\u2069]")
 
 
 def _escape(m) -> str:

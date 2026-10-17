@@ -384,8 +384,9 @@ def _check_dns(conn, exp, ctx):
                 {"devices": fresh})
     if not ctx["router"]["ok"]:
         return "unknown", "The router could not be read.", {}
-    tail = (f" {len(known)} device(s) did so before this was watched and "
-            "are left as they are." if known else "")
+    tail = (f" {len(known)} device(s) known to use a resolver of their own, "
+            "from before this was watched or seen by the owner, are left as "
+            "they are." if known else "")
     return "holding", "Every lookup went through the router." + tail, {}
 
 
@@ -1102,12 +1103,23 @@ def acknowledge_kind(kind: str, now: datetime = None) -> dict:
 
 
 def acknowledge(expectation_id: int, now: datetime = None) -> dict:
-    """The owner has seen a break; the mood stops counting it."""
+    """The owner has seen a break; the mood stops counting it. For DNS, the
+    devices it named join the known ones, so the same habit stays quiet."""
     with me._get_conn() as conn:
         cur = conn.execute(
             "UPDATE expectation SET acknowledged_at = ? WHERE id = ? "
             "AND broken_at IS NOT NULL",
             (_iso(now or datetime.now(timezone.utc)), int(expectation_id)))
+        row = conn.execute(
+            "SELECT kind, state, evidence_json, known_json FROM expectation "
+            "WHERE id = ?", (int(expectation_id),)).fetchone()
+        if (cur.rowcount == 1 and row["kind"] == "dns_via_router"
+                and row["state"] == "broken"):
+            seen = (json.loads(row["evidence_json"] or "{}")
+                    .get("devices") or {})
+            known = set(json.loads(row["known_json"] or "null") or []) | set(seen)
+            conn.execute("UPDATE expectation SET known_json = ? WHERE id = ?",
+                         (json.dumps(sorted(known)), int(expectation_id)))
         conn.commit()
     return {"success": cur.rowcount == 1}
 

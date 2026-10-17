@@ -126,9 +126,23 @@ m.tick(1004.0)
 check("a reset counter is not a negative rate",
       m.snapshot(now=1004.0)["devices"][0]["up_bps"] >= 0, True)
 
+print("one skipped read does not split a connection")
+kept = list(r.fl)
+began = [f["first_seen"] for f in m.flows.values()]
+r.fl = []
+m.tick(1006.0)
+check("a flow one read missed is still open", len(m.flows), 1)
+check("and was not stored as finished", m.finished, [])
+r.fl = kept
+m.tick(1008.0)
+check("it comes back as the same connection",
+      [(f["first_seen"], f.get("missed")) for f in m.flows.values()],
+      [(began[0], None)])
+
 print("stored")
 r.fl = []
 m.tick(1062.0)
+m.tick(1064.0)
 with me._get_conn() as conn:
     flows = conn.execute("SELECT device_ip, dst, dst_name, bytes_in FROM lan_flow").fetchall()
     minutes = conn.execute("SELECT ip, up_bytes, down_bytes FROM lan_traffic_minute").fetchall()

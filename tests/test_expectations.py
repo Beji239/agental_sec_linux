@@ -249,6 +249,29 @@ check("marking the gateway break seen by kind",
                           now=NOW + timedelta(hours=1, minutes=11))["success"])
 check("an unknown kind is not acknowledged",
       not ex.acknowledge_kind("no_such_kind")["success"])
+check("marking the DNS break seen",
+      ex.acknowledge_kind("dns_via_router",
+                          now=NOW + timedelta(hours=1, minutes=12))["success"])
+
+
+def dns_flow(ip, mac, at):
+    sql(("INSERT INTO lan_flow (device_ip, device_mac, proto, dst, dport, "
+         "first_seen, last_seen) VALUES (?, ?, 'udp', '8.8.8.8', 53, ?, ?)",
+         (ip, mac, ex._iso(at), ex._iso(at))))
+
+
+dns_flow("192.0.2.11", "aa:aa:aa:aa:aa:01", NOW + timedelta(hours=2))
+ov = ex.check_once({}, live=FakeLive(), now=NOW + timedelta(hours=2, minutes=1))
+check("the same device doing it again after it was seen holds",
+      by_kind(ov)[("dns_via_router", "")]["state"] == "holding",
+      by_kind(ov)[("dns_via_router", "")])
+dns_flow("192.0.2.13", "aa:aa:aa:aa:aa:03", NOW + timedelta(hours=2, minutes=2))
+ov = ex.check_once({}, live=FakeLive(), now=NOW + timedelta(hours=2, minutes=3))
+check("another device still breaks it",
+      by_kind(ov)[("dns_via_router", "")]["state"] == "broken"
+      and "aa:aa:aa:aa:aa:03" in by_kind(ov)[("dns_via_router", "")]["detail"]
+      and "aa:aa:aa:aa:aa:01" not in by_kind(ov)[("dns_via_router", "")]["detail"],
+      by_kind(ov)[("dns_via_router", "")])
 
 # Quiet nights
 

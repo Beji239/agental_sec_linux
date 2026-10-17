@@ -330,9 +330,15 @@ class LanLive:
             acc[0] += r_out
             acc[1] += r_in
 
+        # A read of the connection table can skip a live entry, so a flow
+        # ends only when two reads in a row miss it, not split in two rows.
         for key, prev in self.flows.items():
-            if key not in seen:
+            if key in seen:
+                continue
+            if prev.get("missed"):
                 self.finished.append(prev)
+            else:
+                seen[key] = dict(prev, missed=1, out_bps=0.0, in_bps=0.0)
         self.flows = seen
 
         # Devices: exact totals from the counters, or the flow sums without.
