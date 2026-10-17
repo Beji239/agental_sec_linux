@@ -508,6 +508,12 @@ def register_routes(app):
         _model_check_cache.update({"at": now, "value": value, "epoch": epoch})
         return value
 
+    @app.route("/api/version")
+    @require_api_key
+    def app_version():
+        from core import version
+        return jsonify(version.current())
+
     @app.route("/api/status")
     @require_api_key
     def status():

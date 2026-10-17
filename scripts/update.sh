@@ -36,6 +36,12 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
     die "the files above were changed in this folder, so nothing was updated. Run 'git stash', then this script again, then 'git stash pop' to put your changes back."
 fi
 
+# The number the console shows: VERSION, plus commits after its tag.
+version_label() {
+    python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from core import version; print(version.info()["label"])' "$PROJECT_ROOT" 2>/dev/null \
+        || cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "(version unknown)"
+}
+
 branch="$(git rev-parse --abbrev-ref HEAD)"
 before="$(git rev-parse HEAD)"
 echo "Looking for updates on $branch..."
@@ -44,7 +50,7 @@ upstream="$(git rev-parse '@{u}' 2>/dev/null)" \
     || die "this branch follows nothing. Run: git branch --set-upstream-to=origin/$branch"
 
 if [[ "$before" == "$upstream" ]]; then
-    echo "Already up to date ($(git describe --tags --always))."
+    echo "Already up to date: AgentalSec $(version_label)."
     exit 0
 fi
 if ! git merge-base --is-ancestor "$before" "$upstream"; then
@@ -120,6 +126,7 @@ running() {
 }
 
 echo
+echo "Updated to AgentalSec $(version_label)."
 echo "Done. What is left:"
 if running || systemctl is-active --quiet agental-sec 2>/dev/null; then
     if systemctl is-active --quiet agental-sec 2>/dev/null; then

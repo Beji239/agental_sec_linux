@@ -1707,7 +1707,7 @@
   <div id="logo">
     <img id="logo-mark" src="/ui/img/agentalsec-mark.svg" alt="" width="20" height="20">
     AgentalSec
-    <span>v2.0</span>
+    <span id="app-version"></span>
   </div>
   <div id="status-pills">
     <div class="pill" id="pill-ai"><span class="dot"></span> AI</div>
@@ -3419,6 +3419,24 @@ async function init() {
   // Cards have no time cap now, so one can still be on screen when this page
   // reloads. Say what happened to it rather than leaving it out.
   showLostCards();
+  loadVersion();
+}
+
+// The number comes from the VERSION file the release shipped, with any
+// commits made since that release's tag.
+async function loadVersion() {
+  try {
+    const r = await fetch('/api/version', { headers: authHeaders() });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('app-version');
+    if (el && d.label) {
+      el.textContent = 'v' + d.label;
+      el.title = d.commits
+        ? `Release ${d.version}, plus ${d.commits} change(s) made after it`
+        : `Release ${d.version}`;
+    }
+  } catch (e) {}
 }
 
 // The page holds no key. The app's one-time link stores a session token

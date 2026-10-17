@@ -2413,5 +2413,19 @@
   "path": "core/package_activity.py",
   "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
   "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/version.py",
+  "text": "import subprocess",
+  "reason": "runs git describe only, with an argument list and no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/version.py",
+  "text": "out = subprocess.run(",
+  "reason": "an argument list with no shell, git by its full path, fixed arguments"
  }
 ]

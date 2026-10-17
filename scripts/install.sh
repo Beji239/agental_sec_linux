@@ -322,7 +322,7 @@ if [[ "$TESTTOOLS" == yes ]]; then
 fi
 
 echo
-echo "Installed."
+echo "Installed AgentalSec $(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "(version unknown)")."
 echo
 echo "Start it from the AgentalSec icon in your app menu, or here with:"
 echo "    python3 main.py"
