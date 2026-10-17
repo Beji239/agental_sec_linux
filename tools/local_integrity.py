@@ -105,6 +105,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import stat
 import subprocess
 import time
@@ -2908,6 +2909,75 @@ def _entry_mode_int(meta: str) -> int:
         return 0
 
 
+# The app's own installed files, checked against what its installers write.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_HARDENING = re.compile(r"/etc/systemd/system/(agentalsec-[\w.-]+)\.service\.d/"
+                        r"hardening\.conf")
+_READ_HELPER_SUDOERS = "/etc/sudoers.d/agentalsec-read-helper"
+
+
+def _grant_lines(text: str) -> list:
+    return [l.rstrip() for l in text.splitlines()
+            if l.strip() and not l.lstrip().startswith("#")]
+
+
+def _read_helper_grant(root: Path = None) -> list | None:
+    """The grant lines install_read_helper.sh writes, for the project's owner.
+    The comment header is left out: it carries the install time."""
+    import pwd
+    root = root or PROJECT_ROOT
+    try:
+        script = (root / "scripts" / "install_read_helper.sh").read_text()
+        body = script.split('DROP_IN_CONTENT="$(cat <<EOF\n', 1)[1].split(
+            "\nEOF\n", 1)[0]
+        helper_dir = re.search(r'^HELPER_DIR="([^"$]+)"', script, re.M).group(1)
+        user = pwd.getpwuid(root.stat().st_uid).pw_name
+    except (OSError, IndexError, AttributeError, KeyError):
+        return None
+    dst = f"{helper_dir}/read_helper.py"
+    return [l.replace("$HELPER_DST", dst).replace("$REAL_USER", user)
+            .replace("\\\\", "\\") for l in _grant_lines(body)]
+
+
+def own_file_check(target: str, now_value, root: Path = None) -> str | None:
+    """Why a changed file is the app's own as its installer writes it, or
+    None. Only root-owned files not writable by others count."""
+    root = root or PROJECT_ROOT
+    parts = str(now_value or "").split(":")
+    if len(parts) < 5 or parts[1] != "0" or parts[4] in ("", "-"):
+        return None
+    try:
+        if int(parts[0], 8) & 0o022:
+            return None
+    except ValueError:
+        return None
+    m = _HARDENING.fullmatch(target)
+    if m:
+        src = root / "scripts" / "systemd-hardening" / f"{m.group(1)}.conf"
+        data, _ = _read_bytes(src)
+        if data is not None and _hash16(data) == parts[4]:
+            return (f"identical to {src.relative_to(root)}, the hardening "
+                    f"the app ships for {m.group(1)}")
+        return None
+    if target == _READ_HELPER_SUDOERS:
+        data, _ = _read_bytes(target)
+        want = _read_helper_grant(root)
+        if (data is not None and want and _hash16(data) == parts[4]
+                and _grant_lines(data.decode("utf-8", "replace")) == want):
+            return ("its grant is exactly what scripts/install_read_helper.sh "
+                    "writes for the project's owner")
+    return None
+
+
+def _own_file_finding(target: str, now_value, why: str, raw: dict) -> dict:
+    return _finding(
+        "LNX-2001", "info", "file", target,
+        f"AgentalSec updated its own file: {target}",
+        (f"Now {now_value}. Checked against the project: {why}. Its own "
+         f"installer wrote it, so this is a record, not an alarm."),
+        dict(raw, own_file=why))
+
+
 def _dir_entry_finding(path: str, rel: str, was_value, now_value) -> dict:
     """
     The ONE finding for a changed file inside a hashed directory set.
@@ -3038,6 +3108,13 @@ def diff_dir_sets(old: dict, new: dict, hashed: bool,
         now_entries = now.get("entries") or {}
 
         for rel in sorted(set(now_entries) - set(was_entries)):
+            why = own_file_check(f"{path}/{rel}", now_entries[rel])
+            if why:
+                out.append(_own_file_finding(
+                    f"{path}/{rel}", now_entries[rel], why,
+                    {"dir": path, "entry": rel, "after": now_entries[rel],
+                     "read_by": "tools/local_integrity.py"}))
+                continue
             out.append(_finding(
                 "LNX-2001", "high", "file", f"{path}/{rel}",
                 f"New file in a watched directory: {path}/{rel}",
@@ -3067,6 +3144,14 @@ def diff_dir_sets(old: dict, new: dict, hashed: bool,
             continue
         for rel in sorted(set(was_entries) & set(now_entries)):
             if was_entries[rel] == now_entries[rel]:
+                continue
+            why = own_file_check(f"{path}/{rel}", now_entries[rel])
+            if why:
+                out.append(_own_file_finding(
+                    f"{path}/{rel}", now_entries[rel], why,
+                    {"dir": path, "entry": rel, "before": was_entries[rel],
+                     "after": now_entries[rel],
+                     "read_by": "tools/local_integrity.py"}))
                 continue
             out.append(_dir_entry_finding(path, rel, was_entries[rel],
                                           now_entries[rel]))

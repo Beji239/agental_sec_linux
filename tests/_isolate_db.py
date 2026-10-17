@@ -46,6 +46,23 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 _done = None
 
 
+def _own_tmp():
+    """Temp files go where the runner puts them, not /tmp, where the live
+    sensors report every program a test starts as run from a staging folder."""
+    import atexit
+    import os
+    import shutil
+    if "agentalsec-tests" in os.environ.get("TMPDIR", ""):
+        return
+    state = os.environ.get("XDG_STATE_HOME") or os.path.expanduser(
+        "~/.local/state")
+    base = pathlib.Path(state) / "agentalsec-tests"
+    base.mkdir(parents=True, exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="hand-", dir=base)
+    os.environ["TMPDIR"] = tempfile.tempdir = tmp
+    atexit.register(shutil.rmtree, tmp, True)
+
+
 def isolate() -> pathlib.Path:
     """Repoint memory_engine.DB_PATH at a fresh database built from Schema.SQL.
 
@@ -57,6 +74,7 @@ def isolate() -> pathlib.Path:
 
     sys.path.insert(0, str(ROOT))
     from core import memory_engine as me
+    _own_tmp()
 
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="agentalsec_isolated_"))
     db = tmp / "isolated.db"

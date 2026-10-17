@@ -10,7 +10,7 @@ stops firing is as broken as one that fires on everything.
 WHAT IT DOES NOT DO: it does not touch the owner's database to write, it does
 not need root, and it does not plant anything outside a throwaway directory it
 creates and removes itself. The processes it starts to prove the argv[0] and
-masquerade cases are copies of /bin/sleep in /tmp, killed in a finally block.
+masquerade cases are copies of /bin/sleep in a temp folder, killed in a finally block.
 
 Runs on Linux. On anything else it skips, which is a result and not a pass.
 """
@@ -54,7 +54,10 @@ if os.name != "posix":
 import psutil                                       # noqa: E402
 from tools import process_monitor_linux as pm       # noqa: E402
 
-TMP = pathlib.Path(tempfile.mkdtemp(prefix="pmround.", dir="/tmp"))
+# Planted in the test temp folder, which the module under test is told is a
+# suspicious place, so the live app does not report these as /tmp programs.
+TMP = pathlib.Path(tempfile.mkdtemp(prefix="pmround."))
+pm.SUSPICIOUS_PATHS.append(str(TMP) + "/")
 
 
 def _plant(dest_name, argv0=None):

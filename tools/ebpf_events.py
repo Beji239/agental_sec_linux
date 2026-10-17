@@ -834,6 +834,10 @@ def in_staging_directory(path: str) -> str | None:
     """
     if not path or not path.startswith("/"):
         return None
+    # /proc/self and /proc/<pid>/fd name another process's files; resolved
+    # here they would name this app's own (runc execs that way).
+    if path.startswith("/proc/"):
+        return None
     try:
         real = os.path.realpath(path)
     except OSError:

@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import socket
+import sqlite3
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -233,7 +234,7 @@ def _findings(conn, start, end, ids) -> list:
     marks = ",".join("?" * len(ids))
     return [dict(r) for r in conn.execute(
         f"SELECT id, detection_id, severity, entity_value, title, found_at, "
-        f"dismissed, dismissed_reason FROM findings WHERE found_at >= ? "
+        f"dismissed, dismissed_reason, raw_data FROM findings WHERE found_at >= ? "
         f"AND found_at < ? AND detection_id IN ({marks}) ORDER BY found_at",
         (_sql(start), _sql(end), *ids)).fetchall()]
 
@@ -415,42 +416,90 @@ def _private(ip: str) -> bool:
         return False
 
 
-def _logins(conn, start, end) -> dict:
+def _attempt_key(svc, src, user, raw, at) -> tuple:
+    """One try is logged by sshd and by btmp under the same pid, so a try
+    is its service, source and pid, or its minute when there is no pid."""
+    pid = raw.get("pid") if isinstance(raw, dict) else None
+    return (svc, src or "", str(pid) if pid else (user or "", at[:16]))
+
+
+def _tty(desc: str) -> str:
+    m = re.search(r"\btty=(?:/dev/)?(\S+)", desc) or re.search(
+        r"\bon (\S+)$", desc)
+    return m.group(1) if m else ""
+
+
+def _logins(conn, start, end, names: dict = None) -> dict:
     out = {"failed": {}, "failed_total": 0, "failed_from": set(),
-           "success": 0, "remote": {}}
+           "success": 0, "remote": {}, "attempts": []}
     if not _has(conn, "events"):
         out["blind"] = True
         return out
+    tries = {}
     for r in conn.execute(
-            "SELECT event_type, username, src_ip, description FROM events "
-            "WHERE occurred_at >= ? AND occurred_at < ? AND event_type IN "
-            "('failed_login','successful_login')", (_sql(start), _sql(end))):
+            "SELECT event_type, username, src_ip, description, occurred_at, "
+            "raw_data FROM events WHERE occurred_at >= ? AND occurred_at < ? "
+            "AND event_type IN ('failed_login','successful_login') "
+            "ORDER BY occurred_at", (_sql(start), _sql(end))):
         desc = r["description"] or ""
         if r["event_type"] == "failed_login":
-            svc = _service(desc)
-            out["failed"][svc] = out["failed"].get(svc, 0) + 1
-            out["failed_total"] += 1
-            if r["src_ip"]:
-                out["failed_from"].add(r["src_ip"])
+            try:
+                raw = json.loads(r["raw_data"] or "{}")
+            except (TypeError, ValueError):
+                raw = {}
+            if not isinstance(raw, dict):
+                raw = {}
+            svc = ("SSH" if str(raw.get("service") or "").startswith("ssh")
+                   else _service(desc))
+            src = r["src_ip"] or ""
+            key = _attempt_key(svc, src, r["username"], raw,
+                               str(r["occurred_at"] or ""))
+            at = (_parse(raw.get("timestamp")) if raw.get("time_basis") ==
+                  "event" else None) or _parse(r["occurred_at"])
+            t = tries.get(key)
+            if t is None:
+                t = tries[key] = {"service": svc, "user": r["username"],
+                                  "from": src, "tty": _tty(desc),
+                                  "at": at}
+            else:
+                t["user"] = t["user"] or r["username"]
+                t["tty"] = t["tty"] or _tty(desc)
+            if src:
+                out["failed_from"].add(src)
+        if r["event_type"] == "failed_login":
             continue
         if any(s in desc for s in SUCCESS_SKIP):
             continue
         out["success"] += 1
         if r["src_ip"] and not _local_address(r["src_ip"]):
             out["remote"][r["src_ip"]] = out["remote"].get(r["src_ip"], 0) + 1
+    for t in tries.values():
+        out["failed"][t["service"]] = out["failed"].get(t["service"], 0) + 1
+        t["where"] = (_who(t["from"], names or {}) if t["from"]
+                      and not _local_address(t["from"]) else "this computer")
+    out["failed_total"] = len(tries)
+    out["attempts"] = list(tries.values())
     return out
 
 
 def _new_ports(conn, start, end) -> list:
     if not _has(conn, "port_owner_change"):
         return []
-    rows = conn.execute(
-        "SELECT p.proto, p.local_port, p.local_address, p.comm, p.detected_at "
-        "FROM port_owner_change p WHERE p.kind = 'appeared' "
-        "AND p.detected_at >= ? AND p.detected_at < ? AND NOT EXISTS ("
-        "SELECT 1 FROM port_owner_change q WHERE q.proto = p.proto "
-        "AND q.local_port = p.local_port AND q.detected_at < ?) "
-        "ORDER BY p.detected_at", (_sql(start), _sql(end), _sql(start)))
+    where = ("FROM port_owner_change p WHERE p.kind = 'appeared' "
+             "AND p.detected_at >= ? AND p.detected_at < ? AND NOT EXISTS ("
+             "SELECT 1 FROM port_owner_change q WHERE q.proto = p.proto "
+             "AND q.local_port = p.local_port AND q.detected_at < ?) "
+             "ORDER BY p.detected_at")
+    args = (_sql(start), _sql(end), _sql(start))
+    # origin_json came in v70; an older database reports without it.
+    try:
+        rows = conn.execute(
+            "SELECT p.proto, p.local_port, p.local_address, p.comm, "
+            "p.detected_at, p.pid, p.exe, p.origin_json " + where, args)
+    except sqlite3.OperationalError:
+        rows = conn.execute(
+            "SELECT p.proto, p.local_port, p.local_address, p.comm, "
+            "p.detected_at, p.pid, p.exe, NULL AS origin_json " + where, args)
     seen, out = set(), []
     for r in rows:
         # A UDP socket on a high port is a client's, not a service.
@@ -460,8 +509,34 @@ def _new_ports(conn, start, end) -> list:
         key = (r["proto"], r["local_port"])
         if key not in seen:
             seen.add(key)
-            out.append(dict(r))
+            row = dict(r)
+            try:
+                row["origin"] = json.loads(row.pop("origin_json") or "null")
+            except (TypeError, ValueError):
+                row["origin"] = None
+            out.append(row)
     return out
+
+
+def _port_words(p: dict, day: date) -> str:
+    """One new listener: the program by its file, who ran it, and what
+    started it, as far as it was read while the program ran."""
+    o = p.get("origin") or {}
+    head = (f"{p['proto']} {p['local_port']}, {p['comm'] or '?'}"
+            + (f" ({p['exe']}" + (f", pid {p['pid']}" if p.get("pid") else "")
+               + ")" if p.get("exe") else ""))
+    if not o:
+        return (head + f", opened {_hm(_parse(p['detected_at']), day)}; what "
+                "started it was not recorded")
+    bits = [f"run by {o['user']}" if o.get("user") else "",
+            f"in {o['unit']}" if o.get("unit") else "",
+            f"started {_hm(_parse(o.get('started')), day)}"
+            if o.get("started") else ""]
+    chain = [c.get("comm") or c.get("exe") or "?" for c in
+             (o.get("parents") or [])[:4]]
+    if chain:
+        bits.append("started by " + ", from ".join(chain))
+    return head + ", " + ", ".join(b for b in bits if b)
 
 
 def _tallies(conn, day: date) -> dict:
@@ -590,7 +665,7 @@ def collect(day: date, written: datetime = None) -> dict:
             "off_before": off_before,
             "coverage": _coverage(start, end, day),
             "incidents": _incidents(conn, start, end, names, day),
-            "logins": _logins(conn, start, end),
+            "logins": _logins(conn, start, end, names),
             "into_host": _findings(conn, start, end, INTO_HOST),
             "new_access": [f for f in _findings(conn, start, end, NEW_ACCESS)
                            if "known_hosts" not in (f["title"] or "")],
@@ -902,6 +977,28 @@ def _result(rows: list, none_text: str = "none") -> tuple:
     return str(len(rows)), _e(text)
 
 
+def _attempt_words(attempts: list, day: date, shown: int = 4) -> str:
+    """Each failed try as who, from where and when, alike ones together."""
+    groups = {}
+    for a in attempts:
+        key = (a["service"], a.get("user") or "", a["where"], a.get("tty") or "")
+        groups.setdefault(key, []).append(a["at"])
+    parts = []
+    for (svc, user, where, tty), times in sorted(
+            groups.items(), key=lambda kv: min(t for t in kv[1] if t)
+            if any(kv[1]) else datetime.max.replace(tzinfo=timezone.utc)):
+        times = [t for t in times if t]
+        when = _span(min(times), max(times), day) if times else "time unknown"
+        text = (f"{svc}" + (f" as {user}" if user else "")
+                + (f" from {where}" if where != "this computer"
+                   else " at this computer")
+                + (f" on {tty}" if tty and where == "this computer" else "")
+                + f", {when}")
+        parts.append(f"{len(times) or 1} {text}" if len(times) > 1 else text)
+    more = len(parts) - shown
+    return "; ".join(parts[:shown]) + (f"; and {more} more" if more > 0 else "")
+
+
 def _attempt_rows(f: dict) -> list:
     lg = f["logins"]
     if lg.get("blind"):
@@ -909,8 +1006,10 @@ def _attempt_rows(f: dict) -> list:
     elif lg["failed_total"]:
         by = ", ".join(f"{n} {svc}" for svc, n in
                        sorted(lg["failed"].items(), key=lambda x: -x[1]))
-        failed = (by, "a run was followed by a success" if f["into_host"]
-                  else "none was followed by a success from the same address")
+        failed = (by, _attempt_words(lg.get("attempts") or [], f["day"])
+                  + ("; a run was followed by a success" if f["into_host"]
+                     else "; none was followed by a success from the same "
+                          "address"))
     else:
         failed = ("0", "none")
     if lg["remote"]:
@@ -923,8 +1022,8 @@ def _attempt_rows(f: dict) -> list:
         success = (str(lg["success"]), "all at this computer" if lg["success"]
                    else "none")
     ports = f["new_ports"]
-    port_text = ", ".join(f"{p['proto']} {p['local_port']} ({p['comm'] or '?'})"
-                          for p in ports[:4])
+    port_text = "; ".join(_port_words(p, f["day"]) for p in ports[:4]) + (
+        f"; and {len(ports) - 4} more" if len(ports) > 4 else "")
     return [
         ("Failed logins (SSH, desktop, sudo)", failed),
         ("Successful logins", success),
@@ -964,11 +1063,68 @@ def _malware_rows(f: dict) -> list:
                               if h["flagged"] else "no match"))),
         ("Programs pretending to be system files", _plain_result(f["masquerade"])),
         ("Programs running from odd places (/tmp, Downloads, caches)",
-         _plain_result(f["odd_places"])),
+         _odd_result(f["odd_places"], f["day"])),
         ("New startup entries and services", _plain_result(f["startup"])),
-        ("Changed system files", _plain_result(f["system_files"],
-                                               "all match their packages")),
+        ("Changed system files", _system_files_result(f["system_files"])),
     ]
+
+
+def _user_name(uid) -> str:
+    try:
+        import pwd
+        return pwd.getpwuid(int(uid)).pw_name
+    except (KeyError, TypeError, ValueError):
+        return f"uid {uid}"
+
+
+def _odd_result(rows: list, day: date, shown: int = 3) -> tuple:
+    """Each program by its file, with what started it and as whom; the two
+    process rules report one run twice, so a run is its pid."""
+    if not rows:
+        return "0", "none"
+    runs = {}
+    for r in rows:
+        try:
+            raw = json.loads(r.get("raw_data") or "{}")
+        except (TypeError, ValueError):
+            raw = {}
+        if not isinstance(raw, dict):
+            raw = {}
+        path = raw.get("realpath") or raw.get("exe") or r["entity_value"]
+        run = runs.setdefault((raw.get("pid"), path) if raw.get("pid")
+                              else (r["id"], path), {
+            "path": path, "at": _parse(r["found_at"]),
+            "dismissed": r.get("dismissed")})
+        if raw.get("parent_comm"):
+            run["parent"] = raw["parent_comm"]
+        if raw.get("uid") is not None:
+            run["user"] = _user_name(raw["uid"])
+    order = sorted(runs.values(), key=lambda x: (bool(x["dismissed"]),
+                                                 x["at"] or datetime.min.replace(
+                                                     tzinfo=timezone.utc)))
+    parts = []
+    for x in order[:shown]:
+        bits = [f"started by {x['parent']}" if x.get("parent") else "",
+                f"as {x['user']}" if x.get("user") else "",
+                _hm(x["at"], day) if x["at"] else ""]
+        parts.append(x["path"] + "".join(f", {b}" for b in bits if b))
+    text = "; ".join(parts) + (f"; and {len(order) - shown} more"
+                               if len(order) > shown else "")
+    dismissed = sum(1 for x in order if x["dismissed"])
+    if dismissed:
+        text += f"; {dismissed} dismissed as harmless"
+    return str(len(order)), text
+
+
+def _system_files_result(rows: list) -> tuple:
+    """Changes, with the app's own files its installer wrote kept apart."""
+    own = [r for r in rows if '"own_file"' in (r.get("raw_data") or "")]
+    count, text = _plain_result([r for r in rows if r not in own],
+                                "all match their packages")
+    if own:
+        text += (f"; {_n(len(own), 'file')} of AgentalSec's own updated, "
+                 f"each matching what its installer writes")
+    return count, text
 
 
 def _plain_result(rows: list, none_text: str = "none") -> tuple:

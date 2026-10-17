@@ -155,7 +155,7 @@ logger = logging.getLogger(__name__)
 # before they are filed.
 # v69, 2026-10-15: learned_rule.reason_kind, owner_words, trial_until and
 # kept_at, so a rule says which fact Python checks and when a trial lapses.
-SCHEMA_VERSION = 69
+SCHEMA_VERSION = 70
 
 
 # HELPERS
@@ -4305,6 +4305,16 @@ def _migrate_merge_carried(conn) -> int:
     return 1
 
 
+def _migrate_port_origin(conn) -> int:
+    """v70: port_owner_change.origin_json, what started a new listener's
+    program, read while it still runs. Idempotent."""
+    if not _table_exists(conn, "port_owner_change") or \
+            "origin_json" in _columns(conn, "port_owner_change"):
+        return 0
+    conn.execute("ALTER TABLE port_owner_change ADD COLUMN origin_json TEXT")
+    return 1
+
+
 def run_migrations(db_path: Path = None) -> dict:
     """
     Apply all pending migrations. Idempotent, safe on every boot.
@@ -4419,6 +4429,7 @@ def run_migrations(db_path: Path = None) -> dict:
         daily_dismissal_added  = _migrate_daily_report_dismissal(conn)
         run_dismissal_added    = _migrate_run_dismissal(conn)
         expectations_added     = _migrate_expectations(conn)
+        port_origin_added      = _migrate_port_origin(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4440,6 +4451,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "daily_dismissal_added": daily_dismissal_added,
             "run_dismissal_added": run_dismissal_added,
             "expectations_added":  expectations_added,
+            "port_origin_added":   port_origin_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,

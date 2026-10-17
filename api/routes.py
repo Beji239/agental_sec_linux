@@ -1891,6 +1891,15 @@ def register_routes(app):
 
         state = router_monitor.public_status(current_app.config["AGENTAL_CONFIG"])
         state["collector_running"] = router_monitor.collector_running()
+        # A router with the agent is read over SSH by the gateway adapter;
+        # the switch here is for SNMP routers.
+        gwmod = get_modules().get("gateway")
+        if gwmod is not None and getattr(gwmod, "enabled", False):
+            st_ = getattr(gwmod, "_state", {}) or {}
+            state["agent"] = {
+                "polls": st_.get("polls", 0), "last": st_.get("last"),
+                "interval_minutes": round(gwmod.poll_interval / 60),
+                "error": getattr(gwmod, "_router_error", None)}
         try:
             state["clients"] = me.query_router_clients(limit=500)["count"]
             state["settings_changed"] = me.query_router_config(
@@ -1962,10 +1971,21 @@ def register_routes(app):
         """One collection pass now, without waiting for the timer."""
         from tools import router_monitor
 
-        result = router_monitor.collect_once(
-            current_app.config["AGENTAL_CONFIG"],
-            session_id=get_session_id(),
-        )
+        config = current_app.config["AGENTAL_CONFIG"]
+        gwmod = get_modules().get("gateway")
+        if (not router_monitor.public_status(config)["available"]
+                and gwmod is not None and getattr(gwmod, "enabled", False)):
+            try:
+                gwmod.poll()
+            except Exception as e:
+                return jsonify({"ran": False, "reason": (
+                    f"the router agent could not be read: {e}")}), 409
+            st_ = gwmod._state
+            return jsonify({"ran": True, "source": "router agent",
+                            "clients_seen": st_.get("clients_seen", 0),
+                            "clients_new": st_.get("clients_new", 0),
+                            "config_changed": 0})
+        result = router_monitor.collect_once(config, session_id=get_session_id())
         return jsonify(result), (200 if result.get("ran") else 409)
 
     @app.route("/api/router/clients")

@@ -421,6 +421,70 @@ def process_detail(pid: int) -> dict:
 
 # THE SWEEP
 
+def _stat_fields(pid: int) -> list:
+    """/proc/<pid>/stat after the name, which may hold spaces or brackets."""
+    with open(f"/proc/{pid}/stat", encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    return text[text.rindex(")") + 2:].split()
+
+
+def _user_of(pid: int) -> str | None:
+    try:
+        with open(f"/proc/{pid}/status", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("Uid:"):
+                    uid = int(line.split()[1])
+                    try:
+                        import pwd
+                        return pwd.getpwuid(uid).pw_name
+                    except KeyError:
+                        return str(uid)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _unit_of(pid: int) -> str | None:
+    """The systemd unit or session scope the process runs in."""
+    try:
+        with open(f"/proc/{pid}/cgroup", encoding="utf-8") as fh:
+            path = fh.read().strip().splitlines()[-1].split(":", 2)[-1]
+    except (OSError, IndexError):
+        return None
+    for part in reversed(path.split("/")):
+        if part.endswith((".service", ".scope")):
+            return part
+    return None
+
+
+def process_origin(pid: int, depth: int = 6) -> dict | None:
+    """Who started a process: its user, unit, start time and the chain of
+    parents, each by the kernel's exe path. Read once, while it runs."""
+    if not pid:
+        return None
+    try:
+        fields = _stat_fields(pid)
+        with open("/proc/stat", encoding="utf-8") as fh:
+            boot = next(int(l.split()[1]) for l in fh if l.startswith("btime"))
+        started = boot + int(fields[19]) / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError, StopIteration):
+        return None
+    chain, cur = [], int(fields[1])
+    while cur > 1 and len(chain) < depth:
+        d = process_detail(cur)
+        chain.append({"pid": cur, "comm": d["comm"], "exe": d["exe"],
+                      "user": _user_of(cur)})
+        try:
+            cur = int(_stat_fields(cur)[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return {"user": _user_of(pid), "unit": _unit_of(pid),
+            "started": datetime.fromtimestamp(started, timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S"),
+            "cmdline": (process_detail(pid)["cmdline"] or "")[:300] or None,
+            "parents": chain}
+
+
 def _is_loopback(address: str) -> bool:
     if not address:
         return False
@@ -1032,17 +1096,19 @@ def _current_sockets(conn) -> dict:
 
 def _log_change(conn, sweep_id, kind, row, at, previous=None) -> None:
     import json as _json
+    origin = (process_origin(row["pid"]) if row.get("pid")
+              and kind in (CHANGE_APPEARED, CHANGE_OWNER) else None)
     conn.execute("""
         INSERT INTO port_owner_change
             (sweep_id, detected_at, kind, proto, scope, local_address,
-             local_port, pid, comm, exe, previous_json, note)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+             local_port, pid, comm, exe, previous_json, note, origin_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         sweep_id, at, kind, row.get("proto"), row.get("scope"),
         row.get("local_address"), row.get("local_port"), row.get("pid"),
         row.get("comm"), row.get("exe"),
         _json.dumps(previous, default=str) if previous else None,
-        _change_note(kind, row),
+        _change_note(kind, row), _json.dumps(origin) if origin else None,
     ))
 
 

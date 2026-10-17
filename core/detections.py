@@ -653,11 +653,12 @@ _REGISTER: list[Detection] = [
     # content edit that leaves all of those identical is NOT DETECTED. The
     # status block says which files that applies to, and the finding's own
     # raw_data carries `content_read`.
-    _d("LNX-2001", 1, "local_sensitive_file_changed", "local_integrity",
-       "file", {"medium", "high"},
+    _d("LNX-2001", 2, "local_sensitive_file_changed", "local_integrity",
+       "file", {"info", "medium", "high"},
        "A file on THIS host no longer matches its recorded baseline, or an "
        "entry appeared in or vanished from a watched directory such as "
-       "/etc/sudoers.d, /etc/pam.d or a systemd unit directory.",
+       "/etc/sudoers.d, /etc/pam.d or a systemd unit directory. Info when it "
+       "is the app's own file and matches what its installer writes.",
        ("integrity",)),
 
     _d("LNX-2002", 1, "local_ssh_key_changed", "local_integrity",

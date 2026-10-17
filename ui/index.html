@@ -5356,7 +5356,15 @@ function renderRouterToggle() {
   onBtn.disabled = !routerState.configured;
 
   note.className = '';
-  if (!routerState.configured) {
+  const agent = routerState.agent;
+  if (agent && !on) {
+    note.classList.add(agent.error ? 'err' : 'good');
+    note.textContent = agent.error
+      ? `Read through the router agent, but the last read failed: ${agent.error}`
+      : `Read through the router agent over SSH every ${agent.interval_minutes} `
+        + `min` + (agent.last ? `, last at ${agent.last.replace('T', ' ')}` : '')
+        + `. The switch is for routers read by SNMP and stays off here.`;
+  } else if (!routerState.configured) {
     note.classList.add('err');
     note.textContent = routerState.reason
       ? `Not configured: ${routerState.reason}.`
@@ -5417,6 +5425,10 @@ async function collectRouterNow() {
     if (!d.ran) {
       note.className = 'err';
       note.textContent = `Nothing read: ${d.reason || 'unavailable'}.`;
+    } else if (d.source === 'router agent') {
+      note.className = 'good';
+      note.textContent = `${d.clients_seen} entries read through the router `
+        + `agent, ${d.clients_new} not seen before.`;
     } else if (d.first_pass) {
       // Said explicitly, because "0 new" on a first run would read as a
       // quiet network when it actually means there was nothing to compare to.
