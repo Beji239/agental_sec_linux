@@ -149,41 +149,70 @@ def _recent_values() -> dict:
     return out
 
 
-def _device_names() -> tuple:
-    """ip -> name, and the set of ips whose hardware now answers elsewhere."""
-    names, stale = {}, set()
+def device_map() -> dict:
+    """ip -> {key, name, current, old}. A device is an inventory row with the
+    rows merged into it and its earlier addresses, so an old address keeps
+    its history."""
     try:
         rows = me.query_known_devices()
     except Exception:                                   # noqa: BLE001
-        return names, stale
-    newest = {}
+        return {}
+    by_id = {r.get("id"): r for r in rows if r.get("id") is not None}
+
+    def root(r):
+        seen = set()
+        while r.get("merged_into") and r["merged_into"] in by_id \
+                and r["id"] not in seen:
+            seen.add(r["id"])
+            r = by_id[r["merged_into"]]
+        return r
+    # Unmerged rows sharing a hardware address are one device that changed
+    # address, unless the owner named them differently.
+    by_mac = {}
     for r in rows:
-        if r.get("ip"):
-            names[r["ip"]] = r.get("known_as") or r.get("hostname")
-        mac = (r.get("mac") or "").lower()
-        if mac:
-            newest.setdefault(mac, []).append((r.get("last_seen") or "", r["ip"]))
-    for seen in newest.values():
-        if len(seen) > 1:
-            seen.sort(reverse=True)
-            stale.update(ip for _, ip in seen[1:])
-    return names, stale
+        if not r.get("merged_into") and r.get("mac"):
+            by_mac.setdefault(r["mac"].lower(), []).append(r)
+    fold = {}
+    for group in by_mac.values():
+        names = {g.get("known_as") for g in group if g.get("known_as")}
+        if len(group) > 1 and len(names) <= 1:
+            newest = max(group, key=lambda g: g.get("last_seen") or "")
+            for g in group:
+                fold[g.get("id")] = newest
+
+    out = {}
+    for r in rows:
+        if not r.get("ip"):
+            continue
+        top = root(r)
+        top = fold.get(top.get("id"), top)
+        out[r["ip"]] = {"key": f"device:{top.get('id')}",
+                        "name": top.get("known_as") or top.get("hostname")
+                        or r.get("known_as") or r.get("hostname"),
+                        "current": top.get("ip"),
+                        "old": top is not r}
+    return out
 
 
 def describe_all(rows: list) -> list:
     """The baseline rows with plain fields added: summary, display_name,
     stale, progress {seen, needed}. Unknown keys keep summary None."""
     values = _recent_values()
-    names, stale = _device_names()
+    devices = device_map()
     needed = int((me.confidence_thresholds() or {}).get("high", 6))
     out = []
     for r in rows:
         r = dict(r)
         t, v, k = r.get("entity_type"), r.get("entity_value"), r.get("behavior_key")
-        name = names.get(v) if t == "ip" else None
+        dev = devices.get(v) if t == "ip" else None
+        name = dev["name"] if dev else None
+        r["stale"] = bool(dev and dev["old"])
         r["display_name"] = (f"{name} ({v})" if name else v) + \
-            (" (old address)" if t == "ip" and v in stale else "")
-        r["stale"] = t == "ip" and v in stale
+            (" (old address)" if r["stale"] else "")
+        # One card per device: its old addresses fold into it.
+        r["device_key"] = dev["key"] if dev else None
+        r["device_name"] = (f"{name} ({dev['current']})" if name and dev
+                            and dev["current"] else name)
         r["type_word"] = TYPE_WORDS.get(t, t)
         fn = TEMPLATES.get(k)
         r["summary"] = fn(r, values.get((t, v, k), [])) if fn else None

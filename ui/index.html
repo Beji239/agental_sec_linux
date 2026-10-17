@@ -2470,15 +2470,17 @@
         record is its <b>normal</b>. Confidence grows with the number of separate
         sessions it has been seen in (2 sessions is low, 4 is medium, 6 is high),
         never with how many times it was polled in one sitting. When something
-        later behaves far outside its own normal, it lands in
-        <b>Recent Deviations</b> below: about 2 steps away from usual is worth a
-        note, 3 or more is an alert. Unusual is not the same as bad; it is a
-        reason to look. And silence is never approval: an alert nobody answered
-        stays unreviewed, it does not become normal.
+        later behaves unlike its own past, the app says so in
+        <b>Recent Deviations</b> below, in a sentence: about 2 steps from usual
+        is worth a look, 3 or more is far from usual. Unusual is not the same
+        as bad; it is a reason to look. Answer with <b>This is fine</b>, or
+        <b>Ask the agent</b> to look into it. Silence is never approval: one
+        nobody answered stays on the list for a week, it does not become
+        normal. A device keeps what was learned at its old addresses.
       </div>
       <div class="row" style="margin-bottom:14px;align-items:center;gap:12px;">
         <input class="input" id="baseline-filter" placeholder="Filter by name, IP or program..." style="width:260px;" data-oninput="loadBaselines()">
-        <label style="font-size:12px;"><input type="checkbox" id="baseline-show-old" data-onchange="loadBaselines()"> show old addresses</label>
+        <label style="font-size:12px;"><input type="checkbox" id="baseline-show-old" data-onchange="loadBaselines()"> list old addresses apart</label>
         <span class="lan-sub" id="baseline-summary"></span>
       </div>
       <div id="baseline-cards"></div>
@@ -3511,6 +3513,7 @@ const UI_ACTIONS = new Set([
   'answerQuestion',
   'approveAction',
   'approveQueued',
+  'askAgentAboutDeviation',
   'autoResize',
   'bgAppsToggled',
   'bgAsk',
@@ -3562,6 +3565,7 @@ const UI_ACTIONS = new Set([
   'mapChatSend',
   'mapCutDevice',
   'mapSinkhole',
+  'markDeviationFine',
   'markEnrollmentDone',
   'mergeDevices',
   'mergeSameMac',
@@ -7097,21 +7101,42 @@ async function loadBaselines() {
   try {
     const rows = await fetch('/api/behavioral/baseline', { headers: authHeaders() }).then(r=>r.json());
     // One card per thing, its normals as sentences, and how far learning has got.
+    // A device's old addresses fold into its card, so what was learned
+    // before an address change still counts for the device.
     const groups = {};
     rows.forEach(r => {
-      const key = r.entity_type + '|' + r.entity_value;
-      (groups[key] = groups[key] || { name: r.display_name || r.entity_value,
-                                      type: r.type_word || r.entity_type,
-                                      stale: !!r.stale, rows: [] }).rows.push(r);
+      const key = r.device_key ? 'dev|' + r.device_key
+                               : r.entity_type + '|' + r.entity_value;
+      const g = groups[key] = groups[key] || {
+        name: r.device_name || r.display_name || r.entity_value,
+        type: r.type_word || r.entity_type, rows: [], old: new Set(), stale: true };
+      if (!r.stale) g.stale = false;
+      if (r.stale) g.old.add(r.entity_value);
+      g.rows.push(r);
+    });
+    Object.values(groups).forEach(g => {
+      if (showOld || g.old.size === 0) return;
+      const byKey = {};
+      g.rows.forEach(r => {
+        const k = r.behavior_key, cur = byKey[k];
+        const seen = (r.progress || {}).seen || 0;
+        if (!cur) { byKey[k] = Object.assign({}, r, { progress: Object.assign({}, r.progress) }); return; }
+        const keep = (cur.stale && !r.stale) ? Object.assign({}, r, { progress: Object.assign({}, r.progress) }) : cur;
+        const other = keep === cur ? r : cur;
+        keep.progress.seen = Math.min(keep.progress.needed || 6,
+          (keep.progress.seen || 0) + ((other.progress || {}).seen || 0));
+        byKey[k] = keep;
+      });
+      g.rows = Object.values(byKey);
     });
     let list = Object.values(groups);
-    const oldCount = list.filter(g => g.stale).length;
-    if (!showOld) list = list.filter(g => !g.stale);
+    const oldCount = list.reduce((n, g) => n + g.old.size, 0);
     if (filter) list = list.filter(g => (g.name + ' ' + g.type).toLowerCase().includes(filter));
     list.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
     document.getElementById('baseline-summary').textContent =
-      `Learning what is normal for ${Object.keys(groups).length - oldCount} thing(s)`
-      + (oldCount ? `, plus ${oldCount} at old addresses${showOld ? '' : ' (hidden)'}` : '') + '.';
+      `Learning what is normal for ${list.length} thing(s)`
+      + (oldCount ? `; ${oldCount} old address(es) folded into their device`
+                    + (showOld ? ', listed apart below' : '') : '') + '.';
     if (!list.length) {
       box.innerHTML = '<div class="empty-state">Nothing learned yet. It fills in by itself as the app runs.</div>';
       return;
@@ -7119,14 +7144,15 @@ async function loadBaselines() {
     box.innerHTML = list.map(g => `
       <div class="card" style="margin:0 0 10px 0;padding:12px 14px;${g.stale ? 'opacity:0.6;' : ''}">
         <div style="font-weight:600;margin-bottom:6px;">${esc(g.name)}
-          <span class="lan-sub" style="font-weight:400;"> ${esc(g.type)}</span></div>
+          <span class="lan-sub" style="font-weight:400;"> ${esc(g.type)}</span>
+          ${g.old.size ? `<div class="lan-sub" style="font-weight:400;">Also learned at earlier address(es): ${esc([...g.old].join(', '))}</div>` : ''}</div>
         ${g.rows.map(r => {
           const p = r.progress || { seen: 0, needed: 6 };
           const pct = Math.min(100, Math.round(100 * p.seen / Math.max(1, p.needed)));
           const level = r.confidence === 'high' ? 'well known'
                       : r.confidence === 'medium' ? 'getting to know it' : 'still learning';
           return `<div style="display:flex;gap:12px;align-items:baseline;margin:3px 0;">
-            <div style="flex:1;">${esc(r.summary || ('no plain description yet: ' + r.behavior_key))}
+            <div style="flex:1;">${esc(r.summary || ('no plain description yet: ' + r.behavior_key))}${r.stale && showOld ? `<span class="lan-sub">, at old address ${esc(r.entity_value)}</span>` : ''}
               ${r.agent_note ? `<div class="lan-sub">Agent's note: ${esc(r.agent_note.substring(0, 200))}</div>` : ''}</div>
             <div class="lan-sub" style="white-space:nowrap;" title="Seen in ${p.seen} of the ${p.needed} sessions needed to call it well known">
               ${level}, ${p.seen} of ${p.needed} sessions
@@ -7140,20 +7166,59 @@ async function loadBaselines() {
   }
 }
 
+// Each deviation as a short story, with the owner's two answers. The story
+// is kept here by id so "Ask the agent" never reads text back out of the page.
+let deviationStories = {};
+
 async function loadDeviations() {
+  const el = document.getElementById('deviations-list');
   try {
-    const rows = await fetch('/api/behavioral/deviations?unresolved_only=true', { headers: authHeaders() }).then(r=>r.json());
-    const el   = document.getElementById('deviations-list');
-    if (!rows.length) { el.innerHTML = '<div class="empty-state">No open deviations.</div>'; return; }
-    el.innerHTML = rows.map(r => `
-      <div class="finding-row">
+    const rows = await fetch('/api/behavioral/deviations?recent=true', { headers: authHeaders() }).then(r=>r.json());
+    deviationStories = {};
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty-state">Nothing has behaved unlike its own past this week.</div>';
+      return;
+    }
+    el.innerHTML = rows.map(r => {
+      deviationStories[r.id] = r.story;
+      const far = r.level === 'far from usual';
+      return `<div class="finding-row" id="dev-${Number(r.id)}">
         <div style="flex:1;">
-          <div class="finding-title">${esc(r.entity_value)} / ${esc(r.behavior_key)}</div>
-          <div class="finding-desc">${esc(r.model_assessment||'')}</div>
+          <div class="finding-title"><span style="color:var(${far ? '--amber' : '--blue'});">${esc(r.level)}</span></div>
+          <div class="finding-desc" style="color:var(--text);">${esc(r.story)}</div>
+          <div class="row" style="gap:8px;margin-top:6px;">
+            <button class="btn" data-onclick="markDeviationFine(${Number(r.id)})">This is fine</button>
+            <button class="btn" data-onclick="askAgentAboutDeviation(${Number(r.id)})">Ask the agent</button>
+          </div>
         </div>
         <div class="finding-time">${fmtTime(r.detected_at)}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">The deviations could not be read.</div>';
+  }
+}
+
+async function markDeviationFine(id) {
+  try {
+    const r = await fetch(`/api/behavioral/deviations/fine/${encodeURIComponent(id)}`,
+      { method: 'POST', headers: authHeaders() });
+    if (r.ok) {
+      const row = document.getElementById(`dev-${Number(id)}`);
+      if (row) row.remove();
+      if (!document.querySelector('#deviations-list .finding-row')) loadDeviations();
+    }
   } catch(e) {}
+}
+
+function askAgentAboutDeviation(id) {
+  const story = deviationStories[id];
+  if (!story) return;
+  showPage('chat');
+  const input = document.getElementById('chat-input');
+  input.value = 'On the Baselines tab, this behaved unlike its own past: '
+    + story + ' Is this a concern? Look into it and tell me what you find.';
+  sendMessage();
 }
 
 // PERFORMANCE, the second axis

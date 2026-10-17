@@ -692,8 +692,7 @@ def register_routes(app):
     @app.route("/api/findings/important")
     @require_api_key
     def findings_important():
-        return jsonify(me.query_important(
-            limit=int(request.args.get("limit", 50))))
+        return jsonify(me.query_important(limit=_int_arg("limit", 50)))
 
     @app.route("/api/findings/promote", methods=["POST"])
     @require_api_key
@@ -2124,6 +2123,10 @@ def register_routes(app):
     @app.route("/api/behavioral/deviations")
     @require_api_key
     def behavioral_deviations():
+        # The tab: the last week's deviations nobody has answered, as stories.
+        if request.args.get("recent", "false").lower() == "true":
+            from core import deviations
+            return jsonify(deviations.for_page())
         sid      = get_session_id()
         unresolved = request.args.get("unresolved_only", "false").lower() == "true"
         rows     = me.query_behavioral_deviation(
@@ -2131,6 +2134,17 @@ def register_routes(app):
             unresolved_only=unresolved,
         )
         return jsonify(rows)
+
+    @app.route("/api/behavioral/deviations/fine/<int:dev_id>", methods=["POST"])
+    @require_api_key
+    def behavioral_deviation_fine(dev_id):
+        """The owner's "This is fine", from the page only."""
+        from core import deviations
+        try:
+            out = deviations.mark_fine(dev_id)
+        except me.BadInput as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        return jsonify(out), (200 if out.get("success") else 404)
 
     # SUPPRESSION AUDIT + UNDO
     #

@@ -66,8 +66,10 @@ rows = bt.describe_all([
      "sample_count": 1, "confidence": "low", "model_notes": "Rollup [x] noise"},
     {"entity_type": "ip", "entity_value": "192.0.2.31", "behavior_key": "first_seen",
      "sample_count": 3, "confidence": "low", "model_notes": "A printer, says the owner."}])
-check("the older address is marked old", (rows[0]["stale"], rows[0]["display_name"]),
-      (True, "printer-old (192.0.2.30) (old address)"))
+check("the older address is marked old, under its device's name",
+      (rows[0]["stale"], rows[0]["display_name"]),
+      (True, "printer (192.0.2.30) (old address)"))
+check("and both fold into one device", rows[0]["device_key"], rows[1]["device_key"])
 check("the current one is not", (rows[1]["stale"], rows[1]["display_name"]),
       (False, "printer (192.0.2.31)"))
 check("progress is sessions seen of those needed", rows[1]["progress"]["seen"], 3)

@@ -11,6 +11,7 @@ import os
 import re
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import contextlib
 from contextlib import contextmanager
 
 # core.voice imports nothing from this project (stdlib only), so this is the
@@ -3998,23 +3999,28 @@ def query_behavioral_baseline(
     # relationship; when nothing retained supports that, the reader learns it
     # here instead of inheriting it as a fact.
     out = []
-    for r in rows:
-        r = _annotate_hours(r)
-        check = corroborate_direction(r.get("entity_type"),
-                                      r.get("entity_value"),
-                                      r.get("behavior_key"))
-        if check:
-            r["direction_check"] = check
-        # TODO 21. Travels with the row for the same reason direction_check
-        # does: a claim must not be readable without what it rests on.
-        r["provenance"] = observation_provenance(
-            r.get("entity_type"), r.get("entity_value"), r.get("behavior_key"))
-        # The measured session count, beside the stored one. They should agree
-        # now that writes are clamped; a disagreement on an old row means the
-        # stored number predates TODO 22 and was asserted rather than counted.
-        r["distinct_sessions_measured"] = count_baseline_sessions(
-            r.get("entity_type"), r.get("entity_value"), r.get("behavior_key"))
-        out.append(r)
+    # One connection for the whole list; one per row made the
+    # Baselines tab take a minute.
+    with _get_readonly_conn() as rconn:
+        for r in rows:
+            r = _annotate_hours(r)
+            check = corroborate_direction(r.get("entity_type"),
+                                          r.get("entity_value"),
+                                          r.get("behavior_key"))
+            if check:
+                r["direction_check"] = check
+            # TODO 21. Travels with the row for the same reason direction_check
+            # does: a claim must not be readable without what it rests on.
+            r["provenance"] = observation_provenance(
+                r.get("entity_type"), r.get("entity_value"), r.get("behavior_key"),
+                conn=rconn)
+            # The measured session count, beside the stored one. They should agree
+            # now that writes are clamped; a disagreement on an old row means the
+            # stored number predates TODO 22 and was asserted rather than counted.
+            r["distinct_sessions_measured"] = count_baseline_sessions(
+                r.get("entity_type"), r.get("entity_value"), r.get("behavior_key"),
+                conn=rconn)
+            out.append(r)
     # TODO 94.20. No LIMIT on the select above, so every matching baseline is
     # here. Worth stating rather than leaving implied: this list is what the
     # app has decided is normal, and a reader who cannot tell a short list
@@ -4447,7 +4453,7 @@ def _basis_breakdown(rows) -> dict:
 
 
 def observation_provenance(entity_type: str, entity_value: str,
-                           behavior_key: str = None) -> dict:
+                           behavior_key: str = None, conn=None) -> dict:
     """
     What is this baseline actually resting on?
 
@@ -4474,7 +4480,8 @@ def observation_provenance(entity_type: str, entity_value: str,
         params.append(behavior_key)
     where = " AND ".join(clauses)
 
-    with _get_readonly_conn() as conn:
+    with (contextlib.nullcontext(conn) if conn is not None
+          else _get_readonly_conn()) as conn:
         rows = conn.execute(
             f"""SELECT evidence_untrusted, evidence_sources, written_by,
                        observed_at, basis, basis_ref
@@ -7332,7 +7339,7 @@ def _retract_ready(conn) -> bool:
 
 
 def count_baseline_sessions(entity_type: str, entity_value: str,
-                            behavior_key: str) -> int:
+                            behavior_key: str, conn=None) -> int:
     """
     Distinct sessions in which this behavior has been observed.
 
@@ -7343,7 +7350,8 @@ def count_baseline_sessions(entity_type: str, entity_value: str,
     everything IS the right answer there rather than a fallback that quietly
     means something else.
     """
-    with _get_conn() as conn:
+    with (contextlib.nullcontext(conn) if conn is not None
+          else _get_conn()) as conn:
         extra = " AND retracted_at IS NULL" if _retract_ready(conn) else ""
         row = conn.execute(f"""
             SELECT COUNT(*) AS n FROM baseline_session_seen

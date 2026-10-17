@@ -43,6 +43,16 @@ for bad in ["abc", "", "9e9", "-", "0x10", "١٢٣"]:
     r = client.get(f"/api/findings?limit={bad}", headers=H)
     check(f"limit={bad!r} -> not a 500", r.status_code != 500, True)
 
+# And every route that reads a limit, so a new one cannot bring it back.
+import inspect                                            # noqa: E402
+for rule in app.url_map.iter_rules():
+    view = app.view_functions.get(rule.endpoint)
+    if ("GET" not in rule.methods or rule.arguments or view is None
+            or '"limit"' not in inspect.getsource(inspect.unwrap(view))):
+        continue
+    r = client.get(f"{rule.rule}?limit=abc", headers=H)
+    check(f"{rule.rule}?limit=abc -> not a 500", r.status_code != 500, True)
+
 r = client.get("/api/findings?limit=999999", headers=H)
 check("absurd limit clamped, still 200", r.status_code, 200)
 

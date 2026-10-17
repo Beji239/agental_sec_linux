@@ -521,6 +521,27 @@ def _confidence_rank(confidence: str) -> int:
 # MAIN ROLLUP FUNCTION
 # Called by background thread (hourly), shutdown handler, and model via trigger_rollup tool
 
+def _history_numbers(entity_type, entity_value, behavior_key) -> list:
+    """Every numeric value recorded for this thing and key, all sessions."""
+    try:
+        with me._get_readonly_conn() as conn:
+            rows = conn.execute(
+                "SELECT behavior_value FROM behavioral_session WHERE "
+                "entity_type = ? AND entity_value = ? AND behavior_key = ? "
+                "AND superseded_by IS NULL",
+                (entity_type, entity_value, behavior_key)).fetchall()
+    except Exception as e:                              # noqa: BLE001
+        logger.debug(f"History for {entity_value} unreadable: {e}")
+        return []
+    out = []
+    for (v,) in rows:
+        try:
+            out.append(float(v))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
 def run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "full") -> dict:
     """See _run_rollup. The thresholds read once for the pass are always
     released afterwards, error or not."""
@@ -660,9 +681,12 @@ def _run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "f
             except (ValueError, TypeError):
                 pass
 
-        # Compute stats if we have numeric data
+        # Compute stats if we have numeric data. Over every session's values,
+        # not this session's alone, which made "usual" the last session.
         stats = {}
         if numeric_values:
+            numeric_values = _history_numbers(
+                entity_type, entity_value, behavior_key) or numeric_values
             n = len(numeric_values)
             mean = sum(numeric_values) / n
             variance = sum((x - mean) ** 2 for x in numeric_values) / n if n > 1 else 0
@@ -834,6 +858,15 @@ def _run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "f
             baselines_created += 1
         else:
             baselines_updated += 1
+
+    # Python's own comparison with earlier sessions, for the Baselines tab.
+    try:
+        from core import deviations
+        dev = deviations.check(session_id)
+        logger.info(f"Rollup [{trigger_reason}]: {dev['written']} deviation(s) "
+                    f"written, {dev['judged']} judged against earlier sessions.")
+    except Exception as e:                              # noqa: BLE001
+        logger.warning(f"Rollup [{trigger_reason}]: deviation check failed: {e}")
 
     duration_ms = int((time.time() - start_time) * 1000)
     entities_processed = len(groups)

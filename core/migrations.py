@@ -155,7 +155,7 @@ logger = logging.getLogger(__name__)
 # before they are filed.
 # v69, 2026-10-15: learned_rule.reason_kind, owner_words, trial_until and
 # kept_at, so a rule says which fact Python checks and when a trial lapses.
-SCHEMA_VERSION = 70
+SCHEMA_VERSION = 71
 
 
 # HELPERS
@@ -4315,6 +4315,17 @@ def _migrate_port_origin(conn) -> int:
     return 1
 
 
+def _migrate_session_thing_index(conn) -> int:
+    """v71: behavioral_session by thing and key. The Baselines tab and the
+    rollup read one thing's history at a time, and each read scanned the
+    whole table. Idempotent."""
+    if not _table_exists(conn, "behavioral_session"):
+        return 0
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_bsession_thing ON "
+                 "behavioral_session(entity_type, entity_value, behavior_key)")
+    return 1
+
+
 def run_migrations(db_path: Path = None) -> dict:
     """
     Apply all pending migrations. Idempotent, safe on every boot.
@@ -4430,6 +4441,7 @@ def run_migrations(db_path: Path = None) -> dict:
         run_dismissal_added    = _migrate_run_dismissal(conn)
         expectations_added     = _migrate_expectations(conn)
         port_origin_added      = _migrate_port_origin(conn)
+        session_index_added    = _migrate_session_thing_index(conn)
 
         _set_version(conn, SCHEMA_VERSION)
         conn.commit()
@@ -4452,6 +4464,7 @@ def run_migrations(db_path: Path = None) -> dict:
             "run_dismissal_added": run_dismissal_added,
             "expectations_added":  expectations_added,
             "port_origin_added":   port_origin_added,
+            "session_index_added": session_index_added,
             "deviations_migrated": deviations,
             "baselines_unsuppressed": unsuppressed,
             "preferences_added":   prefs,
