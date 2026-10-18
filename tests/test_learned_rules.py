@@ -255,5 +255,29 @@ named_now = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}}
 check("once the owner names it, that refusal is gone",
       "waiting on the owner" not in (named_now.get("error") or ""), named_now)
 
+print("\n[8] Nothing is learned about a subject while the owner's answer is due")
+ASKED = "192.0.2.77"
+with me._get_conn() as c:
+    c.execute("INSERT INTO operator_question (session_id, asked_at, topic, "
+              "entity_type, entity_value, question, state) VALUES ('t', "
+              "datetime('now'), 'identify_device', 'ip', ?, "
+              "'Do you know 192.0.2.77?', 'open')", (ASKED,))
+chat = dict(zoom, entity_value=ASKED,
+            raw_data=json.dumps({"registered_domain": "zoom.us",
+                                 "client_ip": ASKED}))
+open_q = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
+                  "a big cloud service", example=chat,
+                  reason_kind="cloud_network", unattended=True)
+check("a rule is refused while the question is open",
+      "has not answered yet" in (open_q.get("error") or ""), open_q)
+with me._get_conn() as c:
+    c.execute("UPDATE operator_question SET state = 'answered' "
+              "WHERE entity_value = ?", (ASKED,))
+answered = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
+                    "a big cloud service", example=chat,
+                    reason_kind="cloud_network", unattended=True)
+check("once answered, that refusal is gone",
+      "has not answered yet" not in (answered.get("error") or ""), answered)
+
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)

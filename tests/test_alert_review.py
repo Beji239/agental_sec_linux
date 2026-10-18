@@ -187,6 +187,20 @@ ar.review_once(run=counting_model)
 check("once the owner names it, its alerts go to the model again",
       asked["n"] == 1)
 
+print("\n[5c] The review sees a question the owner has not answered")
+with me._get_conn() as c:
+    c.execute("INSERT INTO operator_question (session_id, asked_at, topic, "
+              "entity_type, entity_value, question, state) VALUES ('t', "
+              "datetime('now'), 'identify_device', 'ip', '203.0.113.50', "
+              "'Do you know the device at 203.0.113.50?', 'open')")
+ev = ar.evidence({"detection_id": "GEO-1002", "entity_value": "203.0.113.50",
+                  "raw_data": "{}"})
+check("its evidence carries the question",
+      ev.get("open_question_to_owner") == "Do you know the device at "
+      "203.0.113.50?", ev)
+check("and the prompt says what that means",
+      "open_question_to_owner" in ar.PROMPT and "give no pattern" in ar.PROMPT)
+
 print("\n[6] Reading the answer")
 good = {"decisions": [{"id": 1, "verdict": "alarm", "reason": "x"}]}
 check("a plain answer is read", ar._parse([json.dumps(good)]) == good["decisions"])

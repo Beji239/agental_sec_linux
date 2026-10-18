@@ -196,19 +196,38 @@ def replay(conn, detection_id: str, match: dict, days: int = REPLAY_DAYS):
             "entities_seen": len(all_entities), "open_ids": open_ids}
 
 
-def waiting_device(conn, example: dict) -> str | None:
-    """The example's address when that device still waits on the owner: a
-    new device incident is open and the owner has not named it since."""
+def _subjects(example: dict) -> set:
+    """The addresses an alert is about: its entity and the client in it."""
     try:
         raw = json.loads(example.get("raw_data") or "{}")
     except (TypeError, ValueError):
         raw = {}
     raw = raw if isinstance(raw, dict) else {}
+    return {v for v in (example.get("entity_value"), raw.get("ip"),
+                        raw.get("client_ip"), raw.get("src_ip"))
+            if v and isinstance(v, str)}
+
+
+def open_question(conn, example: dict) -> str | None:
+    """A question the owner was asked about this alert's subject and has not
+    answered yet, word for word."""
+    if not me._table_exists_ro(conn, "operator_question"):
+        return None
+    for subject in _subjects(example):
+        row = conn.execute(
+            "SELECT question FROM operator_question WHERE state = 'open' "
+            "AND entity_value = ? ORDER BY id DESC LIMIT 1",
+            (subject,)).fetchone()
+        if row:
+            return row[0]
+    return None
+
+
+def waiting_device(conn, example: dict) -> str | None:
+    """The example's address when that device still waits on the owner: a
+    new device incident is open and the owner has not named it since."""
     marks = ",".join("?" * len(NEW_DEVICES))
-    for ip in {example.get("entity_value"), raw.get("ip"),
-               raw.get("client_ip"), raw.get("src_ip")}:
-        if not ip or not isinstance(ip, str):
-            continue
+    for ip in _subjects(example):
         waiting = conn.execute(
             f"SELECT 1 FROM incident WHERE detection_id IN ({marks}) "
             f"AND entity_value = ? AND status IN "
@@ -285,6 +304,13 @@ def learn(detection_id: str, finding_id, match, reason: str,
                                   f"on the owner's decision; nothing is "
                                   f"learned from it until the owner names "
                                   f"it or closes its new device incident")}
+            asked = open_question(conn, example)
+            if asked:
+                return {"success": False,
+                        "error": (f"the owner was asked about this and has "
+                                  f"not answered yet ({asked[:200]}); "
+                                  f"nothing is learned about it until they "
+                                  f"do")}
             ok, found = evidence.verify(reason_kind, example)
             if not ok:
                 return {"success": False,
