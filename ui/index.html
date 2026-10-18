@@ -1951,6 +1951,22 @@
 
   <!-- DEVICES. What is on the network, what you said belongs there, and what each device answers on. -->
   <div class="page" id="page-devices">
+    <div class="card" id="hold-card">
+      <div class="card-title">New Devices</div>
+      <div class="card-note">
+        With this on, a device that joins the network for the first time gets no
+        internet until you check it in here, by naming it. Devices already here
+        keep theirs. Useful in a business network; at home you may not need it.
+        The block is made at the router, so it needs the router agent. If the app
+        cannot reach the router, the new device stays online and you are told.
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 4px;">
+        <input type="checkbox" id="hold-switch" data-onchange="holdSwitch(this.checked)">
+        Hold new devices until I check them in
+      </label>
+      <div id="hold-status" class="exp-note"></div>
+      <div id="hold-list"></div>
+    </div>
     <div class="card">
       <div class="card-title">Network Devices</div>
       <div class="card-note">
@@ -2715,6 +2731,22 @@
         <button class="btn" id="fa-reset" data-onclick="resetFalseAlarms()">Show all</button></span></div>
       <div id="fa-days"></div>
       <div class="card-title" style="margin-top:16px;">Needs your verdict</div>
+      <div class="exp-note" style="margin-top:0;">
+        <b>The question is whether the alarm was right to worry you.</b> Every incident here
+        really happened: a device did join, a program did start. That is not what you are asked.
+        AgentalSec wants to learn from each one whether it is the kind of thing you worry about.
+        <b>False alarm</b>: it happened, but it was harmless, so the alert was not needed, for
+        example your own laptop showing up under a new private address. <b>Real</b>: it caught
+        something you would want to act on, such as a device you do not know. <b>Not sure</b>:
+        you cannot tell yet.
+      </div>
+      <div class="exp-note">
+        <b>When you say Real.</b> The rule that caught it is marked as catching real things, a red
+        ring above, so it is one to keep, not mute. A fix that would have held it back counts
+        against that fix on its trial. Saying Real does not block or change anything by itself:
+        to act, use the incident's actions or ask the analyst. <b>When you say False alarm</b>, the
+        rule's filled dots grow, and a rule that is mostly filled is the one to mute or fix.
+      </div>
       <div id="fa-todo"></div>
     </div>
     <div class="card">
@@ -3541,6 +3573,9 @@ const UI_ACTIONS = new Set([
   'goToInbox',
   'handleKey',
   'hideKeyModal',
+  'holdCheckIn',
+  'holdLetIn',
+  'holdSwitch',
   'inspectProcess',
   'inventoryScan',
   'loadActions',
@@ -3819,7 +3854,7 @@ function loadPage(name) {
   if (name === 'dashboard')  { _srcCatalog = null; loadDashboard(); }
   if (name === 'alerts')     { loadFindings(); loadImportant(); }
   if (name === 'timeline')   loadTimeline();
-  if (name === 'devices')    { loadDevices(); refreshRouter(); loadInventory();
+  if (name === 'devices')    { loadDevices(); loadHold(); refreshRouter(); loadInventory();
                                loadPorts(); loadPortSets(); loadTls(); }
   if (name === 'map')        loadThreatMap();
   if (name === 'lan')        startLanLive(); else stopLanLive();
@@ -5157,6 +5192,78 @@ function _showRetired() {
 function toggleRetiredDevices(on) {
   try { localStorage.setItem('devices.showRetired', on ? '1' : '0'); } catch (e) {}
   loadDevices();
+}
+
+async function loadHold() {
+  const status = document.getElementById('hold-status');
+  const list = document.getElementById('hold-list');
+  let d;
+  try {
+    d = await fetch('/api/devices/hold', { headers: authHeaders() }).then(r => r.json());
+  } catch (e) {
+    status.textContent = 'Could not reach AgentalSec, so the new device switch is not shown.';
+    return;
+  }
+  document.getElementById('hold-switch').checked = !!d.on;
+  const since = d.since ? new Date(d.since).toLocaleString() : '';
+  status.textContent = !d.on ? 'Off. New devices get internet as usual.'
+    : (d.router ? `On since ${since}. ` : `On since ${since}, but no router agent is set up, so nothing can be held. `)
+      + (d.waiting ? `${d.waiting} device${d.waiting === 1 ? '' : 's'} waiting for you.` : 'Nothing waiting.');
+  const rows = (d.devices || []).filter(r => r.status !== 'released');
+  list.innerHTML = rows.map(r => {
+    const what = [r.hostname, r.vendor].filter(Boolean).join(', ') || 'nothing known yet';
+    const when = new Date(r.held_at).toLocaleString();
+    const id = esc(r.mac.replace(/:/g, ''));
+    return `<div class="trial st-${r.status === 'held' ? 'trial' : 'off'}">`
+      + `<div class="trial-head"><span class="trial-title">${esc(r.ip || r.mac)}, ${esc(what)}</span>`
+      + `<span class="trial-pill">${r.status === 'held' ? 'No internet' : 'Online, not held'}</span></div>`
+      + `<div class="exp-note">Hardware address ${esc(r.mac)}, first seen ${esc(when)}.`
+      + (r.error ? ` It could not be held: ${esc(r.error)}.` : '') + `</div>`
+      + `<div class="row" style="gap:8px;margin-top:8px;">`
+      + (r.ip ? `<input class="input" id="hold-name-${id}" placeholder="What is it?" style="flex:1;">`
+        + `<button class="btn primary" data-onclick="holdCheckIn('${esc(r.ip)}', '${id}')">Check in</button>` : '')
+      + (r.status === 'held' ? `<button class="btn" data-onclick="holdLetIn('${esc(r.mac)}')">Let it in unnamed</button>` : '')
+      + `</div></div>`;
+  }).join('');
+}
+
+async function holdSwitch(on) {
+  if (!on && !confirm('Turn this off? Every device waiting now gets its internet back.')) {
+    document.getElementById('hold-switch').checked = true;
+    return;
+  }
+  try {
+    await fetch('/api/devices/hold/switch', {
+      method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ on: !!on }) });
+  } catch (e) {}
+  loadHold();
+}
+
+async function holdCheckIn(ip, id) {
+  const field = document.getElementById('hold-name-' + id);
+  const name = field ? field.value.trim() : '';
+  if (!name) { if (field) field.focus(); return; }
+  try {
+    const r = await fetch('/api/devices/label', {
+      method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ ip: ip, known_as: name }) }).then(x => x.json());
+    const failed = (r.hold_released || []).find(x => !x.success);
+    if (r.error || failed) alert(r.error || failed.error);
+  } catch (e) {}
+  loadHold();
+  loadDevices();
+}
+
+async function holdLetIn(mac) {
+  if (!confirm('Let this device in without naming it? It gets its internet back now.')) return;
+  try {
+    const r = await fetch('/api/devices/hold/release', {
+      method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+      body: JSON.stringify({ mac: mac }) }).then(x => x.json());
+    if (r.error) alert(r.error);
+  } catch (e) {}
+  loadHold();
 }
 
 async function loadDevices() {
@@ -9167,9 +9274,10 @@ async function loadLearned() {
   if (!rules.length) { box.innerHTML = '<div class="exp-note">No rule learned yet.</div>'; return; }
   box.innerHTML = rules.map(r => {
     const when = new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-    const onTrial = r.status === 'on' && r.trial_until && !r.kept_at;
+    const waits = r.status === 'on' && r.question_state === 'open';
+    const onTrial = !waits && r.status === 'on' && r.trial_until && !r.kept_at;
     const until = onTrial ? new Date(r.trial_until).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
-    const pill = r.status !== 'on' ? 'Undone' : r.lapsed ? 'Trial lapsed' : onTrial ? 'On trial' : 'On';
+    const pill = r.status !== 'on' ? 'Undone' : waits ? 'Until you answer' : r.lapsed ? 'Trial lapsed' : onTrial ? 'On trial' : 'On';
     const basis = r.owner_words ? `Your words: "${esc(r.owner_words)}".`
       : r.reason_kind ? `Python checks every alert it holds: ${esc(LEARN_KIND[r.reason_kind] || r.reason_kind)}.`
       : 'Made before rules had to name a checked fact, so it holds nothing.';
@@ -9183,7 +9291,9 @@ async function loadLearned() {
       + `Held back ${Number(r.held_count)} so far, ${Number(r.held_last_7_days)} in the last week.`
       + (r.last_example ? ` Last one: ${esc(r.last_example)}.` : '')
       + (onTrial ? ` On trial until ${esc(until)}; it lapses unless you keep it.` : '') + `</div>`
-      + (onTrial || r.lapsed ? '<button class="btn" data-keep="1">Keep this rule</button>' : '')
+      + (waits ? `<div class="exp-note"><b>Waits on you.</b> Made while a question to you about this device is open, so it covers that device only. `
+        + `Everything it holds is kept. Answer the question on the Inbox tab: yes keeps the rule, no undoes it and shows all it held.</div>` : '')
+      + (!waits && (onTrial || r.lapsed) ? '<button class="btn" data-keep="1">Keep this rule</button>' : '')
       + (r.status === 'on' ? '<button class="btn" data-undo="1">Undo this rule</button>' : '')
       + `</div>`;
   }).join('');

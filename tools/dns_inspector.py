@@ -159,6 +159,14 @@ BEACON_MIN_INTERVAL_SECS = 30
 # CV = stddev / mean. Below 0.25 is more regular than any human-driven pattern.
 BEACON_CV_CEILING = 0.25
 
+# Spread (DNS-1007): one destination new and rare in the house, polled on a
+# timer by several devices in the same beacon window.
+SPREAD_MIN_DEVICES = 2
+SPREAD_NEW_DAYS = 7       # first asked for in the house this recently
+SPREAD_RARE_DEVICES = 4   # by at most this many devices, ever
+# Held spread (DNS-1008): rule fields that name a destination by name.
+HELD_NAME_KEYS = ("registered_domain", "domain", "sni", "matched")
+
 # THE VOLUME AND PATTERN CHECKS, ADDED 2026-09-22.
 #
 # WHY THESE ARRIVED LAST AND WHAT WAS CLAIMED IN THE MEANTIME. Until today,
@@ -1177,7 +1185,7 @@ def _check_activity(conn, session_id: str) -> dict:
     return out
 
 
-def _check_beacons(conn, session_id: str) -> int:
+def _check_beacons(conn, session_id: str, pairs: list = None) -> int:
     """
     Find (client, domain) pairs whose query cadence is too regular for a human.
 
@@ -1202,70 +1210,10 @@ def _check_beacons(conn, session_id: str) -> int:
     dependency nobody looks at because it has no behaviour.
     """
     from core import memory_engine as me
-    # Parsing the stored stamps needs these; the CUTOFF does not, it goes
-    # through the funnel. Do not delete this as unused.
-    from datetime import datetime, timezone
-
-    cutoff = _window_cutoff(BEACON_WINDOW_HOURS)
-
-    # Get pairs with enough queries in the window.
-    candidates = conn.execute("""
-        SELECT client_ip, domain, COUNT(*) as cnt
-        FROM dns_queries
-        WHERE queried_at >= ? AND client_ip IS NOT NULL AND domain IS NOT NULL
-        GROUP BY client_ip, domain
-        HAVING cnt >= ?
-    """, (cutoff, BEACON_MIN_COUNT)).fetchall()
 
     raised = 0
-    for client_ip, domain, cnt in candidates:
-        if _is_local_name(domain):
-            continue
-        # Fetch the timestamps sorted ascending so interval computation is simple.
-        ts_rows = conn.execute("""
-            SELECT queried_at FROM dns_queries
-            WHERE client_ip = ? AND domain = ? AND queried_at >= ?
-            ORDER BY queried_at ASC
-        """, (client_ip, domain, cutoff)).fetchall()
-
-        timestamps = []
-        for (ts_str,) in ts_rows:
-            if not ts_str:
-                continue
-            try:
-                # Accept ISO strings with or without timezone.
-                ts_str = ts_str.replace("Z", "+00:00")
-                dt = datetime.fromisoformat(ts_str)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                timestamps.append(dt.timestamp())
-            except (ValueError, AttributeError):
-                continue
-
-        if len(timestamps) < BEACON_MIN_COUNT:
-            continue
-
-        intervals = [timestamps[i + 1] - timestamps[i]
-                     for i in range(len(timestamps) - 1)]
-
-        if not intervals:
-            continue
-
-        mean_interval = statistics.mean(intervals)
-        if mean_interval < BEACON_MIN_INTERVAL_SECS:
-            # Too fast: this is a burst, not a scheduled poll.
-            continue
-
-        if len(intervals) < 2:
-            continue
-
-        stddev = statistics.stdev(intervals)
-        cv = stddev / mean_interval if mean_interval > 0 else 1.0
-
-        if cv > BEACON_CV_CEILING:
-            # Too irregular to call a beacon.
-            continue
-
+    for client_ip, domain, cnt, mean_interval, stddev, cv in (
+            pairs if pairs is not None else _beacon_pairs(conn)):
         title = f"DNS beacon: {client_ip} polls {domain} on schedule"
         if _already_handled(client_ip, title):
             continue
@@ -1300,6 +1248,238 @@ def _check_beacons(conn, session_id: str) -> int:
                 f"{cnt} queries, mean {mean_interval:.0f}s, CV {cv:.3f}"
             )
 
+    return raised
+
+
+def _beacon_pairs(conn) -> list:
+    """(client, domain, count, mean, stddev, cv) for every pair in the beacon
+    window whose cadence is too regular for a human."""
+    # Parsing the stored stamps needs these; the CUTOFF does not, it goes
+    # through the funnel. Do not delete this as unused.
+    from datetime import datetime, timezone
+
+    cutoff = _window_cutoff(BEACON_WINDOW_HOURS)
+    candidates = conn.execute("""
+        SELECT client_ip, domain, COUNT(*) as cnt
+        FROM dns_queries
+        WHERE queried_at >= ? AND client_ip IS NOT NULL AND domain IS NOT NULL
+        GROUP BY client_ip, domain
+        HAVING cnt >= ?
+    """, (cutoff, BEACON_MIN_COUNT)).fetchall()
+
+    out = []
+    for client_ip, domain, cnt in candidates:
+        if _is_local_name(domain):
+            continue
+        ts_rows = conn.execute("""
+            SELECT queried_at FROM dns_queries
+            WHERE client_ip = ? AND domain = ? AND queried_at >= ?
+            ORDER BY queried_at ASC
+        """, (client_ip, domain, cutoff)).fetchall()
+        timestamps = []
+        for (ts_str,) in ts_rows:
+            if not ts_str:
+                continue
+            try:
+                # Accept ISO strings with or without timezone.
+                ts_str = ts_str.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(ts_str)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                timestamps.append(dt.timestamp())
+            except (ValueError, AttributeError):
+                continue
+        if len(timestamps) < BEACON_MIN_COUNT:
+            continue
+        intervals = [timestamps[i + 1] - timestamps[i]
+                     for i in range(len(timestamps) - 1)]
+        if len(intervals) < 2:
+            continue
+        mean_interval = statistics.mean(intervals)
+        if mean_interval < BEACON_MIN_INTERVAL_SECS:
+            # Too fast: this is a burst, not a scheduled poll.
+            continue
+        stddev = statistics.stdev(intervals)
+        cv = stddev / mean_interval if mean_interval > 0 else 1.0
+        if cv > BEACON_CV_CEILING:
+            # Too irregular to call a beacon.
+            continue
+        out.append((client_ip, domain, cnt, mean_interval, stddev, cv))
+    return out
+
+
+def _name_clause(name: str, registered: bool) -> tuple:
+    """SQL for rows asking for this name, or anything under it."""
+    if registered:
+        return "(domain = ? OR domain LIKE ?)", (name, f"%.{name}")
+    return "domain = ?", (name,)
+
+
+def _device_label(conn, ip: str) -> str:
+    row = conn.execute(
+        "SELECT known_as, hostname, vendor FROM known_devices WHERE ip = ? "
+        "AND merged_into IS NULL AND retired_at IS NULL ORDER BY "
+        "identified_by = 'user' DESC LIMIT 1", (ip,)).fetchone()
+    name = next((v for v in (row or ()) if v), None)
+    return f"{name} ({ip})" if name else ip
+
+
+def _check_spread(conn, session_id: str, pairs: list) -> dict:
+    """
+    DNS-1007. Several devices polling one destination on a timer, when that
+    destination is new in the house and few devices ever asked for it: one
+    controller reaching more than one device. Raised high, so it is never
+    held by a learned rule or sorted by the model.
+    """
+    from core import memory_engine as me
+    from datetime import datetime, timedelta, timezone
+
+    out = {"raised": 0, "unjudged": None}
+    by_name: dict = {}
+    for client_ip, domain, cnt, mean_interval, _sd, _cv in pairs:
+        reg = _registered_domain(domain)
+        if reg:
+            by_name.setdefault(reg, {})[client_ip] = (domain, cnt,
+                                                      mean_interval)
+    shared = {k: v for k, v in by_name.items()
+              if len(v) >= SPREAD_MIN_DEVICES}
+    if not shared:
+        return out
+
+    new_since = (datetime.now(timezone.utc) - timedelta(days=SPREAD_NEW_DAYS)) \
+        .strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    oldest = conn.execute("SELECT MIN(queried_at) FROM dns_queries").fetchone()
+    if not oldest or not oldest[0] or oldest[0] > new_since:
+        # Too little history to call anything new; said, not guessed.
+        out["unjudged"] = (f"{len(shared)} destination(s) polled by several "
+                           f"devices, but the DNS record is younger than "
+                           f"{SPREAD_NEW_DAYS} days, so whether they are new "
+                           f"here cannot be judged yet")
+        return out
+
+    for reg, devices in shared.items():
+        where, args = _name_clause(reg, True)
+        first, ever = conn.execute(
+            f"SELECT MIN(queried_at), COUNT(DISTINCT client_ip) FROM "
+            f"dns_queries WHERE {where}", args).fetchone()
+        if not first or first < new_since or ever > SPREAD_RARE_DEVICES:
+            continue
+        labels = {ip: _device_label(conn, ip) for ip in devices}
+        title = f"Several devices call {reg} on a timer"
+        for ip, (domain, cnt, mean_interval) in devices.items():
+            if _already_handled(ip, title):
+                continue
+            others = ", ".join(labels[o] for o in devices if o != ip)
+            result = me.save_finding(
+                session_id=session_id, source="dns_inspector",
+                severity="high", entity_type="ip", entity_value=ip,
+                title=title, sensor_id=resolver_sensor_id(),
+                description=(
+                    f"{labels[ip]} looks up {domain} every "
+                    f"{mean_interval:.0f}s ({cnt} times in "
+                    f"{BEACON_WINDOW_HOURS}h). So do: {others}.\n"
+                    f"{reg} was first asked for here on {first[:16]} and "
+                    f"only {ever} device(s) have ever asked for it. One new, "
+                    f"rare server checked in on by several devices is how "
+                    f"one intruder controlling more than one device looks. "
+                    f"Find what on each device makes these lookups."),
+                raw_data={"domain": domain, "registered_domain": reg,
+                          "client_ip": ip, "devices": sorted(devices),
+                          "first_seen": first, "devices_ever": ever},
+                detection_id="DNS-1007")
+            if result.get("saved"):
+                out["raised"] += 1
+                logger.warning(f"DNS-1007: {len(devices)} devices poll {reg}")
+    return out
+
+
+def _rule_device_ips(conn, match: dict) -> set:
+    """The addresses of the device a rule is pinned to, if it is pinned."""
+    raw = match.get("raw") or {}
+    ips = {v for v in (match.get("entity"), raw.get("client_ip"),
+                       raw.get("src_ip")) if v}
+    mac = raw.get("subject")
+    if mac:
+        ips |= {r[0] for r in conn.execute(
+            "SELECT ip FROM known_devices WHERE lower(mac) = lower(?)",
+            (mac,))}
+    return ips
+
+
+def _check_held_spread(conn, session_id: str) -> int:
+    """
+    DNS-1008. A destination a learned rule holds back starts being reached by
+    another device. Raised once per rule, naming every new device, because a
+    quiet rule must not hide a destination spreading through the house.
+    """
+    import fnmatch
+    import json
+    from core import learned_rules
+    from core import memory_engine as me
+
+    if not me._table_exists_ro(conn, "learned_rule"):
+        return 0
+    raised = 0
+    rules = conn.execute(
+        "SELECT id, detection_id, match_json, created_at, reason FROM "
+        "learned_rule WHERE status = 'on' AND (trial_until IS NULL OR kept_at "
+        "IS NOT NULL OR trial_until > ?)", (learned_rules._iso(),)).fetchall()
+    for rid, did, match_json, created_at, reason in rules:
+        title = f"A destination learned rule {rid} holds back is reached by more devices"
+        if conn.execute("SELECT 1 FROM findings WHERE detection_id = "
+                        "'DNS-1008' AND title = ? LIMIT 1",
+                        (title,)).fetchone():
+            continue                                # once per rule, ever
+        try:
+            match = json.loads(match_json)
+        except ValueError:
+            continue
+        raw = match.get("raw") or {}
+        key = next((k for k in HELD_NAME_KEYS if raw.get(k)), None)
+        if not key:
+            continue
+        pattern = str(raw[key]).lower()
+        registered = key == "registered_domain"
+        if any(c in pattern for c in "*?["):
+            literal = pattern.replace("*", "%").replace("?", "_")
+            where, args = "domain LIKE ?", ("%" + literal.lstrip("%"),)
+        else:
+            where, args = _name_clause(pattern, registered)
+        own = _rule_device_ips(conn, match)
+        fresh = []
+        for client_ip, domain, first in conn.execute(
+                f"SELECT client_ip, MIN(domain), MIN(queried_at) FROM "
+                f"dns_queries WHERE {where} AND client_ip IS NOT NULL "
+                f"GROUP BY client_ip", args):
+            name = _registered_domain(domain) if registered else domain
+            if client_ip in own or not fnmatch.fnmatchcase(
+                    (name or "").lower(), pattern):
+                continue
+            if first and first > created_at:
+                fresh.append((client_ip, first))
+        if not fresh:
+            continue
+        fresh.sort(key=lambda x: x[1])
+        names = ", ".join(f"{_device_label(conn, ip)} from {at[:16]}"
+                          for ip, at in fresh)
+        result = me.save_finding(
+            session_id=session_id, source="dns_inspector", severity="medium",
+            entity_type="ip", entity_value=fresh[0][0], title=title,
+            sensor_id=resolver_sensor_id(),
+            description=(
+                f"Learned rule {rid} ({did}) holds back {key} {pattern}: "
+                f"{reason}. Since it was made on {created_at[:16]}, devices "
+                f"that never asked for it before now do: {names}. Check "
+                f"that these devices should reach it; if not, undo the rule "
+                f"on the Expectations tab."),
+            raw_data={"registered_domain" if registered else "domain":
+                      pattern, "client_ip": fresh[0][0], "rule_id": rid,
+                      "devices": [ip for ip, _ in fresh]},
+            detection_id="DNS-1008")
+        if result.get("saved"):
+            raised += 1
+            logger.warning(f"DNS-1008: rule {rid} destination reached by "
+                           f"{len(fresh)} new device(s)")
     return raised
 
 
@@ -1354,7 +1534,11 @@ def analyse_once(config: dict, session_id: str) -> dict:
                 }
 
             dga_found = _check_dga(conn, since_id=cursor, session_id=session_id)
-            beacon_found = _check_beacons(conn, session_id=session_id)
+            pairs = _beacon_pairs(conn)
+            beacon_found = _check_beacons(conn, session_id=session_id,
+                                          pairs=pairs)
+            spread = _check_spread(conn, session_id, pairs)
+            held_spread = _check_held_spread(conn, session_id)
             # THE TWO NEW FAMILIES, 2026-09-22. Both are windowed on the whole
             # table rather than cursor-based, and both are idempotent by
             # finding_already_open: they describe a STATE of the last four
@@ -1381,6 +1565,7 @@ def analyse_once(config: dict, session_id: str) -> dict:
     _set_cursor(max_id)
     logger.info(
         f"DNS inspection: DGA={dga_found}, beacon={beacon_found}, "
+        f"spread={spread['raised']}, held spread={held_spread}, "
         f"tunnel={tunnel_found}, volume/nxdomain/txt="
         f"{activity.get('volume', 0)}/{activity.get('nxdomain', 0)}/"
         f"{activity.get('txt', 0)} over {activity.get('clients_seen', 0)} "
@@ -1388,11 +1573,16 @@ def analyse_once(config: dict, session_id: str) -> dict:
     )
     if activity.get("note"):
         logger.warning(f"DNS inspection coverage: {activity['note']}")
+    if spread.get("unjudged"):
+        logger.info(f"DNS-1007: {spread['unjudged']}")
     return {
         "ran": True,
         "reason": None,
         "dga_findings": dga_found,
         "beacon_findings": beacon_found,
+        "spread_findings": spread["raised"],
+        "spread_unjudged": spread.get("unjudged"),
+        "held_spread_findings": held_spread,
         "tunnel_findings": tunnel_found,
         "activity_findings": activity_total,
         "activity": activity,

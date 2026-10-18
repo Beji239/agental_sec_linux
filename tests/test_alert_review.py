@@ -199,7 +199,8 @@ check("its evidence carries the question",
       ev.get("open_question_to_owner") == "Do you know the device at "
       "203.0.113.50?", ev)
 check("and the prompt says what that means",
-      "open_question_to_owner" in ar.PROMPT and "give no pattern" in ar.PROMPT)
+      "open_question_to_owner" in ar.PROMPT
+      and "covers that one device until the owner answers" in ar.PROMPT)
 
 print("\n[6] Reading the answer")
 good = {"decisions": [{"id": 1, "verdict": "alarm", "reason": "x"}]}
@@ -217,5 +218,43 @@ check("a cut off answer is not an answer",
 check("no answer is not an answer", ar._parse([]) is None)
 
 ar._state["running"] = False
+print("\n[9] A normal one about a device with an open question")
+PENDING = "192.0.2.90"
+named("198.51.100.30", "sync.example.com")
+with me._get_conn() as c:
+    c.execute("INSERT INTO operator_question (session_id, asked_at, topic, "
+              "entity_type, entity_value, question, state) VALUES ('t', "
+              "datetime('now'), 'identify_device', 'ip', ?, 'Whose is it?', "
+              "'open')", (PENDING,))
+from core import incident  # noqa: E402
+incident.watch_once("t")
+ar._state["running"] = True
+pend = me.save_finding(
+    session_id="t", source="dns_inspector", severity="medium",
+    entity_type="ip", entity_value=PENDING, detection_id="DNS-1002",
+    title="DNS beacon: polls sync.example.com on schedule", description="t",
+    raw_data={"domain": "sync.example.com", "registered_domain": "example.com",
+              "client_ip": PENDING})
+check("it waits for the review", pend.get("review_id"), pend)
+ar.review_once(run=lambda p: {"answers": [json.dumps({"decisions": [
+    {"id": pend["review_id"], "verdict": "normal",
+     "reason_kind": "named_lookup",
+     "reason": "a sync service, waits on the owner's answer",
+     "pattern": {"raw": {"registered_domain": "example.com"}}}]})],
+    "usage": {"total_tokens": 10}})
+prov = [r for r in lr.listing()["rules"] if r.get("question_state") == "open"]
+check("the rule it makes is provisional, for that device",
+      len(prov) == 1 and prov[0]["match"].get("entity") == PENDING, prov)
+kept = findings(PENDING)
+check("the alert is on record, held under that rule",
+      len(kept) == 1 and kept[0]["dismissed"] == 1 and
+      kept[0]["dismissed_reason"].startswith("provisional rule "), kept)
+tick = incident.watch_once("t")
+with me._get_readonly_conn() as c:
+    opened = c.execute("SELECT COUNT(*) FROM incident WHERE entity_value = ?",
+                       (PENDING,)).fetchone()[0]
+check("no incident is opened for it", opened == 0
+      and tick.get("findings_read", 0) >= 1, tick)
+
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)

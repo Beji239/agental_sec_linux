@@ -1089,6 +1089,22 @@ _REGISTER: list[Detection] = [
        "Normal backup and update tools produce this; so does C2 polling.", ("confidentiality",)),
 
 
+    _d("DNS-1007", 1, "dns_beacon_spread", "dns_inspector", "ip",
+       {"high"},
+       "Two or more devices poll the same destination on a timer, and that "
+       "destination is new in the house and rare: few devices ever asked for "
+       "it. One controller checking in on several devices looks like this. "
+       "Raised high, so no learned rule holds it and the model never sorts "
+       "it away.", ("confidentiality", "integrity")),
+
+    _d("DNS-1008", 1, "held_destination_spread", "dns_inspector", "ip",
+       {"medium"},
+       "A destination a learned quiet rule holds back is now asked for by "
+       "devices that never asked for it before the rule was made. Raised "
+       "once per rule, naming the devices, so a quiet rule cannot hide a "
+       "destination spreading through the house.", ("confidentiality",)),
+
+
     # dns_inspector, the checks that were listed as NOT BUILT until
     # 2026-09-22.
     #

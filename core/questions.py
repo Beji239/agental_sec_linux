@@ -653,7 +653,7 @@ def mark_shown_in_chat(question_ids: list) -> dict:
 # ANSWERING
 
 def answer(question_id: int, answer_text: str = None,
-           do_not_know: bool = False) -> dict:
+           do_not_know: bool = False, verdict: str = None) -> dict:
     """
     The owner answers, or says the owner does not know either.
 
@@ -679,10 +679,15 @@ def answer(question_id: int, answer_text: str = None,
                    SET state='do_not_know', answered_at=?, answer_text=?
                  WHERE id=?
             """, (now, answer_text or "I do not know either", question_id))
-            return {"success": True, "state": "do_not_know",
-                    "note": ("Recorded. Nobody knows, so this stops being a "
-                             "question and becomes a known unknown.")}
 
+    if do_not_know:
+        settled = _settle_rules(question_id, "no", "I do not know either")
+        return {"success": True, "state": "do_not_know",
+                "provisional_rules": settled,
+                "note": ("Recorded. Nobody knows, so this stops being a "
+                         "question and becomes a known unknown.")}
+
+    with me._get_conn() as conn:
         answer_text = (answer_text or "").strip()
         if not answer_text:
             return {"success": False,
@@ -756,8 +761,24 @@ def answer(question_id: int, answer_text: str = None,
                 f"baseline: {file_error}. This is a defect in the app, not "
                 f"something you did.")
 
+    from core import learned_rules
+    settled = _settle_rules(question_id, verdict if verdict in ("yes", "no")
+                            else learned_rules.verdict_of(answer_text),
+                            answer_text)
     return {"success": True, "state": "answered", "filed_as": filed_as,
-            "filing_failed": file_error, "note": note}
+            "filing_failed": file_error, "note": note,
+            "provisional_rules": settled}
+
+
+def _settle_rules(question_id: int, verdict: str, words: str) -> dict:
+    """Provisional quiet rules made while this question was open end here."""
+    try:
+        from core import learned_rules
+        return learned_rules.settle_question(question_id, verdict, words)
+    except Exception as e:                                  # noqa: BLE001
+        logger.error("Provisional rules for question %s not settled: %s",
+                     question_id, e)
+        return {"error": str(e)}
 
 
 # EXPIRY
@@ -781,14 +802,20 @@ def expire_stale(now: datetime = None) -> dict:
     with me._get_conn() as conn:
         if not me._table_exists_ro(conn, "operator_question"):
             return {"expired": 0}
-        cur = conn.execute("""
-            UPDATE operator_question
-               SET state = 'expired'
+        ids = [r[0] for r in conn.execute("""
+            SELECT id FROM operator_question
              WHERE state = 'open'
                AND first_shown_at IS NOT NULL
                AND first_shown_at <= ?
-        """, (cutoff,))
+        """, (cutoff,))]
+        cur = conn.execute(f"""
+            UPDATE operator_question
+               SET state = 'expired'
+             WHERE id IN ({",".join("?" * len(ids)) or "NULL"})
+        """, ids)
         count = cur.rowcount or 0
+    for qid in ids:
+        _settle_rules(qid, "no", "the question expired unanswered")
 
     if count:
         logger.info("%d question(s) retired after %d days unanswered.",

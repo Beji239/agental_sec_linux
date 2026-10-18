@@ -2619,7 +2619,9 @@ TOOL_MANIFEST = [
             "quoting the owner. Threat list, high and critical need "
             "owner_words. Without owner_words a rule covers only the device "
             "it was learned from, until the same pattern holds on several "
-            "named devices for days."),
+            "named devices for days. While the owner's answer about the "
+            "device is due, a rule is provisional: that device only, ended "
+            "by the answer, and a no shows all it held."),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -6018,6 +6020,13 @@ def _query_dns_inspection() -> dict:
             "DNS-1005 NXDOMAIN share per client: names that do not exist, as "
             "a count and as a fraction of that client's own queries.",
             "DNS-1006 TXT query volume per client. Counted, never read.",
+            "DNS-1007 beacon spread: the same destination polled on a timer "
+            "by two or more devices, when it is new in the house and few "
+            "devices ever asked for it. Needs a week of DNS history to call "
+            "anything new, and says so until then.",
+            "DNS-1008 held destination spread: a destination a learned rule "
+            "holds back, asked for by devices that never asked for it before "
+            "the rule. Once per rule.",
         ],
         "not_implemented": [
             "Queries with no following connection: this needs a join between "

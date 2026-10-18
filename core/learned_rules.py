@@ -5,7 +5,8 @@
 # it, and is counted on the rule so the owner can see it and undo it. On the
 # owner's word a rule needs no check. A rule made with nobody watching is on
 # trial for two weeks and lapses unless the owner keeps it. Critical findings
-# are never held.
+# are never held. A rule made while the owner's answer is due is provisional:
+# it covers that one device, records what it holds, and ends on the answer.
 
 import fnmatch
 import json
@@ -31,7 +32,11 @@ NEW_DEVICES = ("LAN-1008", "NET-1001", "RTR-1001")
 WIDE_EARN_DEVICES = 3    # named devices the same pattern must hold on
 WIDE_EARN_DAYS = 3       # before a rule the model made covers every device
 NEW_COLUMNS = (("reason_kind", "TEXT"), ("owner_words", "TEXT"),
-               ("trial_until", "TEXT"), ("kept_at", "TEXT"))
+               ("trial_until", "TEXT"), ("kept_at", "TEXT"),
+               ("question_id", "INTEGER"), ("question_state", "TEXT"))
+PROVISIONAL = "provisional rule"   # start of the note on what one holds
+NEGATIVE = {"no", "nope", "nah", "not", "never", "unknown", "don't", "dont"}
+NEGATIVE_START = ("do not", "i don't", "i dont", "i do not", "i have no")
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS learned_rule (
@@ -273,7 +278,8 @@ def _earned_wide(conn, detection_id: str, base: dict, device: tuple) -> bool:
     if _named(conn, device):
         named.add(device[1].lower())
     for r in conn.execute("SELECT match_json, created_at FROM learned_rule "
-                          "WHERE detection_id = ? AND status = 'on'",
+                          "WHERE detection_id = ? AND status = 'on' AND "
+                          "(question_state IS NULL OR question_state = 'yes')",
                           (detection_id,)):
         try:
             m = json.loads(r[0])
@@ -298,15 +304,20 @@ def _earned_wide(conn, detection_id: str, base: dict, device: tuple) -> bool:
 def open_question(conn, example: dict) -> str | None:
     """A question the owner was asked about this alert's subject and has not
     answered yet, word for word."""
+    row = _open_question_row(conn, example)
+    return row[1] if row else None
+
+
+def _open_question_row(conn, example: dict):
     if not me._table_exists_ro(conn, "operator_question"):
         return None
     for subject in _subjects(example):
         row = conn.execute(
-            "SELECT question FROM operator_question WHERE state = 'open' "
+            "SELECT id, question FROM operator_question WHERE state = 'open' "
             "AND entity_value = ? ORDER BY id DESC LIMIT 1",
             (subject,)).fetchone()
         if row:
-            return row[0]
+            return row[0], row[1]
     return None
 
 
@@ -380,6 +391,7 @@ def learn(detection_id: str, finding_id, match, reason: str,
         if example["severity"] in NEVER_HELD:
             return {"success": False,
                     "error": "critical findings are never held back"}
+        asked = None
         if not owner_words:
             ok, why = evidence.closable(example)
             if not ok:
@@ -391,11 +403,11 @@ def learn(detection_id: str, finding_id, match, reason: str,
                                   f"on the owner's decision; nothing is "
                                   f"learned from it until the owner names "
                                   f"it or closes its new device incident")}
-            asked = open_question(conn, example)
-            if asked:
+            asked = _open_question_row(conn, example)
+            if asked and not _device_of(example):
                 return {"success": False,
                         "error": (f"the owner was asked about this and has "
-                                  f"not answered yet ({asked[:200]}); "
+                                  f"not answered yet ({asked[1][:200]}); "
                                   f"nothing is learned about it until they "
                                   f"do")}
             ok, found = evidence.verify(reason_kind, example)
@@ -410,7 +422,14 @@ def learn(detection_id: str, finding_id, match, reason: str,
         # until the same pattern has held on enough named devices.
         scope = "as written"
         device = None if owner_words else _device_of(example)
-        if device and not _pinned(clean):
+        if asked:
+            # Only to stop a flood while the answer is due: this device
+            # alone, never earned wide, ended by the answer.
+            if not _pinned(clean):
+                clean = _pin(clean, device)
+            scope = (f"only {device[1]}, provisional until the owner answers "
+                     f"question {asked[0]}")
+        elif device and not _pinned(clean):
             if _earned_wide(conn, detection_id, clean, device):
                 scope = (f"every device, earned on {WIDE_EARN_DEVICES} or "
                          f"more named devices")
@@ -457,15 +476,18 @@ def learn(detection_id: str, finding_id, match, reason: str,
         cur = conn.execute(
             "INSERT INTO learned_rule (detection_id, match_json, reason, "
             "evidence_json, created_by, created_at, reason_kind, owner_words, "
-            "trial_until) VALUES (?,?,?,?,?,?,?,?,?)",
+            "trial_until, question_id, question_state) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (detection_id, json.dumps(clean, sort_keys=True), reason[:500],
              json.dumps(dict(source, title=example["title"])), by, _iso(),
              None if owner_words else reason_kind,
-             owner_words[:300] if owner_words else None, trial))
+             owner_words[:300] if owner_words else None, trial,
+             asked[0] if asked else None, "open" if asked else None))
         rid = cur.lastrowid
         cleared, entities = 0, set()
         if clear_open and rp["open_ids"]:
-            note = f"learned rule {rid}: {reason[:200]}"
+            note = (f"{PROVISIONAL} {rid}: " if asked else
+                    f"learned rule {rid}: ") + reason[:200]
             for fid, entity in rp["open_ids"]:
                 if not owner_words:
                     f = _finding(conn, fid)
@@ -482,12 +504,14 @@ def learn(detection_id: str, finding_id, match, reason: str,
              {"detection_id": detection_id, "match": clean, "by": by,
               "reason": reason[:300], "cleared": cleared,
               "reason_kind": reason_kind, "owner_words": bool(owner_words),
-              "trial_until": trial, "scope": scope})
-    if entities:
+              "trial_until": trial, "scope": scope,
+              "question_id": asked[0] if asked else None})
+    if entities and not asked:
         _settle_incidents(detection_id, entities, rid, reason)
     return {"success": True, "rule_id": rid, "detection_id": detection_id,
             "match": clean, "cleared_open_findings": cleared,
             "trial_until": trial, "scope": scope,
+            "provisional": bool(asked),
             "replay": {k: v for k, v in rp.items() if k != "open_ids"}}
 
 
@@ -530,12 +554,15 @@ def _active() -> dict:
                 # A trial nobody kept has lapsed.
                 for r in conn.execute(
                         "SELECT id, detection_id, match_json, reason, "
-                        "reason_kind, owner_words FROM learned_rule WHERE "
+                        "reason_kind, owner_words, question_id, "
+                        "question_state FROM learned_rule WHERE "
                         "status = 'on' AND (trial_until IS NULL OR kept_at "
                         "IS NOT NULL OR trial_until > ?)", (_iso(),)):
                     rules.setdefault(r["detection_id"], []).append(
                         (r["id"], json.loads(r["match_json"]), r["reason"],
-                         r["reason_kind"], bool(r["owner_words"])))
+                         r["reason_kind"], bool(r["owner_words"]),
+                         r["question_id"] if r["question_state"] == "open"
+                         else None))
     except Exception as e:                                  # noqa: BLE001
         logger.warning(f"learned rules not read, nothing held: {e}")
     with _lock:
@@ -544,15 +571,18 @@ def _active() -> dict:
 
 
 def holds(detection_id, entity_value, title, raw_data, severity):
-    """The rule holding this finding back, as (id, reason), or None. A hold
-    is counted on the rule. Any error lets the finding through."""
+    """The rule holding this finding back, as (id, reason, question id), or
+    None. The question id is set for a provisional rule, whose holds are
+    still recorded. A hold is counted on the rule. Any error lets the finding
+    through."""
     if severity in NEVER_HELD:
         return None
     try:
         from core import evidence
         item = {"detection_id": detection_id, "entity_value": entity_value,
                 "title": title, "raw_data": raw_data, "severity": severity}
-        for rid, match, reason, kind, owner in _active().get(detection_id, ()):
+        for rid, match, reason, kind, owner, qid in \
+                _active().get(detection_id, ()):
             if not matches(match, entity_value, title, raw_data):
                 continue
             # A rule the owner did not word holds only what still checks out.
@@ -560,7 +590,7 @@ def holds(detection_id, entity_value, title, raw_data, severity):
                               or not evidence.verify(kind, item)[0]):
                 continue
             _count(rid, entity_value, title)
-            return rid, reason
+            return rid, reason, qid
     except Exception as e:                                  # noqa: BLE001
         logger.warning(f"learned rule check failed, finding kept: {e}")
     return None
@@ -615,6 +645,55 @@ def keep(rule_id: int, by: str = "owner") -> dict:
     _forget()
     _journal("learned_rule_kept", int(rule_id), {"by": by})
     return {"success": True, "rule_id": int(rule_id)}
+
+
+def verdict_of(answer_text: str) -> str:
+    """yes or no from the owner's own words; anything unclear counts as no,
+    so what was held is shown rather than kept quiet."""
+    words = " ".join((answer_text or "").lower().replace("\u2019", "'")
+                     .split())
+    first = words.split(" ")[0].strip(".,!;:") if words else ""
+    if not words or first in NEGATIVE or words.startswith(NEGATIVE_START):
+        return "no"
+    return "yes"
+
+
+def settle_question(question_id: int, verdict: str, words: str = None) -> dict:
+    """The owner answered, or the question expired. Yes makes the question's
+    provisional rules permanent; no ends them and shows all they held."""
+    verdict = "yes" if verdict == "yes" else "no"
+    with me._get_conn() as conn:
+        if not me._table_exists_ro(conn, "learned_rule"):
+            return {"rules": 0}
+        ensure_tables(conn)
+        rows = conn.execute("SELECT id FROM learned_rule WHERE question_id = ? "
+                            "AND question_state = 'open' AND status = 'on'",
+                            (int(question_id),)).fetchall()
+        shown = 0
+        for r in rows:
+            rid = r["id"]
+            if verdict == "yes":
+                conn.execute("UPDATE learned_rule SET question_state = 'yes', "
+                             "kept_at = COALESCE(kept_at, ?) WHERE id = ?",
+                             (_iso(), rid))
+                continue
+            conn.execute("UPDATE learned_rule SET question_state = 'no', "
+                         "status = 'undone', undone_at = ?, undone_by = "
+                         "'owner', undone_reason = ? WHERE id = ?",
+                         (_iso(), (f"the owner's answer to question "
+                                   f"{question_id}: {words or 'no'}")[:300],
+                          rid))
+            shown += conn.execute(
+                "UPDATE findings SET dismissed = 0, dismissed_at = NULL, "
+                "dismissed_reason = NULL WHERE dismissed = 1 AND "
+                "dismissed_reason LIKE ?", (f"{PROVISIONAL} {rid}:%",)
+            ).rowcount or 0
+    _forget()
+    for r in rows:
+        _journal("learned_rule_settled", r["id"],
+                 {"question_id": int(question_id), "verdict": verdict,
+                  "shown_again": shown})
+    return {"rules": len(rows), "verdict": verdict, "shown_again": shown}
 
 
 def listing(include_undone: bool = False, limit: int = 200) -> dict:

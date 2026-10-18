@@ -597,10 +597,10 @@ check("and it is the sensor the rows are stored under",
           "SELECT DISTINCT sensor_id FROM dns_queries")), {RESOLVER_SENSOR})
 
 # Every raising site, not just the one that was measured: the DGA pair, the
-# beacon, the tunnel and the three volume checks.
+# beacon, the tunnel, the three volume checks and the two spread checks.
 _ins_code = stripped(ROOT / "tools" / "dns_inspector.py")
-check("all SEVEN raising sites pass the resolver sensor",
-      _ins_code.count("sensor_id=resolver_sensor_id(),"), 7)
+check("all NINE raising sites pass the resolver sensor",
+      _ins_code.count("sensor_id=resolver_sensor_id(),"), 9)
 check_true("and the importer and inspector share one naming function",
            "def resolver_sensor_id()" in stripped(
                ROOT / "tools" / "dns_monitor.py"))
@@ -773,11 +773,11 @@ _beacon_src = pathlib.Path(ROOT / "tools" / "dns_inspector.py").read_text(
 import ast as _ast2
 _beacon_fn = next(n for n in _ast2.walk(_ast2.parse(_beacon_src))
                   if isinstance(n, _ast2.FunctionDef)
-                  and n.name == "_check_beacons")
+                  and n.name == "_beacon_pairs")
 _beacon_imports = {a.name for n in _ast2.walk(_beacon_fn)
                    if isinstance(n, _ast2.ImportFrom)
                    for a in n.names}
-check("_check_beacons imports what it parses with",
+check("_beacon_pairs imports what it parses with",
       sorted(_beacon_imports & {"datetime", "timezone"}),
       ["datetime", "timezone"])
 

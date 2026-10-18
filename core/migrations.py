@@ -155,7 +155,10 @@ logger = logging.getLogger(__name__)
 # before they are filed.
 # v69, 2026-10-15: learned_rule.reason_kind, owner_words, trial_until and
 # kept_at, so a rule says which fact Python checks and when a trial lapses.
-SCHEMA_VERSION = 71
+# v72, 2026-10-18: learned_rule.question_id and question_state, provisional
+# rules made while the owner's answer is due.
+# v72 also: device_hold, new devices kept off the internet until checked in.
+SCHEMA_VERSION = 72
 
 
 # HELPERS
@@ -4289,12 +4292,14 @@ def _migrate_run_dismissal(conn) -> int:
 
 
 def _migrate_expectations(conn) -> int:
-    """v66 to v69: the expectations the app sets and checks itself, rule
+    """v66 to v72: the expectations the app sets and checks itself, rule
     trials, learned rules and the alert review. Idempotent."""
-    from core import alert_review, expectations, learned_rules, rule_trials
+    from core import (alert_review, device_hold, expectations, learned_rules,
+                      rule_trials)
     return (expectations.ensure_tables(conn) | rule_trials.ensure_tables(conn)
             | learned_rules.ensure_tables(conn)
-            | alert_review.ensure_tables(conn))
+            | alert_review.ensure_tables(conn)
+            | device_hold.ensure_tables(conn))
 
 
 def _migrate_merge_carried(conn) -> int:

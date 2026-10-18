@@ -181,6 +181,11 @@ PLAIN = {
                 "controller.",
     "DNS-1006": "A device asked for an unusual number of text records (TXT). "
                 "Some software does this, and it can also carry hidden data.",
+    "DNS-1007": "Several devices check in with the same new, rare server on "
+                "a timer. One intruder controlling more than one device looks "
+                "like this.",
+    "DNS-1008": "A server a quiet rule holds back is now reached by devices "
+                "that never reached it before. Check they should.",
 
     # Linux audit system
     "AUD-1001": "The rules deciding what the audit system records were "

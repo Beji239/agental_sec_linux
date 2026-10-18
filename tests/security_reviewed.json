@@ -2427,5 +2427,47 @@
   "path": "core/version.py",
   "text": "out = subprocess.run(",
   "reason": "an argument list with no shell, git by its full path, fixed arguments"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
+  "text": "cur = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/incident.py",
+  "text": "f\"SELECT * FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders, the ids go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/learned_rules.py",
+  "text": "f\"SELECT 1 FROM known_devices WHERE lower({col}) = lower(?) AND \"",
+  "reason": "col is mac or ip, chosen in code, the value goes in as a parameter"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/learned_rules.py",
+  "text": "f\"SELECT 1 FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders, the ids go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_inspector.py",
+  "text": "f\"SELECT MIN(queried_at), COUNT(DISTINCT client_ip) FROM \"",
+  "reason": "the clause is fixed text from _name_clause, the name goes in as a parameter"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_inspector.py",
+  "text": "f\"SELECT client_ip, MIN(domain), MIN(queried_at) FROM \"",
+  "reason": "the clause is fixed text, the pattern goes in as a parameter"
  }
 ]

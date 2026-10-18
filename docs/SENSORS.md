@@ -60,7 +60,12 @@ These read the packet sniffer's stream and need nothing else.
   of each handshake, including QUIC, whose first packet any observer can
   decrypt.
 - **DNS inspection.** Machine generated domain names (DGA) and DNS used as a
-  beacon channel.
+  beacon channel. When two or more devices check in with the same server on a
+  timer, and that server is new in the house and few devices ever asked for
+  it, every one of them is raised high: one intruder controlling more than one
+  device looks like this. It needs a week of DNS history before it calls
+  anything new, and says so until then. A server a quiet rule holds back is
+  raised once when devices that never asked for it start to.
 - **LAN protocol abuse.** ARP spoofing, a change of the gateway's hardware
   address, rogue DHCP servers, LLMNR and NBT-NS poisoning.
 - **Announcements.** Device names and types from mDNS and SSDP traffic that is

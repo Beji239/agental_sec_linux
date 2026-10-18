@@ -3335,7 +3335,14 @@ def identify_device(ip: str, known_as: str, device_type: str = None,
             "SELECT * FROM known_devices WHERE ip = ?", (ip,)
         ).fetchone()
 
-    return {"success": True, "device": dict(row) if row else None}
+    out = {"success": True, "device": dict(row) if row else None}
+    if identified_by == "user":
+        # Naming a device is checking it in: a hold on it is lifted.
+        from core import device_hold
+        released = device_hold.release_ip(ip, by="owner")
+        if released:
+            out["hold_released"] = released
+    return out
 
 
 PREF_ENROLLMENT_DONE = "enrollment_completed_at"
@@ -6607,7 +6614,12 @@ def save_finding(session_id: str, source: str, severity: str,
     from core import learned_rules
     held = learned_rules.holds(detection_id, entity_value, title, raw_data,
                                severity)
-    if held:
+    provisional = None
+    if held and held[2]:
+        # Recorded but not raised, so a no from the owner shows it again.
+        provisional = (f"{learned_rules.PROVISIONAL} {held[0]}: held while "
+                       f"the owner's answer to question {held[2]} is due")
+    elif held:
         why = f"held back by learned rule {held[0]}: {held[1]}"
         logger.info(f"{detection_id} not raised for {entity_value}: {why}")
         return {"saved": False, "detection_id": detection_id, "reason": why,
@@ -6617,7 +6629,7 @@ def save_finding(session_id: str, source: str, severity: str,
     from core import alert_review
     if reviewed:
         description = f"{description or ''}\n\n{reviewed}".strip()
-    elif alert_review.should_hold(detection_id, severity):
+    elif not provisional and alert_review.should_hold(detection_id, severity):
         try:
             hid = alert_review.hold(session_id, source, severity, entity_type,
                                     entity_value, title, description, raw_data,
@@ -6634,14 +6646,17 @@ def save_finding(session_id: str, source: str, severity: str,
             INSERT INTO findings
                 (session_id, source, severity, entity_type, entity_value,
                  title, description, raw_data, vpn_state, sensor_id,
-                 detection_id, detection_rev)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                 detection_id, detection_rev, dismissed, dismissed_at,
+                 dismissed_reason)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,
+                    CASE WHEN ? THEN datetime('now') END,?)
         """, (
             session_id, source, severity, entity_type, entity_value,
             title, description,
             json.dumps(raw_data) if raw_data else None,
             vpn_state, sensor_id or _local_sensor_id(),
-            detection_id, rule.rev
+            detection_id, rule.rev, 1 if provisional else 0,
+            1 if provisional else 0, provisional
         ))
     # Item 3.2. A finding raised and then quietly deleted is the most
     # valuable thing for an attacker to erase, so it is journaled first.
@@ -6650,7 +6665,10 @@ def save_finding(session_id: str, source: str, severity: str,
     _journal("finding_saved", "findings", entity_value,
               {"source": source, "severity": severity, "title": title,
                "entity_type": entity_type, "detection_id": detection_id,
-               "detection_rev": rule.rev})
+               "detection_rev": rule.rev, "held": provisional})
+    if provisional:
+        return {"saved": True, "detection_id": detection_id, "rev": rule.rev,
+                "held_provisionally": held[0], "reason": provisional}
     return {"saved": True, "detection_id": detection_id, "rev": rule.rev}
 
 

@@ -255,30 +255,6 @@ named_now = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}}
 check("once the owner names it, that refusal is gone",
       "waiting on the owner" not in (named_now.get("error") or ""), named_now)
 
-print("\n[8] Nothing is learned about a subject while the owner's answer is due")
-ASKED = "192.0.2.77"
-with me._get_conn() as c:
-    c.execute("INSERT INTO operator_question (session_id, asked_at, topic, "
-              "entity_type, entity_value, question, state) VALUES ('t', "
-              "datetime('now'), 'identify_device', 'ip', ?, "
-              "'Do you know 192.0.2.77?', 'open')", (ASKED,))
-chat = dict(zoom, entity_value=ASKED,
-            raw_data=json.dumps({"registered_domain": "zoom.us",
-                                 "client_ip": ASKED}))
-open_q = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
-                  "a big cloud service", example=chat,
-                  reason_kind="cloud_network", unattended=True)
-check("a rule is refused while the question is open",
-      "has not answered yet" in (open_q.get("error") or ""), open_q)
-with me._get_conn() as c:
-    c.execute("UPDATE operator_question SET state = 'answered' "
-              "WHERE entity_value = ?", (ASKED,))
-answered = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
-                    "a big cloud service", example=chat,
-                    reason_kind="cloud_network", unattended=True)
-check("once answered, that refusal is gone",
-      "has not answered yet" not in (answered.get("error") or ""), answered)
-
 print("\n[9] A rule the model makes covers its own device until it is earned")
 named("198.51.100.7", "updates.example.net")
 BEACON = {"raw": {"registered_domain": "example.net"}}
@@ -335,6 +311,128 @@ own = lr.learn("DNS-1002", None, {"raw": {"registered_domain": "example.org"}},
                owner_words="every device may do this")
 check("the owner's words keep the pattern as written",
       own.get("success") and "entity" not in own["match"], own)
+
+print("\n[10] While the owner's answer is due, a rule is provisional")
+from core import questions  # noqa: E402
+named("198.51.100.9", "sync.example.com")
+SYNC = {"raw": {"registered_domain": "example.com"}}
+
+
+def sync(ip, n=0):
+    return {"review_id": 200 + n, "detection_id": "DNS-1002",
+            "severity": "medium", "entity_value": ip,
+            "title": "DNS beacon: polls sync.example.com on schedule",
+            "raw_data": json.dumps({"domain": "sync.example.com",
+                                    "registered_domain": "example.com",
+                                    "client_ip": ip})}
+
+
+def ask(ip):
+    with me._get_conn() as c:
+        return c.execute(
+            "INSERT INTO operator_question (session_id, asked_at, topic, "
+            "entity_type, entity_value, question, state) VALUES ('t', "
+            "datetime('now'), 'identify_device', 'ip', ?, ?, 'open')",
+            (ip, f"Do you know {ip}?")).lastrowid
+
+
+def raise_sync(ip):
+    return me.save_finding(
+        session_id="t", source="dns_inspector", severity="medium",
+        entity_type="ip", entity_value=ip, detection_id="DNS-1002",
+        title="DNS beacon: polls sync.example.com on schedule",
+        description="test", raw_data=json.loads(sync(ip)["raw_data"]))
+
+
+def finding_state(ip):
+    with me._get_readonly_conn() as c:
+        return [tuple(r) for r in c.execute(
+            "SELECT dismissed, dismissed_reason FROM findings WHERE "
+            "detection_id = 'DNS-1002' AND entity_value = ? ORDER BY id",
+            (ip,))]
+
+
+ASKED, OTHER = "192.0.2.77", "192.0.2.78"
+qid = ask(ASKED)
+prov = lr.learn("DNS-1002", None, SYNC, "a sync service polling",
+                example=sync(ASKED), reason_kind="named_lookup")
+check("a rule is made, provisional", prov.get("success")
+      and prov.get("provisional"), prov)
+check("it covers that device only", prov.get("match", {}).get("entity")
+      == ASKED and "provisional until the owner answers" in
+      prov.get("scope", ""), prov)
+held = raise_sync(ASKED)
+check("a repeat is recorded, not raised", held.get("held_provisionally")
+      == prov.get("rule_id") and finding_state(ASKED)[-1][0] == 1, held)
+check("another device is not covered",
+      raise_sync(OTHER).get("held_provisionally") is None
+      and finding_state(OTHER)[-1][0] == 0)
+with me._get_conn() as c:
+    c.execute("UPDATE learned_rule SET created_at = '2026-01-01T00:00:00+00:00' "
+              "WHERE question_state = 'open'")
+    for ip in ("192.0.2.71", "192.0.2.72", ASKED):
+        c.execute("INSERT INTO known_devices (ip, known_as, identified_by) "
+                  "VALUES (?, 'device', 'user')", (ip,))
+    extra = c.execute(
+        "INSERT INTO learned_rule (detection_id, match_json, reason, "
+        "created_by, created_at, question_id, question_state) VALUES "
+        "('DNS-1002', ?, 't', 'model', '2026-01-01T00:00:00+00:00', 0, "
+        "'open')", (json.dumps(dict(SYNC, entity="192.0.2.72"),
+                               sort_keys=True),)).lastrowid
+    earned = lr._earned_wide(c, "DNS-1002", SYNC, ("entity", "192.0.2.71"))
+    still = [r[0] for r in c.execute("SELECT id FROM learned_rule WHERE "
+                                     "question_state = 'open'")]
+    c.execute("UPDATE learned_rule SET question_state = 'yes' WHERE "
+              "question_state = 'open'")
+    counted = lr._earned_wide(c, "DNS-1002", SYNC, ("entity", "192.0.2.71"))
+    c.executemany("UPDATE learned_rule SET question_state = 'open' WHERE "
+                  "id = ?", [(i,) for i in still])
+    c.execute("DELETE FROM learned_rule WHERE id = ?", (extra,))
+check("a provisional rule never helps earn a wide one", not earned)
+check("once the owner said yes, it counts", counted)
+out = questions.answer(qid, "no idea, not mine")
+check("a no ends the rule", out.get("provisional_rules", {}).get("verdict")
+      == "no" and [r for r in lr.listing(include_undone=True)["rules"]
+                   if r["id"] == prov["rule_id"]][0]["status"] == "undone",
+      out)
+check("and shows what it held", finding_state(ASKED)[-1] == (0, None)
+      and out["provisional_rules"]["shown_again"] >= 1, finding_state(ASKED))
+check("the device raises again", raise_sync(ASKED).get("held_provisionally")
+      is None and finding_state(ASKED)[-1][0] == 0)
+
+YES = "192.0.2.79"
+qid2 = ask(YES)
+prov2 = lr.learn("DNS-1002", None, SYNC, "a sync service polling",
+                 example=sync(YES, 1), reason_kind="named_lookup")
+raise_sync(YES)
+out2 = questions.answer(qid2, "yes, that is the kitchen tablet")
+rule2 = [r for r in lr.listing()["rules"] if r["id"] == prov2.get("rule_id")]
+check("a yes makes it permanent", rule2 and rule2[0]["status"] == "on"
+      and rule2[0]["question_state"] == "yes" and rule2[0]["kept_at"], rule2)
+check("what it held stays quiet", finding_state(YES)[-1][0] == 1)
+check("and it holds outright from now on",
+      raise_sync(YES).get("saved") is False)
+
+LATE = "192.0.2.81"
+qid3 = ask(LATE)
+prov3 = lr.learn("DNS-1002", None, SYNC, "a sync service polling",
+                 example=sync(LATE, 2), reason_kind="named_lookup")
+with me._get_conn() as c:
+    c.execute("UPDATE operator_question SET first_shown_at = "
+              "'2020-01-01 00:00:00' WHERE id = ?", (qid3,))
+questions.expire_stale()
+with me._get_readonly_conn() as c:
+    ops = {r[0] for r in c.execute("SELECT operation FROM integrity_journal")}
+check("the answer's effect on a rule is journalled",
+      "learned_rule_settled" in ops, ops)
+check("an unanswered question that expires counts as no",
+      [r for r in lr.listing(include_undone=True)["rules"]
+       if r["id"] == prov3.get("rule_id")][0]["status"] == "undone")
+check("an answer that is unclear counts as no",
+      [lr.verdict_of(w) for w in ("No.", "nope", "don't know it",
+                                  "I don't recognise it", "", "normal, my TV",
+                                  "Yes, the office laptop", "nothing to worry")]
+      == ["no", "no", "no", "no", "no", "yes", "yes", "yes"])
 
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)

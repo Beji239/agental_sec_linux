@@ -26,7 +26,7 @@ REASONS = {
 
 # Never closed or held without the owner: threat list hits, the app's own
 # health, and anything high or critical.
-NEVER_PREFIXES = ("FED-", "LAN-1010", "SYS-")
+NEVER_PREFIXES = ("FED-", "LAN-1010", "SYS-", "DNS-1007", "DNS-1008")
 NEVER_SEVERITIES = ("high", "critical")
 
 # Wording that addresses a reader rather than describing traffic. In fields a

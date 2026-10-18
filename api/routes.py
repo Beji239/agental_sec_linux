@@ -1372,6 +1372,29 @@ def register_routes(app):
         logger.info(f"User identified {ip} as {known_as!r}")
         return jsonify(result)
 
+    @app.route("/api/devices/hold")
+    @require_api_key
+    def device_hold_state():
+        """The hold-new-devices switch and the devices it holds."""
+        from core import device_hold
+        return jsonify(device_hold.state())
+
+    @app.route("/api/devices/hold/switch", methods=["POST"])
+    @require_api_key
+    def device_hold_switch():
+        from core import device_hold
+        data = request.get_json(silent=True) or {}
+        return jsonify(device_hold.set_switch(bool(data.get("on"))))
+
+    @app.route("/api/devices/hold/release", methods=["POST"])
+    @require_api_key
+    def device_hold_release():
+        """Let a held device in without naming it."""
+        from core import device_hold
+        data = request.get_json(silent=True) or {}
+        out = device_hold.release(_text(data, "mac"))
+        return jsonify(out), (200 if out.get("success") else 400)
+
     @app.route("/api/devices/unidentified")
     @require_api_key
     def unidentified_devices():
@@ -2918,6 +2941,7 @@ def register_routes(app):
             question_id=int(qid),
             answer_text=data.get("answer_text"),
             do_not_know=bool(data.get("do_not_know")),
+            verdict=data.get("verdict"),
         ))
 
     # THE PERFORMANCE AXIS

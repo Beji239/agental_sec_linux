@@ -42,6 +42,12 @@ SAFE_CALLS = {"len", "int", "range", "max", "min"}
 
 # (file, function): why the non-literal pieces there cannot carry outside data.
 REVIEWED = {
+    ("core/questions.py", "expire_stale"):
+        "only ? placeholders, one per id, ids go in as parameters",
+    ("tools/dns_inspector.py", "_check_spread"):
+        "_name_clause emits fixed text, the name goes in as a parameter",
+    ("tools/dns_inspector.py", "_check_held_spread"):
+        "_name_clause or a fixed LIKE ?, the pattern goes in as a parameter",
     ("core/duty.py", "_emergency_measure"):
         "clause names fixed columns, addresses go in as ? parameters",
     ("core/integrity.py", "seal_row"):

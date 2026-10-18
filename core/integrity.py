@@ -245,6 +245,14 @@ JOURNALLED = {
     "learned_rule_made",
     "learned_rule_undone",
     "learned_rule_kept",
+    # A provisional rule ended by the owner's answer.
+    "learned_rule_settled",
+    # A new device held off the internet, let in, and the switch itself.
+    "device_held",
+    "device_not_held",
+    "device_released",
+    "device_hold_on",
+    "device_hold_off",
 }
 
 

@@ -604,7 +604,8 @@ def watch_once(session_id: str, modules: dict = None,
             rows = conn.execute("""
                 SELECT id, found_at, source, severity, entity_type,
                        entity_value, title, description, detection_id,
-                       detection_rev, dismissed, sensor_id
+                       detection_rev, dismissed, dismissed_reason,
+                       sensor_id
                   FROM findings
                  WHERE id > ? AND detection_id IS NOT NULL
                  ORDER BY id ASC
@@ -647,6 +648,12 @@ def watch_once(session_id: str, modules: dict = None,
             continue
 
         if rule.kind != "detection":
+            counts["refused"] += 1
+            continue
+
+        # Held by a provisional rule while the owner's answer is due.
+        if r["dismissed"] and (r["dismissed_reason"] or "").startswith(
+                "provisional rule "):
             counts["refused"] += 1
             continue
 

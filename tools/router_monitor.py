@@ -1327,6 +1327,7 @@ def _raise_client_findings(new_clients: list, host: str, session_id: str,
     written for, and the reason its router counts must not repeat the defect
     one file over.
     """
+    from core import device_hold
     from core import memory_engine as me
 
     raised = 0
@@ -1338,6 +1339,8 @@ def _raise_client_findings(new_clients: list, host: str, session_id: str,
             logger.debug(f"RTR-1001 not raised for {client['ip']}: not an "
                          f"address on the router's own network")
             continue
+        # Kept off the internet until checked in, when the owner asked.
+        device_hold.consider(client)
         if me.is_dismissed("ip", client["ip"]):
             logger.debug(f"RTR-1001 not raised for {client['ip']}: dismissed")
             continue

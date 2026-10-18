@@ -127,6 +127,12 @@ answers on.
 *Eleven devices: nine named, one new one waiting for a name, and a phone with
 a private address. Sample data.*
 
+- **New devices.** A switch, off by default: with it on, a device that joins
+  the network for the first time gets no internet until you check it in here
+  by naming it. Devices already there keep theirs. The block is made at the
+  router, so it needs the router agent; if the app cannot reach the router,
+  the device stays online and the notice says so. Useful in a business
+  network; at home you may not need it.
 - **Network devices.** Everything this machine can see on the local network:
   address, your label, type, identity, the **basis** for that identity,
   hardware address, vendor, hostname, last seen. Read the basis before
@@ -471,7 +477,12 @@ huge. Click a rule to light up only its dots, and **Show all** to go back. A
 rule whose dots are mostly filled is the one to mute on the Detections tab.
 
 Under it, **Needs your verdict** lists incidents that have none yet, with
-three buttons: False alarm, Real, Not sure. You can also tell the analyst in
+three buttons: False alarm, Real, Not sure. The question is whether the alarm
+was right to worry you, not whether it happened: every incident really
+happened. False alarm means it was harmless, Real means it caught something you
+would want to act on, Not sure means you cannot tell yet. Real marks the rule as
+one to keep, and counts against any fix that would have held the incident back;
+it does not block anything by itself. You can also tell the analyst in
 chat ("that was my backup job, it is a false alarm") and it records your
 verdict, marked as given on your word. Incidents you dismissed before this
 existed count as false alarms, marked "from a dismissal".
@@ -517,7 +528,13 @@ package, a device's hardware address together with another field. Every alarm a
 rule holds back is checked again against the rule's fact. A rule made with
 nobody watching is on trial for two weeks and lapses unless you press **Keep
 this rule**; a rule can also rest on your own words in chat, and then it says
-so. A rule can never hide a critical alarm or switch a whole rule off, and
+so. A rule the analyst makes alone covers only the device it learned from,
+until the same pattern has held on three or more devices you named, for three
+days or more; your own words can cover every device at once. While a question
+to you about a device is open, a rule only stops that device's alarms from
+flooding in: it covers that device alone, keeps everything it holds, and ends
+with your answer. Yes keeps the rule; no undoes it and shows all it held. A
+rule can never hide a critical alarm or switch a whole rule off, and
 **Undo this rule** brings its alarms back. The analyst makes at most five rules
 a day on its own and closes at most forty incidents a day.
 
