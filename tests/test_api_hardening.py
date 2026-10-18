@@ -177,6 +177,18 @@ check("the page's script carries the nonce", f'<script nonce="{nonce}">' in html
 check("a second load gets a new nonce",
       nonce in client.get("/", environ_overrides=LOCAL).headers["Content-Security-Policy"],
       False)
+for label, resp in (("the page", r),
+                    ("an API answer", client.get("/api/status", headers=H,
+                                                 environ_overrides=LOCAL))):
+    check(f"{label}: no other site's window keeps a handle on it",
+          resp.headers.get("Cross-Origin-Opener-Policy"), "same-origin")
+    check(f"{label}: embeds only what allows it",
+          resp.headers.get("Cross-Origin-Embedder-Policy"), "require-corp")
+    check(f"{label}: other sites cannot load it",
+          resp.headers.get("Cross-Origin-Resource-Policy"), "same-origin")
+    check(f"{label}: camera, microphone and location are off",
+          all(f"{f}=()" in resp.headers.get("Permissions-Policy", "")
+              for f in ("camera", "microphone", "geolocation")), True)
 
 link = ds.open_link_token(API_KEY)
 r = client.get("/open?t=" + link, environ_overrides=LOCAL)

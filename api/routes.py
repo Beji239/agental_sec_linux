@@ -66,6 +66,16 @@ def _csp(nonce: str) -> str:
 # The answer to a one-time link: a few bytes of script that store the session.
 _HANDOFF_CSP = "default-src 'none'; script-src 'nonce-{}'; base-uri 'none'; frame-ancestors 'none'"
 
+# On every answer. The page loads nothing from other sites and uses no
+# device feature, so other origins get nothing and the features stay off.
+_ISOLATION_HEADERS = (
+    ("Cross-Origin-Opener-Policy", "same-origin"),
+    ("Cross-Origin-Embedder-Policy", "require-corp"),
+    ("Cross-Origin-Resource-Policy", "same-origin"),
+    ("Permissions-Policy", "camera=(), microphone=(), geolocation=(), "
+                           "usb=(), serial=(), payment=(), display-capture=()"),
+)
+
 
 # FAILED AUTH THROTTLE
 #
@@ -383,6 +393,8 @@ def register_routes(app):
     # them rather than on the ones I happened to think about.
     @app.after_request
     def _api_response_headers(resp):
+        for name, value in _ISOLATION_HEADERS:
+            resp.headers.setdefault(name, value)
         if request.path.startswith("/api/"):
             resp.headers.setdefault("Cache-Control", "no-store")
             resp.headers.setdefault("X-Content-Type-Options", "nosniff")
