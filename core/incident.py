@@ -73,6 +73,7 @@ class BadIncidentInput(ValueError):
 DEFAULT_TICK_SECONDS       = 60
 DEFAULT_INCIDENTS_PER_DAY  = 40
 DEFAULT_SEVERITY_FLOOR     = "medium"
+NEW_DEVICES = ("LAN-1008", "NET-1001", "RTR-1001")
 
 # INCIDENTS ARE NOT SUPPRESSIBLE, AND FINDINGS ARE. This is the whole
 # relationship between the two mechanisms and it is worth stating plainly,
@@ -341,6 +342,25 @@ def write_incident(detection_id: str, entity_type: str, entity_value: str,
 
         row = conn.execute(
             "SELECT * FROM incident WHERE incident_key = ?", (key,)).fetchone()
+        # One new device is one incident, whichever sensor saw it first.
+        folded = False
+        if row is None and detection_id in NEW_DEVICES and entity_type == "ip":
+            marks = ",".join("?" * len(NEW_DEVICES))
+            row = conn.execute(
+                f"SELECT * FROM incident WHERE detection_id IN ({marks}) "
+                f"AND entity_type = 'ip' AND entity_value = ? AND status IN "
+                f"('new','triaged','action_pending') "
+                f"ORDER BY severity_rank DESC, id LIMIT 1",
+                (*NEW_DEVICES, entity_value)).fetchone()
+            # Only into a row whose rule declares this severity, so a high
+            # alert is never folded down into a medium one.
+            if row is not None and _severity_rank(severity) > \
+                    _severity_rank(row["severity"]):
+                try:
+                    det.check_severity(row["detection_id"], severity)
+                except Exception:                           # noqa: BLE001
+                    row = None
+            folded = row is not None
 
         if row is None:
             conn.execute("""
@@ -370,6 +390,8 @@ def write_incident(detection_id: str, entity_type: str, entity_value: str,
             worst = severity
             if _severity_rank(row["severity"]) > _severity_rank(severity):
                 worst = row["severity"]
+            if folded and worst == row["severity"]:
+                title = row["title"]
             conn.execute("""
                 UPDATE incident
                    SET last_seen_at   = ?,
@@ -389,7 +411,8 @@ def write_incident(detection_id: str, entity_type: str, entity_value: str,
             action = "coalesced"
 
         final = conn.execute("SELECT * FROM incident WHERE incident_key = ?",
-                             (key,)).fetchone()
+                             (row["incident_key"] if folded else key,)
+                             ).fetchone()
         out = dict(final)
         out["action"] = action
         out["previous_severity"] = row["severity"] if row is not None else None

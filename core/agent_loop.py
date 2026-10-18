@@ -2507,7 +2507,7 @@ def complete_once(system: str, prompt: str) -> dict:
 
 
 def run_unattended(instruction: str, session_id: str, allowlist=None,
-                   extra_system: str = "") -> dict:
+                   extra_system: str = "", max_rounds: int = None) -> dict:
     """
     One unattended turn. Synchronous, self-contained, and it never blocks.
 
@@ -2527,6 +2527,8 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
                 "error": "No model configured. Set provider.model in "
                          "config.json."}
 
+    # A caller may lower the ceiling, never raise it.
+    rounds = min(int(max_rounds or UNATTENDED_MAX_ROUNDS), UNATTENDED_MAX_ROUNDS)
     total_usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                    "total_tokens": 0, "estimated": True}
     answers, tool_names, refused = [], [], []
@@ -2570,14 +2572,14 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
     async def _rounds() -> str:
         nonlocal error, hit_ceiling
 
-        for _round in range(UNATTENDED_MAX_ROUNDS + 1):
+        for _round in range(rounds + 1):
             _shorten_old_results(messages, aged, _round)
-            final = _round == UNATTENDED_MAX_ROUNDS
+            final = _round == rounds
             if final:
                 hit_ceiling = True
                 messages.append({"role": "user", "content":
                                  UNATTENDED_FINAL_NOTE.format(
-                                     rounds=UNATTENDED_MAX_ROUNDS)})
+                                     rounds=rounds)})
             round_usage = {}
             response_text = ""
             calls = []
@@ -2723,7 +2725,7 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
     try:
         _run_rounds()
         if hit_ceiling and not answers and not error:
-            error = (f"it used all {UNATTENDED_MAX_ROUNDS} rounds of lookups "
+            error = (f"it used all {rounds} rounds of lookups "
                      f"and, asked to answer from what it had read, still gave "
                      f"no answer")
     except Exception as e:

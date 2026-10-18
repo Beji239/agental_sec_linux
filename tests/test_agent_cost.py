@@ -92,6 +92,20 @@ total_before = sum(len(x) * 100_000 for x in seen_per_call)
 check("what the run resends is under a third of before",
       total_now * 3 < total_before, True)
 
+print("\n[1b] a caller can lower the round ceiling, never raise it")
+ROUNDS = 50
+seen_per_call.clear()
+out = al.run_unattended("look", "s", allowlist=["query_big"], max_rounds=3)
+check("three rounds of lookups, then the answer call", len(seen_per_call), 4)
+check("and it is told it used all 3", out["error"] is None or "3 rounds"
+      in out["error"], True)
+seen_per_call.clear()
+al.run_unattended("look", "s", allowlist=["query_big"], max_rounds=99)
+check("asking for more than the ceiling gets the ceiling",
+      len(seen_per_call), al.UNATTENDED_MAX_ROUNDS + 1)
+check("a regular duty run asks for fewer rounds than an emergency",
+      duty.REGULAR_MAX_ROUNDS < al.UNATTENDED_MAX_ROUNDS, True)
+
 print("\n[2] a spent budget holds urgent work after one refusal")
 calls = []
 duty._enabled = lambda: True

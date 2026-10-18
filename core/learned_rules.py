@@ -27,6 +27,7 @@ NEVER_HELD = ("critical",)
 MAX_RAW_KEYS = 6
 TRIAL_DAYS = 14
 UNATTENDED_PER_DAY = 5   # tripwire: rules made with nobody watching
+NEW_DEVICES = ("LAN-1008", "NET-1001", "RTR-1001")
 NEW_COLUMNS = (("reason_kind", "TEXT"), ("owner_words", "TEXT"),
                ("trial_until", "TEXT"), ("kept_at", "TEXT"))
 
@@ -195,6 +196,33 @@ def replay(conn, detection_id: str, match: dict, days: int = REPLAY_DAYS):
             "entities_seen": len(all_entities), "open_ids": open_ids}
 
 
+def _waiting_device(conn, example: dict) -> str | None:
+    """The example's address when that device still waits on the owner: a
+    new device incident is open and the owner has not named it since."""
+    try:
+        raw = json.loads(example.get("raw_data") or "{}")
+    except (TypeError, ValueError):
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+    marks = ",".join("?" * len(NEW_DEVICES))
+    for ip in {example.get("entity_value"), raw.get("ip"),
+               raw.get("client_ip"), raw.get("src_ip")}:
+        if not ip or not isinstance(ip, str):
+            continue
+        waiting = conn.execute(
+            f"SELECT 1 FROM incident WHERE detection_id IN ({marks}) "
+            f"AND entity_value = ? AND status IN "
+            f"('new','triaged','action_pending') LIMIT 1",
+            (*NEW_DEVICES, ip)).fetchone()
+        named = conn.execute(
+            "SELECT 1 FROM known_devices WHERE ip = ? AND identified_by = "
+            "'user' AND merged_into IS NULL AND retired_at IS NULL LIMIT 1",
+            (ip,)).fetchone()
+        if waiting and not named:
+            return ip
+    return None
+
+
 def learn(detection_id: str, finding_id, match, reason: str,
           by: str = "model", clear_open: bool = True,
           example: dict = None, reason_kind: str = None,
@@ -250,6 +278,13 @@ def learn(detection_id: str, finding_id, match, reason: str,
             ok, why = evidence.closable(example)
             if not ok:
                 return {"success": False, "error": why}
+            waiting = _waiting_device(conn, example)
+            if waiting:
+                return {"success": False,
+                        "error": (f"{waiting} is a new device still waiting "
+                                  f"on the owner's decision; nothing is "
+                                  f"learned from it until the owner names "
+                                  f"it or closes its new device incident")}
             ok, found = evidence.verify(reason_kind, example)
             if not ok:
                 return {"success": False,

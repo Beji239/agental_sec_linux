@@ -127,7 +127,8 @@ def main():
 
     def stub_model(answer):
         """Replace the unattended turn with a recording stub."""
-        def _fake(prompt, session_id, allowlist=None, extra_system=""):
+        def _fake(prompt, session_id, allowlist=None, extra_system="",
+                  **_):
             model_calls["n"] += 1
             model_calls["allowlist"] = allowlist
             model_calls["prompt"] = prompt

@@ -88,7 +88,8 @@ def main():
     # not_due".
     calls = {"n": 0, "when": []}
 
-    def _recorder(prompt, session_id, allowlist=None, extra_system=""):
+    def _recorder(prompt, session_id, allowlist=None, extra_system="",
+                  **_):
         calls["n"] += 1
         calls["when"].append(duty._sql_ts(duty._now()))
         return {

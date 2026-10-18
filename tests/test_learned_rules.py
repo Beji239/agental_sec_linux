@@ -7,6 +7,7 @@ findings, leaves other devices alone, refuses rules that fit nothing, that
 turn a detection off or that cover critical findings, and stops holding once
 undone. The model's tools reach the same code.
 """
+import json
 import pathlib
 import sys
 
@@ -220,6 +221,39 @@ with me._get_readonly_conn() as c:
                                  "(?, ?)", ids)]
 check("a false alarm verdict on the owner's word", v == ["false_alarm"] * 2, v)
 check("a reason is needed", not incident.close_many(ids, "")["success"])
+
+print("\n[7] Nothing is learned from a device still waiting on the owner")
+NEWCOMER = "192.0.2.239"
+with me._get_conn() as c:
+    c.execute("INSERT INTO incident (incident_key, detection_id, entity_type, "
+              "entity_value, severity, title, first_seen_at, last_seen_at, "
+              "status, status_at) VALUES ('t-new-device', 'RTR-1001', 'ip', ?, "
+              "'medium', 'Router reports a device not seen before', "
+              "datetime('now'), datetime('now'), 'triaged', datetime('now'))",
+              (NEWCOMER,))
+zoom = {"review_id": 1, "detection_id": "DNS-1003", "severity": "medium",
+        "entity_value": NEWCOMER, "title": "Possible DNS tunnel under zoom.us",
+        "raw_data": json.dumps({"registered_domain": "zoom.us",
+                                "client_ip": NEWCOMER})}
+waiting = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
+                   "a big cloud service", example=zoom,
+                   reason_kind="cloud_network", unattended=True)
+check("a rule from the new device's traffic is refused",
+      not waiting.get("success") and "waiting on the owner" in
+      (waiting.get("error") or ""), waiting)
+check("the owner's own words still make one", lr.learn(
+    "DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
+    "a big cloud service", example=zoom,
+    owner_words="that is my laptop on zoom").get("success"))
+lr.undo(max(r["id"] for r in lr.listing()["rules"]), reason="test")
+with me._get_conn() as c:
+    c.execute("INSERT INTO known_devices (ip, known_as, identified_by) "
+              "VALUES (?, 'Laptop', 'user')", (NEWCOMER,))
+named_now = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
+                     "a big cloud service", example=zoom,
+                     reason_kind="cloud_network", unattended=True)
+check("once the owner names it, that refusal is gone",
+      "waiting on the owner" not in (named_now.get("error") or ""), named_now)
 
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)

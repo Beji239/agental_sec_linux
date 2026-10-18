@@ -2292,13 +2292,19 @@ def _verified_close(incident_id: int, reason_kind: str) -> str:
         f"Python could not confirm {reason_kind}: {found}")
 
 
-def _run_unattended(prompt: str, session_id: str) -> dict:
+# A regular run has no incident behind it, so it gets half an emergency's
+# rounds. Every round resends all earlier ones, so this is most of its cost.
+REGULAR_MAX_ROUNDS = 6
+
+
+def _run_unattended(prompt: str, session_id: str, max_rounds: int = None) -> dict:
     """Call agent_loop's unattended turn. Imported lazily; see _tool_allowlist.
     Rules it learns are on trial (core/learned_rules)."""
     from core import agent_loop, learned_rules
     with learned_rules.unattended_turn():
         return agent_loop.run_unattended(prompt, session_id, _tool_allowlist(),
-                                         extra_system=UNATTENDED_ADDENDUM)
+                                         extra_system=UNATTENDED_ADDENDUM,
+                                         max_rounds=max_rounds)
 
 
 # LOOP-12, 2026-09-27. ONE TICK AT A TIME.
@@ -2497,6 +2503,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
     host_block = "\n\n".join(b for b in (host_block, map_block) if b)
 
     # 5. build the prompt and call the model.
+    max_rounds = None
     if kind == "emergency":
         prompt = EMERGENCY_PROMPT.format(
             emergency_block=_fenced(_emergency_block(flood)),
@@ -2548,6 +2555,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
                    "entity_value": row.get("entity_value")}
         report_subject = {"incident_id": row.get("id")}
     else:
+        max_rounds = REGULAR_MAX_ROUNDS
         prompt = REGULAR_PROMPT.format(
             findings_block=_fenced(_findings_block(rows)),
             coverage_block=_coverage_block(coverage),
@@ -2560,7 +2568,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
         report_subject = {"finding_id": subject["finding_id"],
                           "second_finding_id": subject["second_finding_id"]}
 
-    result = _run_unattended(prompt, session_id)
+    result = _run_unattended(prompt, session_id, max_rounds=max_rounds)
     usage = _usage_dict(result)
     # THE NAMES THE TURN CALLED, carried to every run row below. Collected
     # since T4, returned by run_unattended since T4, and dropped by

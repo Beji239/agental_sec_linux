@@ -52,7 +52,8 @@ duty.build_host_survey_block = lambda *a, **k: ""
 model = {"n": 0, "prompt": None}
 
 
-def fake_model(prompt, session_id, allowlist=None, extra_system=""):
+def fake_model(prompt, session_id, allowlist=None, extra_system="",
+               **_):
     model["n"] += 1
     model["prompt"] = prompt
     return {"answers": [json.dumps({"hypothesis": "h", "evidence": "e",
