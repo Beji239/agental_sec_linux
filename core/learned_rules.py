@@ -196,7 +196,7 @@ def replay(conn, detection_id: str, match: dict, days: int = REPLAY_DAYS):
             "entities_seen": len(all_entities), "open_ids": open_ids}
 
 
-def _waiting_device(conn, example: dict) -> str | None:
+def waiting_device(conn, example: dict) -> str | None:
     """The example's address when that device still waits on the owner: a
     new device incident is open and the owner has not named it since."""
     try:
@@ -278,7 +278,7 @@ def learn(detection_id: str, finding_id, match, reason: str,
             ok, why = evidence.closable(example)
             if not ok:
                 return {"success": False, "error": why}
-            waiting = _waiting_device(conn, example)
+            waiting = waiting_device(conn, example)
             if waiting:
                 return {"success": False,
                         "error": (f"{waiting} is a new device still waiting "

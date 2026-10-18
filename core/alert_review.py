@@ -318,6 +318,19 @@ def review_once(run=None) -> dict:
                          f"somebody is trying to steer it."))
             items.remove(it)
             out["tampered"] = out.get("tampered", 0) + 1
+    # A device nobody has vouched for yet is shown in full, never sorted.
+    from core import learned_rules
+    with me._get_readonly_conn() as conn:
+        waiting = {it["id"]: learned_rules.waiting_device(conn, it)
+                   for it in items}
+    for it in list(items):
+        if waiting.get(it["id"]):
+            release(it, (f"Filed without review: {waiting[it['id']]} is a new "
+                         f"device still waiting on the owner's decision, so "
+                         f"everything it does is shown."),
+                    status="shown", by="unconfirmed_device")
+            items.remove(it)
+            out["new_device"] = out.get("new_device", 0) + 1
     if not items:
         return out
     normals_today = _normals_since(24)

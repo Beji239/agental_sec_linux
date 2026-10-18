@@ -156,6 +156,37 @@ check("filed now", r.get("success") and findings("203.0.113.2"), r)
 check("its rule is undone", r.get("rule_undone") and not lr.listing()["rules"])
 check("only a normal one can come back", not ar.show(w2["review_id"])["success"])
 
+print("\n[5b] A device nobody has vouched for is shown in full")
+NEWCOMER = "192.0.2.239"
+with me._get_conn() as c:
+    c.execute("INSERT INTO incident (incident_key, detection_id, entity_type, "
+              "entity_value, severity, title, first_seen_at, last_seen_at, "
+              "status, status_at) VALUES ('t-new', 'LAN-1008', 'ip', ?, "
+              "'high', 'New device', datetime('now'), datetime('now'), "
+              "'triaged', datetime('now'))", (NEWCOMER,))
+ar._state["running"] = True
+held = geo(NEWCOMER, TV, "New laptop")
+asked = {"n": 0}
+
+
+def counting_model(prompt):
+    asked["n"] += 1
+    return {"answers": [json.dumps({"decisions": []})], "usage": {}}
+
+
+out = ar.review_once(run=counting_model)
+filed = findings(NEWCOMER)
+check("its alert is filed without the model",
+      out.get("new_device") == 1 and asked["n"] == 0 and filed
+      and "waiting on the owner" in filed[0]["description"], (out, filed))
+with me._get_conn() as c:
+    c.execute("INSERT INTO known_devices (ip, known_as, identified_by) "
+              "VALUES (?, 'New laptop', 'user')", (NEWCOMER,))
+geo(NEWCOMER, TV, "New laptop", severity="low")
+ar.review_once(run=counting_model)
+check("once the owner names it, its alerts go to the model again",
+      asked["n"] == 1)
+
 print("\n[6] Reading the answer")
 good = {"decisions": [{"id": 1, "verdict": "alarm", "reason": "x"}]}
 check("a plain answer is read", ar._parse([json.dumps(good)]) == good["decisions"])

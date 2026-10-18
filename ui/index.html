@@ -9221,7 +9221,7 @@ async function loadReviewed() {
   const c = d.last_7_days || {};
   const head = `<div class="exp-note">${d.running ? 'The model is sorting alerts.' : 'The review is off, so alerts are filed as raised.'} `
     + `Last 7 days: ${Number(c.normal || 0)} normal, ${Number(c.alarm || 0)} sent to you, `
-    + `${Number(c.shown || 0)} shown because the model could not look in time, ${Number(c.waiting || 0)} waiting. `
+    + `${Number(c.shown || 0)} shown as raised (the model could not look in time, or the device was not confirmed yet), ${Number(c.waiting || 0)} waiting. `
     + `Tokens in the last day: ${Number(d.tokens_24h || 0)}.</div>`;
   const items = (d.items || []).slice(0, 40);
   if (!items.length) { box.innerHTML = head + '<div class="exp-note">Nothing sorted yet.</div>'; return; }
