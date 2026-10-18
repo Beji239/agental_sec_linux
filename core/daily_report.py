@@ -113,6 +113,30 @@ def _span(a, b, day: date) -> str:
     return left if left == right else f"{left} to {right}"
 
 
+def _window(a, b, day: date) -> str:
+    """The report's window. A start named by its day gets an end named by its
+    day too, so it never reads "Fri 16 Oct 21:00 to 21:00"."""
+    left, right = _hm(a, day), _hm(b, day)
+    if not left[:1].isdigit() and right[:1].isdigit() and right != "24:00":
+        right = f"{_short_day(day)} {right}"
+    return left if left == right else f"{left} to {right}"
+
+
+def _lower_first(text: str) -> str:
+    """'New file' reads 'new file' mid-sentence; 'DGA-profile' stays."""
+    if len(text) > 1 and text[1].isupper():
+        return text
+    return text[:1].lower() + text[1:]
+
+
+_LONG_ID = re.compile(r"\b([0-9a-f]{12})[0-9a-f]{52}\b")
+
+
+def _short_ids(text: str) -> str:
+    """A container's 64-character id cut to the 12 that docker ps shows."""
+    return _LONG_ID.sub(r"\1", text)
+
+
 def _dur(seconds: float) -> str:
     minutes = int(round(max(0, seconds) / 60))
     days, rest = divmod(minutes, 1440)
@@ -529,7 +553,7 @@ def _port_words(p: dict, day: date) -> str:
         return (head + f", opened {_hm(_parse(p['detected_at']), day)}; what "
                 "started it was not recorded")
     bits = [f"run by {o['user']}" if o.get("user") else "",
-            f"in {o['unit']}" if o.get("unit") else "",
+            f"in {_short_ids(o['unit'])}" if o.get("unit") else "",
             f"started {_hm(_parse(o.get('started')), day)}"
             if o.get("started") else ""]
     chain = [c.get("comm") or c.get("exe") or "?" for c in
@@ -807,7 +831,7 @@ def _brief(f: dict) -> list:
         total = sum(g["times"] for g in harmless)
         top = max(harmless, key=lambda g: g["times"])
         lines.append(f"{_n(total, 'incident')} judged harmless, the most common "
-                     f"being {top['title'][0].lower() + top['title'][1:]}.")
+                     f"being {_lower_first(top['title'])}.")
     for o in f["coverage"]["off"]:
         lines.append(f"AgentalSec was off {_span(o['start'], o['end'], day)}.")
     if not lines:
@@ -1209,7 +1233,7 @@ def render(f: dict, a: dict) -> str:
         f"<title>Daily security report, {_e(_long_day(day))}</title>\n"
         f"<style>{CSS}</style>\n</head>\n<body><div class=\"page\">\n")
     add("<h1>Daily security report</h1>\n<div class=\"meta\">")
-    add(f"<b>{_e(_long_day(day))}</b>, {_e(_span(f['start'], f['end'], day))} "
+    add(f"<b>{_e(_long_day(day))}</b>, {_e(_window(f['start'], f['end'], day))} "
         f"local time ({_e(tz)}).<br>Written {_e(_short_day(w.date()))} at "
         f"{w:%H:%M} by AgentalSec on <b>{_e(f['host'])}</b>. All times below are "
         f"local, 24-hour.</div>\n")

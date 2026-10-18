@@ -400,5 +400,26 @@ check("each report has a tick box and the button posts the ticked ids",
                             "/api/daily-reports/dismiss", "daily-show-dismissed",
                             "restoreDailyReport(")), True)
 
+print("\nwording")
+d17 = date(2026, 10, 17)
+eve = datetime(2026, 10, 16, 21, 0).astimezone()
+check("a window from the evening before names both days",
+      dr._window(eve, eve + timedelta(days=1), d17),
+      "Fri 16 Oct 21:00 to Sat 17 Oct 21:00")
+check("a midnight window stays as it was",
+      dr._window(datetime(2026, 10, 17).astimezone(),
+                 datetime(2026, 10, 18).astimezone(), d17), "00:00 to 24:00")
+check("an acronym keeps its capitals mid-sentence",
+      dr._lower_first("DGA-profile domain queried"), "DGA-profile domain queried")
+check("an ordinary title is lowercased",
+      dr._lower_first("New file in a watched directory"),
+      "new file in a watched directory")
+cid = "bb99a268d947" + "0" * 52
+port = dr._port_words({"proto": "tcp", "local_port": 43824, "comm": "java",
+                       "exe": "/usr/bin/java", "pid": 7,
+                       "origin": {"unit": f"docker-{cid}.scope"}}, d17)
+check("a container id is cut to the 12 docker ps shows",
+      "in docker-bb99a268d947.scope" in port and cid not in port, True)
+
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)
