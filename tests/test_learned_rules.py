@@ -279,5 +279,62 @@ answered = lr.learn("DNS-1003", None, {"raw": {"registered_domain": "zoom.us"}},
 check("once answered, that refusal is gone",
       "has not answered yet" not in (answered.get("error") or ""), answered)
 
+print("\n[9] A rule the model makes covers its own device until it is earned")
+named("198.51.100.7", "updates.example.net")
+BEACON = {"raw": {"registered_domain": "example.net"}}
+
+
+def beacon(ip, n):
+    return {"review_id": 100 + n, "detection_id": "DNS-1002",
+            "severity": "medium", "entity_value": ip,
+            "title": "DNS beacon: polls updates.example.net on schedule",
+            "raw_data": json.dumps({"domain": "updates.example.net",
+                                    "registered_domain": "example.net",
+                                    "client_ip": ip})}
+
+
+def learn_from(ip, n):
+    return lr.learn("DNS-1002", None, BEACON, "a vendor's update check",
+                    example=beacon(ip, n), reason_kind="named_lookup")
+
+
+def name_device(ip):
+    with me._get_conn() as c:
+        c.execute("INSERT INTO known_devices (ip, known_as, identified_by) "
+                  "VALUES (?, 'device', 'user')", (ip,))
+
+
+first = learn_from("192.0.2.21", 1)
+check("it is made for that device only",
+      first.get("success") and first["match"].get("entity") == "192.0.2.21"
+      and first.get("scope") == "only 192.0.2.21", first)
+check("another device doing the same is not covered",
+      not lr.matches(first["match"], "192.0.2.22", "x",
+                     json.dumps({"registered_domain": "example.net"})))
+for ip in ("192.0.2.21", "192.0.2.22", "192.0.2.23", "192.0.2.24"):
+    name_device(ip)
+learn_from("192.0.2.22", 2)
+learn_from("192.0.2.23", 3)
+fresh = learn_from("192.0.2.24", 4)
+check("named devices with rules days younger than the limit do not earn it",
+      fresh["match"].get("entity") == "192.0.2.24", fresh)
+with me._get_conn() as c:
+    c.execute("UPDATE learned_rule SET created_at = '2026-01-01T00:00:00+00:00' "
+              "WHERE detection_id = 'DNS-1002' AND match_json LIKE "
+              "'%example.net%'")
+name_device("192.0.2.25")
+wide = learn_from("192.0.2.25", 5)
+check("held on enough named devices for days, it covers every device",
+      wide.get("success") and "entity" not in wide["match"]
+      and wide.get("scope", "").startswith("every device"), wide)
+own = lr.learn("DNS-1002", None, {"raw": {"registered_domain": "example.org"}},
+               "my own words", example=dict(beacon("192.0.2.30", 6), raw_data=
+               json.dumps({"domain": "a.example.org",
+                           "registered_domain": "example.org",
+                           "client_ip": "192.0.2.30"})),
+               owner_words="every device may do this")
+check("the owner's words keep the pattern as written",
+      own.get("success") and "entity" not in own["match"], own)
+
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)

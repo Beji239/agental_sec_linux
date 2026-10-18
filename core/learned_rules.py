@@ -28,6 +28,8 @@ MAX_RAW_KEYS = 6
 TRIAL_DAYS = 14
 UNATTENDED_PER_DAY = 5   # tripwire: rules made with nobody watching
 NEW_DEVICES = ("LAN-1008", "NET-1001", "RTR-1001")
+WIDE_EARN_DEVICES = 3    # named devices the same pattern must hold on
+WIDE_EARN_DAYS = 3       # before a rule the model made covers every device
 NEW_COLUMNS = (("reason_kind", "TEXT"), ("owner_words", "TEXT"),
                ("trial_until", "TEXT"), ("kept_at", "TEXT"))
 
@@ -208,6 +210,91 @@ def _subjects(example: dict) -> set:
             if v and isinstance(v, str)}
 
 
+def _device_of(example: dict) -> tuple | None:
+    """The device an alert is about: its hardware address when the alert
+    carries one, else its address on this network."""
+    import ipaddress
+    from core import evidence
+    raw = evidence.raw_of(example)
+    mac = str(raw.get("subject") or "")
+    if evidence._MAC.match(mac):
+        return ("mac", mac.lower())
+    for key, value in (("entity", example.get("entity_value")),
+                       ("client_ip", raw.get("client_ip")),
+                       ("src_ip", raw.get("src_ip"))):
+        try:
+            if value and ipaddress.ip_address(str(value)).is_private:
+                return (key, str(value))
+        except ValueError:
+            continue
+    return None
+
+
+def _pinned(match: dict) -> bool:
+    raw = match.get("raw") or {}
+    return bool(match.get("entity") or raw.get("subject")
+                or raw.get("client_ip") or raw.get("src_ip"))
+
+
+def _unpinned(match: dict) -> dict:
+    out = {k: v for k, v in match.items() if k != "entity"}
+    raw = {k: v for k, v in (match.get("raw") or {}).items()
+           if k not in ("subject", "client_ip", "src_ip")}
+    if raw:
+        out["raw"] = raw
+    else:
+        out.pop("raw", None)
+    return out
+
+
+def _pin(match: dict, device: tuple) -> dict:
+    kind, value = device
+    out = json.loads(json.dumps(match))
+    if kind == "entity":
+        out["entity"] = value
+    else:
+        out.setdefault("raw", {})["subject" if kind == "mac" else kind] = value
+    return out
+
+
+def _named(conn, device: tuple) -> bool:
+    kind, value = device
+    col = "mac" if kind == "mac" else "ip"
+    return bool(conn.execute(
+        f"SELECT 1 FROM known_devices WHERE lower({col}) = lower(?) AND "
+        f"identified_by = 'user' AND merged_into IS NULL AND retired_at IS "
+        f"NULL LIMIT 1", (value,)).fetchone())
+
+
+def _earned_wide(conn, detection_id: str, base: dict, device: tuple) -> bool:
+    """Has this pattern been judged normal separately on enough of the
+    owner's named devices, over enough days, to cover every device."""
+    named, oldest = set(), None
+    if _named(conn, device):
+        named.add(device[1].lower())
+    for r in conn.execute("SELECT match_json, created_at FROM learned_rule "
+                          "WHERE detection_id = ? AND status = 'on'",
+                          (detection_id,)):
+        try:
+            m = json.loads(r[0])
+        except ValueError:
+            continue
+        if not _pinned(m) or _unpinned(m) != base:
+            continue
+        raw = m.get("raw") or {}
+        for kind in ("mac", "entity", "client_ip", "src_ip"):
+            value = raw.get("subject") if kind == "mac" else (
+                m.get("entity") if kind == "entity" else raw.get(kind))
+            if value and _named(conn, (kind, value)):
+                named.add(str(value).lower())
+                oldest = min(oldest or r[1], r[1])
+                break
+    if len(named) < WIDE_EARN_DEVICES or not oldest:
+        return False
+    since = _iso(datetime.now(timezone.utc) - timedelta(days=WIDE_EARN_DAYS))
+    return oldest <= since
+
+
 def open_question(conn, example: dict) -> str | None:
     """A question the owner was asked about this alert's subject and has not
     answered yet, word for word."""
@@ -319,6 +406,17 @@ def learn(detection_id: str, finding_id, match, reason: str,
         bad = evidence.check_pattern(clean, example, bool(owner_words))
         if bad:
             return {"success": False, "error": bad}
+        # A rule the model makes alone covers the device it learned from,
+        # until the same pattern has held on enough named devices.
+        scope = "as written"
+        device = None if owner_words else _device_of(example)
+        if device and not _pinned(clean):
+            if _earned_wide(conn, detection_id, clean, device):
+                scope = (f"every device, earned on {WIDE_EARN_DEVICES} or "
+                         f"more named devices")
+            else:
+                clean = _pin(clean, device)
+                scope = f"only {device[1]}"
         if not matches(clean, example["entity_value"], example["title"],
                        example["raw_data"]):
             return {"success": False,
@@ -384,12 +482,12 @@ def learn(detection_id: str, finding_id, match, reason: str,
              {"detection_id": detection_id, "match": clean, "by": by,
               "reason": reason[:300], "cleared": cleared,
               "reason_kind": reason_kind, "owner_words": bool(owner_words),
-              "trial_until": trial})
+              "trial_until": trial, "scope": scope})
     if entities:
         _settle_incidents(detection_id, entities, rid, reason)
     return {"success": True, "rule_id": rid, "detection_id": detection_id,
             "match": clean, "cleared_open_findings": cleared,
-            "trial_until": trial,
+            "trial_until": trial, "scope": scope,
             "replay": {k: v for k, v in rp.items() if k != "open_ids"}}
 
 

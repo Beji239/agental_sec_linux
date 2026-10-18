@@ -2617,7 +2617,9 @@ TOOL_MANIFEST = [
             "titles, hostnames or process names. reason_kind is the fact "
             "Python checks for every hold; without it, only owner_words "
             "quoting the owner. Threat list, high and critical need "
-            "owner_words."),
+            "owner_words. Without owner_words a rule covers only the device "
+            "it was learned from, until the same pattern holds on several "
+            "named devices for days."),
         "input_schema": {
             "type": "object",
             "properties": {
