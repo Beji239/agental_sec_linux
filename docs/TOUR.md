@@ -481,8 +481,9 @@ three buttons: False alarm, Real, Not sure. The question is whether the alarm
 was right to worry you, not whether it happened: every incident really
 happened. False alarm means it was harmless, Real means it caught something you
 would want to act on, Not sure means you cannot tell yet. Real marks the rule as
-one to keep, and counts against any fix that would have held the incident back;
-it does not block anything by itself. You can also tell the analyst in
+one to keep, counts against any fix that would have held the incident back,
+undoes any quiet rule the analyst made that would hide it, and sends alarms
+like it straight to you; it does not block anything by itself. You can also tell the analyst in
 chat ("that was my backup job, it is a false alarm") and it records your
 verdict, marked as given on your word. Incidents you dismissed before this
 existed count as false alarms, marked "from a dismissal".
@@ -635,7 +636,12 @@ and two serious alerts nobody answered. Sample data.*
 - **Questions it wants to ask you.** What the analyst cannot find out on its
   own, such as whether a device is yours. Each says why it is stuck, what was
   already tried, and where you could look. Type the answer and press **Tell
-  it**, and the answer is used from then on. **I do not know either** is a
+  it**, and the answer is used from then on. Answer a question about a
+  device with yes and what it is ("yes, the kitchen tablet"), and the device
+  is named from your words and its new device alerts are closed; a no leaves
+  them open. Until you answer, a new device sends one notice, and its lesser
+  alerts are kept under its new device incident instead of each raising its
+  own; a high one still does. **I do not know either** is a
   real answer too: the question stops, and nobody knowing is recorded.
   Questions nobody answers retire after a while and are listed as such, never
   quietly treated as yes. The menu shows waiting, answered, nobody knows or

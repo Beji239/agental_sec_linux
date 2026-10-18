@@ -62,6 +62,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 from core import memory_engine as me
@@ -762,12 +763,66 @@ def answer(question_id: int, answer_text: str = None,
                 f"something you did.")
 
     from core import learned_rules
-    settled = _settle_rules(question_id, verdict if verdict in ("yes", "no")
-                            else learned_rules.verdict_of(answer_text),
-                            answer_text)
-    return {"success": True, "state": "answered", "filed_as": filed_as,
-            "filing_failed": file_error, "note": note,
-            "provisional_rules": settled}
+    said = (verdict if verdict in ("yes", "no")
+            else learned_rules.verdict_of(answer_text))
+    settled = _settle_rules(question_id, said, answer_text)
+    out = {"success": True, "state": "answered", "filed_as": filed_as,
+           "filing_failed": file_error, "note": note,
+           "provisional_rules": settled}
+    if topic == "identify_device" and entity_type == "ip" and said == "yes":
+        out["device"] = _device_known(question_id, entity_value, answer_text)
+    return out
+
+
+YES_START = re.compile(r"^\s*(yes|yeah|yep|yup|sure|correct|right)\b[\s,.!:;-]*"
+                       r"(it'?s|it is|that'?s|that is|this is)?\s*",
+                       re.IGNORECASE)
+
+
+def _device_known(question_id: int, ip: str, answer_text: str) -> dict:
+    """The owner said yes, the device is theirs: name it from their words and
+    close its new device incidents, so nothing is left to do by hand."""
+    from core import incident
+    name = YES_START.sub("", answer_text or "").strip(" .,!")[:64]
+    if not name:
+        with me._get_readonly_conn() as conn:
+            row = conn.execute("SELECT hostname, vendor FROM known_devices "
+                               "WHERE ip = ? LIMIT 1", (ip,)).fetchone()
+        name = next((v for v in (row or ()) if v), None) or "Known device"
+    out = {"named": None, "incidents_closed": []}
+    try:
+        named = me.identify_device(
+            ip=ip, known_as=name,
+            evidence=f"The owner answered question {question_id}: "
+                     f"{answer_text}"[:500],
+            identified_by="user")
+        if named.get("success"):
+            out["named"] = name
+            if named.get("hold_released"):
+                out["hold_released"] = named["hold_released"]
+        else:
+            out["name_error"] = named.get("error")
+    except Exception as e:                                  # noqa: BLE001
+        out["name_error"] = str(e)
+    try:
+        marks = ",".join("?" * len(incident.NEW_DEVICES))
+        with me._get_readonly_conn() as conn:
+            ids = [r[0] for r in conn.execute(
+                f"SELECT id FROM incident WHERE detection_id IN ({marks}) "
+                f"AND entity_value = ? AND status IN "
+                f"('new','triaged','action_pending')",
+                (*incident.NEW_DEVICES, ip))]
+        if ids:
+            closed = incident.close_many(
+                ids, f"The owner said this device is theirs (question "
+                     f"{question_id}).", by="user")
+            out["incidents_closed"] = closed.get("closed", [])
+            for iid in out["incidents_closed"]:
+                incident.set_verdict(iid, "false_alarm", by="owner",
+                                     note=answer_text)
+    except Exception as e:                                  # noqa: BLE001
+        out["close_error"] = str(e)
+    return out
 
 
 def _settle_rules(question_id: int, verdict: str, words: str) -> dict:

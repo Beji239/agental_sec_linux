@@ -328,8 +328,20 @@ def review_once(run=None) -> dict:
                          f"somebody is trying to steer it."))
             items.remove(it)
             out["tampered"] = out.get("tampered", 0) + 1
-    # A device nobody has vouched for yet is shown in full, never sorted.
+    # The owner called an alarm like this real: shown, never sorted away.
     from core import learned_rules
+    with me._get_readonly_conn() as conn:
+        real = {it["id"]: learned_rules._said_real(
+            conn, it["detection_id"], {"entity": it.get("entity_value")})
+            for it in items if it.get("entity_value")}
+    for it in list(items):
+        if real.get(it["id"]):
+            release(it, (f"Filed without review: the owner called an alarm "
+                         f"like this real (incident {real[it['id']]})."),
+                    status="shown", by="owner_said_real")
+            items.remove(it)
+            out["owner_said_real"] = out.get("owner_said_real", 0) + 1
+    # A device nobody has vouched for yet is shown in full, never sorted.
     with me._get_readonly_conn() as conn:
         waiting = {it["id"]: learned_rules.waiting_device(conn, it)
                    for it in items}

@@ -265,6 +265,71 @@ def incident_key(detection_id: str, entity_type: str, entity_value: str) -> str:
     return f"{detection_id}|{entity_type}|{entity_value}"
 
 
+def _waiting_device_incident(r, cache: dict):
+    """The open new device incident a finding belongs under, when it is a
+    low or medium alert about a device the owner has not vouched for yet.
+    High and critical ones keep their own incident and notice."""
+    if r["detection_id"] in NEW_DEVICES or \
+            _severity_rank(r["severity"]) >= _severity_rank("high"):
+        return None
+    try:
+        from core import learned_rules
+        item = {"entity_value": r["entity_value"], "raw_data": r["raw_data"]}
+        with me._get_readonly_conn() as conn:
+            ip = learned_rules.waiting_device(conn, item)
+            if not ip:
+                return None
+            if ip not in cache:
+                marks = ",".join("?" * len(NEW_DEVICES))
+                row = conn.execute(
+                    f"SELECT id FROM incident WHERE detection_id IN ({marks}) "
+                    f"AND entity_value = ? AND status IN "
+                    f"('new','triaged','action_pending') ORDER BY id LIMIT 1",
+                    (*NEW_DEVICES, ip)).fetchone()
+                cache[ip] = row[0] if row else None
+            return cache[ip]
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning(f"waiting device check failed, raised as usual: {e}")
+        return None
+
+
+def _attach(incident_id: int, rows: list):
+    """Record findings under an incident: counted, kept by id, last seen."""
+    with me._get_conn() as conn:
+        row = conn.execute("SELECT finding_ids_json FROM incident WHERE id = ?",
+                           (incident_id,)).fetchone()
+        if row is None:
+            return
+        ids = sorted(set(json.loads(row[0] or "[]"))
+                     | {int(r["id"]) for r in rows})[-50:]
+        conn.execute("UPDATE incident SET finding_count = finding_count + ?, "
+                     "finding_ids_json = ?, last_seen_at = MAX(last_seen_at, "
+                     "?) WHERE id = ?",
+                     (len(rows), json.dumps(ids),
+                      _sql_ts(_parse_ts(max(r["found_at"] for r in rows))
+                              or _now()), incident_id))
+
+
+def _notify_new_device(inc: dict) -> dict:
+    """One notice when a new device first appears, unless the hold switch
+    already sent one for it."""
+    try:
+        with me._get_readonly_conn() as conn:
+            if me._table_exists_ro(conn, "device_hold") and conn.execute(
+                    "SELECT 1 FROM device_hold WHERE ip = ? LIMIT 1",
+                    (inc.get("entity_value"),)).fetchone():
+                return {"sent": False, "reason": "the hold switch told the owner"}
+        from core import actions
+        return actions.notify(
+            "A new device needs your attention",
+            f"{inc.get('entity_value')} joined the network. Its alerts are "
+            f"kept under one incident until you say whose it is, on the "
+            f"Devices tab or by answering the analyst.")
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning(f"new device notice not sent: {e}")
+        return {"sent": False, "reason": str(e)}
+
+
 def write_incident(detection_id: str, entity_type: str, entity_value: str,
                    severity: str, title: str, source: str = None,
                    finding_ids: list = None, first_seen_at=None,
@@ -605,7 +670,7 @@ def watch_once(session_id: str, modules: dict = None,
                 SELECT id, found_at, source, severity, entity_type,
                        entity_value, title, description, detection_id,
                        detection_rev, dismissed, dismissed_reason,
-                       sensor_id
+                       sensor_id, raw_data
                   FROM findings
                  WHERE id > ? AND detection_id IS NOT NULL
                  ORDER BY id ASC
@@ -634,6 +699,8 @@ def watch_once(session_id: str, modules: dict = None,
     # findings becomes one write rather than fifty updates. The database's
     # UNIQUE key handles the across-ticks half.
     grouped: dict[str, dict] = {}
+    to_device: dict[int, list] = {}
+    waiting: dict = {}
 
     for r in rows:
         did = r["detection_id"]
@@ -655,6 +722,13 @@ def watch_once(session_id: str, modules: dict = None,
         if r["dismissed"] and (r["dismissed_reason"] or "").startswith(
                 "provisional rule "):
             counts["refused"] += 1
+            continue
+
+        # A device still waiting on the owner: its lesser alerts are kept
+        # under its new device incident, not raised one by one.
+        home = _waiting_device_incident(r, waiting)
+        if home:
+            to_device.setdefault(home, []).append(r)
             continue
 
         severity = (r["severity"] or "info").lower()
@@ -685,6 +759,11 @@ def watch_once(session_id: str, modules: dict = None,
                 slot["severity"] = severity
                 slot["title"] = r["title"]
 
+    for home, found in to_device.items():
+        _attach(home, found)
+        counts["folded_into_device"] = counts.get("folded_into_device", 0) \
+            + len(found)
+
     for key, slot in grouped.items():
         if made_today >= cap:
             counts["capped"] += 1
@@ -709,6 +788,8 @@ def watch_once(session_id: str, modules: dict = None,
         if out.get("action") == "created":
             counts["new"] += 1
             made_today += 1
+            if slot["detection_id"] in NEW_DEVICES:
+                _notify_new_device(out)
         else:
             counts["coalesced"] += 1
         if notify_urgent(out).get("sent"):
@@ -1286,8 +1367,17 @@ def set_verdict(incident_id: int, verdict: str, by: str = "owner",
                     {"from": row["verdict"], "to": verdict, "by": by})
     except Exception as e:                                  # noqa: BLE001
         logger.error(f"Could not journal the verdict on {incident_id}: {e}")
-    return {"success": True, "incident_id": int(incident_id),
-            "verdict": verdict, "by": by}
+    out = {"success": True, "incident_id": int(incident_id),
+           "verdict": verdict, "by": by}
+    if verdict == "real":
+        # It worried the owner: no rule the model made may hide it.
+        try:
+            from core import learned_rules
+            out["rules_undone"] = learned_rules.undo_for_real(incident_id)
+        except Exception as e:                              # noqa: BLE001
+            logger.error(f"Rules hiding incident {incident_id} not undone: "
+                         f"{e}")
+    return out
 
 
 def close_many(incident_ids, reason: str, owner_words: str = None,

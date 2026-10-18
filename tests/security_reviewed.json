@@ -2469,5 +2469,19 @@
   "path": "tools/dns_inspector.py",
   "text": "f\"SELECT client_ip, MIN(domain), MIN(queried_at) FROM \"",
   "reason": "the clause is fixed text, the pattern goes in as a parameter"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/incident.py",
+  "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
+  "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
  }
 ]

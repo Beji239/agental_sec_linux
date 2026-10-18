@@ -340,6 +340,53 @@ def waiting_device(conn, example: dict) -> str | None:
     return None
 
 
+def _real_findings(conn, incident_id=None, detection_id=None):
+    """(incident id, finding) for incidents the owner called real."""
+    if not me._table_exists_ro(conn, "incident"):
+        return []
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(incident)")}
+    if "verdict" not in cols:
+        return []
+    return [(r[0], r) for r in conn.execute(
+        "SELECT i.id, f.detection_id, f.entity_value, f.title, f.raw_data "
+        "FROM incident i JOIN findings f ON f.detection_id = i.detection_id "
+        "AND f.entity_value = i.entity_value WHERE (i.id = ? OR (? IS NULL "
+        "AND i.detection_id = ? AND i.verdict = 'real')) LIMIT 500",
+        (incident_id, incident_id, detection_id))]
+
+
+def _said_real(conn, detection_id: str, match: dict):
+    for iid, f in _real_findings(conn, detection_id=detection_id):
+        if matches(match, f["entity_value"], f["title"], f["raw_data"]):
+            return iid
+    return None
+
+
+def undo_for_real(incident_id: int) -> list:
+    """The owner called an incident real: every rule the model made alone
+    that would hide it is undone, so its alarms come back."""
+    undone = []
+    with me._get_readonly_conn() as conn:
+        if not me._table_exists_ro(conn, "learned_rule"):
+            return []
+        found = _real_findings(conn, incident_id=incident_id)
+        if not found:
+            return []
+        rules = conn.execute(
+            "SELECT id, match_json FROM learned_rule WHERE status = 'on' AND "
+            "owner_words IS NULL AND detection_id = ?",
+            (found[0][1]["detection_id"],)).fetchall()
+    for r in rules:
+        m = json.loads(r["match_json"])
+        if any(matches(m, f["entity_value"], f["title"], f["raw_data"])
+               for _, f in found):
+            if undo(r["id"], by="owner",
+                    reason=f"the owner called incident {incident_id} real"
+                    ).get("success"):
+                undone.append(r["id"])
+    return undone
+
+
 def learn(detection_id: str, finding_id, match, reason: str,
           by: str = "model", clear_open: bool = True,
           example: dict = None, reason_kind: str = None,
@@ -443,6 +490,12 @@ def learn(detection_id: str, finding_id, match, reason: str,
                               "read the finding's fields again"),
                     "example": {k: example[k] for k in
                                 ("entity_value", "title", "raw_data")}}
+        real = None if owner_words else _said_real(conn, detection_id, clean)
+        if real:
+            return {"success": False,
+                    "error": (f"the owner marked an alarm this pattern covers "
+                              f"as real (incident {real}); nothing is learned "
+                              f"that would hide it")}
         rp = replay(conn, detection_id, clean)
         if (rp["findings"] >= WIDE_FLOOR and rp["would_hold"] == rp["findings"]
                 and rp["entities_seen"] >= WIDE_ENTITIES):
