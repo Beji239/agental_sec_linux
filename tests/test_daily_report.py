@@ -404,11 +404,30 @@ print("\nwording")
 d17 = date(2026, 10, 17)
 eve = datetime(2026, 10, 16, 21, 0).astimezone()
 check("a window from the evening before names both days",
-      dr._window(eve, eve + timedelta(days=1), d17),
+      dr._span(eve, eve + timedelta(days=1), d17),
       "Fri 16 Oct 21:00 to Sat 17 Oct 21:00")
+check("an old incident seen again today names both days",
+      dr._span(datetime(2026, 10, 1, 0, 19).astimezone(),
+               datetime(2026, 10, 17, 2, 21).astimezone(), d17),
+      "Thu 1 Oct 00:19 to Sat 17 Oct 02:21")
 check("a midnight window stays as it was",
-      dr._window(datetime(2026, 10, 17).astimezone(),
-                 datetime(2026, 10, 18).astimezone(), d17), "00:00 to 24:00")
+      dr._span(datetime(2026, 10, 17).astimezone(),
+               datetime(2026, 10, 18).astimezone(), d17), "00:00 to 24:00")
+check("a span inside the day stays short",
+      dr._span(datetime(2026, 10, 17, 3, 52).astimezone(),
+               datetime(2026, 10, 17, 4, 6).astimezone(), d17), "03:52 to 04:06")
+noon = datetime(2026, 10, 17, 12, 0).astimezone()
+stamp = noon.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+check("a UTC stamp in the model's words becomes local time",
+      dr._local_times(f"A device joined the LAN at {stamp}.", d17),
+      "A device joined the LAN at 12:00.")
+check("text without a stamp is left alone",
+      dr._local_times("joined at 19:14, no stamp", d17), "joined at 19:14, no stamp")
+html = dr.render(dict(f, day=d17), {"text": f"Seen at {stamp}.",
+                                    "recommendations": [f"Check {stamp}."]})
+check("the rendered assessment carries local times only",
+      stamp not in html and "Seen at 12:00." in html and "Check 12:00." in html,
+      True)
 check("an acronym keeps its capitals mid-sentence",
       dr._lower_first("DGA-profile domain queried"), "DGA-profile domain queried")
 check("an ordinary title is lowercased",

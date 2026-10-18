@@ -109,17 +109,27 @@ def _hm(dt, day: date) -> str:
 
 
 def _span(a, b, day: date) -> str:
-    left, right = _hm(a, day), _hm(b, day)
-    return left if left == right else f"{left} to {right}"
-
-
-def _window(a, b, day: date) -> str:
-    """The report's window. A start named by its day gets an end named by its
-    day too, so it never reads "Fri 16 Oct 21:00 to 21:00"."""
+    """A start named by its day gets an end named by its day too, so it
+    never reads "Thu 1 Oct 00:19 to 02:21" for a span ending today."""
     left, right = _hm(a, day), _hm(b, day)
     if not left[:1].isdigit() and right[:1].isdigit() and right != "24:00":
         right = f"{_short_day(day)} {right}"
     return left if left == right else f"{left} to {right}"
+
+
+_UTC_STAMP = re.compile(r"\b(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)"
+                        r"(?:\.\d+)?(?:Z|\+00:00)")
+
+
+def _local_times(text: str, day: date) -> str:
+    """The model writes UTC stamps; the report is in local time."""
+    def swap(m):
+        try:
+            dt = datetime.fromisoformat(f"{m.group(1)}T{m.group(2)}+00:00")
+        except ValueError:
+            return m.group(0)
+        return _hm(dt, day)
+    return _UTC_STAMP.sub(swap, text or "")
 
 
 def _lower_first(text: str) -> str:
@@ -371,7 +381,8 @@ def _incidents(conn, start, end, names, day) -> dict:
             "last": _parse(r["last_seen_at"]),
             "count": r["finding_count"] or 1, "kind": kind, "outcome": words,
             "handled": handled,
-            "note": plain(_first_sentence(note)) if note else "",
+            "note": (plain(_first_sentence(_local_times(note, day)))
+                     if note else ""),
             "pending": pending.get(r["id"]),
             "actions": actions.get(r["id"], []),
         })
@@ -1233,7 +1244,7 @@ def render(f: dict, a: dict) -> str:
         f"<title>Daily security report, {_e(_long_day(day))}</title>\n"
         f"<style>{CSS}</style>\n</head>\n<body><div class=\"page\">\n")
     add("<h1>Daily security report</h1>\n<div class=\"meta\">")
-    add(f"<b>{_e(_long_day(day))}</b>, {_e(_window(f['start'], f['end'], day))} "
+    add(f"<b>{_e(_long_day(day))}</b>, {_e(_span(f['start'], f['end'], day))} "
         f"local time ({_e(tz)}).<br>Written {_e(_short_day(w.date()))} at "
         f"{w:%H:%M} by AgentalSec on <b>{_e(f['host'])}</b>. All times below are "
         f"local, 24-hour.</div>\n")
@@ -1381,9 +1392,10 @@ def render(f: dict, a: dict) -> str:
 
     add("<h2>The agent's assessment</h2>\n")
     if a.get("text"):
-        add(f"<p>{_e(a['text'])}</p>\n")
+        add(f"<p>{_e(_local_times(a['text'], day))}</p>\n")
         if a.get("recommendations"):
-            add("<ol>" + "".join(f"<li>{_e(r)}</li>" for r in a["recommendations"])
+            add("<ol>" + "".join(f"<li>{_e(_local_times(r, day))}</li>"
+                                 for r in a["recommendations"])
                 + "</ol>\n")
     else:
         add(f"<p>Not written: {_e(plain(a.get('error') or 'no answer'))}. The facts "

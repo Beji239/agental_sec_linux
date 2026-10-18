@@ -219,16 +219,25 @@ def _block(items: list) -> str:
     return "\n".join(lines)
 
 
+def _last_reply(replies: list) -> str:
+    return next((r for r in reversed(replies or []) if r and r.strip()), "")
+
+
 def _parse(replies: list) -> list | None:
-    text = next((r for r in reversed(replies or []) if r and r.strip()), "")
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        return None
-    try:
-        out = json.loads(text[start:end + 1]).get("decisions")
-    except (TypeError, ValueError, AttributeError):
-        return None
-    return out if isinstance(out, list) else None
+    """The object that holds the decisions, wherever it sits: a brace in the
+    words around it does not spoil it."""
+    text = _last_reply(replies)
+    decoder = json.JSONDecoder()
+    at = text.find("{")
+    while at >= 0:
+        try:
+            obj = decoder.raw_decode(text, at)[0]
+        except ValueError:
+            obj = None
+        if isinstance(obj, dict) and isinstance(obj.get("decisions"), list):
+            return obj["decisions"]
+        at = text.find("{", at + 1)
+    return None
 
 
 def _waiting(conn, limit: int) -> list:
@@ -338,6 +347,9 @@ def review_once(run=None) -> dict:
         + int(usage.get("completion_tokens") or 0))
     decisions = _parse(result.get("answers")) if not result.get("error") \
         else None
+    if decisions is None and not result.get("error"):
+        logger.warning("alert_review: the answer was not readable, it began: "
+                       f"{_last_reply(result.get('answers'))[:300]!r}")
     by_id = {it["id"]: it for it in items}
     for d in decisions or []:
         if not isinstance(d, dict):

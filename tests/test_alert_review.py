@@ -156,6 +156,21 @@ check("filed now", r.get("success") and findings("203.0.113.2"), r)
 check("its rule is undone", r.get("rule_undone") and not lr.listing()["rules"])
 check("only a normal one can come back", not ar.show(w2["review_id"])["success"])
 
+print("\n[6] Reading the answer")
+good = {"decisions": [{"id": 1, "verdict": "alarm", "reason": "x"}]}
+check("a plain answer is read", ar._parse([json.dumps(good)]) == good["decisions"])
+check("a brace in the words before it does not spoil it",
+      ar._parse(["Looked at {3 items}. " + json.dumps(good)]) == good["decisions"])
+check("nor one after it",
+      ar._parse([json.dumps(good) + " (see {notes})"]) == good["decisions"])
+check("a fenced answer is read",
+      ar._parse(["```json\n" + json.dumps(good) + "\n```"]) == good["decisions"])
+check("an object without decisions is not an answer",
+      ar._parse(['{"verdict": "normal"}']) is None)
+check("a cut off answer is not an answer",
+      ar._parse([json.dumps(good)[:-5]]) is None)
+check("no answer is not an answer", ar._parse([]) is None)
+
 ar._state["running"] = False
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)
