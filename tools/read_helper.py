@@ -11,6 +11,8 @@
 #   dpkg_verify  dpkg -V with the package list computed here. dpkg -V
 #                does NOT need root to run; root only adds 27 files in /boot.
 #   proc_exe     the running file of every process, with its start time
+#   firewall_rules  what ufw and nft say about the ruleset, fixed commands
+#   btmp         the failed login records, /var/log/btmp
 #
 # /etc/shadow and /etc/gshadow MUST NOT BE ADDED: they hold password hashes.
 #
@@ -56,6 +58,21 @@ VERBS = {
                "the sensor, so those rows had no path to compare against a "
                "package. Every process is listed, with its start time so the "
                "caller can tell a reused pid from the one it asked about.",
+    },
+    "btmp": {
+        "paths": ["/var/log/btmp"],
+        "why": "btmp records every failed login, including ones no text log "
+               "kept, and it is root:utmp mode 660, so the event monitor could "
+               "not read it. The newest records are returned, with the file's "
+               "size and inode so the caller keeps its place.",
+    },
+    "firewall_rules": {
+        "paths": [],
+        "why": "ufw and nft refuse to show the ruleset to a normal account, so "
+               "the app could not check that its own blocks are in place. "
+               "Runs ufw status numbered, ufw show added and nft list ruleset "
+               "with fixed arguments; nothing from the caller reaches a "
+               "command line.",
     },
     "dpkg_verify": {
         "paths": [],
@@ -363,6 +380,52 @@ def verb_dpkg_verify():
             "stderr": res.stderr.strip()[:2000]}
 
 
+FIREWALL_COMMANDS = (
+    ("ufw_status", ["/usr/sbin/ufw", "status", "numbered"]),
+    ("ufw_added", ["/usr/sbin/ufw", "show", "added"]),
+    ("nft", ["/usr/sbin/nft", "list", "ruleset"]),
+)
+
+
+BTMP_MAX = 384 * 4000                 # the newest 4000 records
+
+
+def verb_btmp():
+    """The newest failed login records, base64, with size and inode."""
+    import base64
+    path = VERBS["btmp"]["paths"][0]
+    try:
+        st = os.stat(path)
+        with open(path, "rb") as fh:
+            start = max(0, st.st_size - BTMP_MAX)
+            fh.seek(start)
+            raw = fh.read(BTMP_MAX)
+    except OSError as e:
+        raise Refusal(f"{path} could not be read: {e.strerror or e}")
+    return {"verb": "btmp", "note": VERBS["btmp"]["why"], "size": st.st_size,
+            "ino": st.st_ino, "start": start,
+            "data_b64": base64.b64encode(raw).decode("ascii")}
+
+
+def verb_firewall_rules():
+    """The firewall's own listings, read as root. Fixed commands only."""
+    out = {"verb": "firewall_rules", "note": VERBS["firewall_rules"]["why"]}
+    for key, argv in FIREWALL_COMMANDS:
+        if not os.path.exists(argv[0]):
+            out[key] = None
+            continue
+        try:
+            res = subprocess.run(argv, capture_output=True, text=True,
+                                 timeout=30)
+            out[key] = {"rc": res.returncode,
+                        "stdout": res.stdout[:MAX_BYTES],
+                        "stderr": res.stderr[:4096]}
+        except (OSError, subprocess.SubprocessError) as e:
+            out[key] = {"rc": None, "stdout": "",
+                        "stderr": f"{type(e).__name__}: {e}"}
+    return out
+
+
 def _start_ticks(pid: str):
     """Field 22 of /proc/<pid>/stat: start time in clock ticks since boot."""
     data, _ = _read(f"/proc/{pid}/stat", 4096)
@@ -420,6 +483,8 @@ HANDLERS = {
     "root_ssh": verb_root_ssh,
     "dpkg_verify": verb_dpkg_verify,
     "proc_exe": verb_proc_exe,
+    "firewall_rules": verb_firewall_rules,
+    "btmp": verb_btmp,
 }
 
 

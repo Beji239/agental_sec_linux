@@ -81,6 +81,9 @@ from core import migrations                     # noqa: E402
 migrations.run_migrations(DB)
 from core import duty, integrity                # noqa: E402
 from tools import port_owner as po              # noqa: E402
+# These checks need sockets this account cannot attribute; the names helper,
+# where installed, would attribute them all.
+po._from_names_helper = lambda walked: None
 
 
 def _fresh_report(verdict="no_action", body="a body", saw="what it saw",

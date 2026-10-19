@@ -158,7 +158,8 @@ logger = logging.getLogger(__name__)
 # v72, 2026-10-18: learned_rule.question_id and question_state, provisional
 # rules made while the owner's answer is due.
 # v72 also: device_hold, new devices kept off the internet until checked in.
-SCHEMA_VERSION = 72
+# v73, 2026-10-18: sensor_service, the capture service's reports to the core.
+SCHEMA_VERSION = 73
 
 
 # HELPERS
@@ -4292,14 +4293,15 @@ def _migrate_run_dismissal(conn) -> int:
 
 
 def _migrate_expectations(conn) -> int:
-    """v66 to v72: the expectations the app sets and checks itself, rule
+    """v66 to v73: the expectations the app sets and checks itself, rule
     trials, learned rules and the alert review. Idempotent."""
-    from core import (alert_review, device_hold, expectations, learned_rules,
-                      rule_trials)
+    from core import (alert_review, capture_service, device_hold,
+                      expectations, learned_rules, rule_trials)
     return (expectations.ensure_tables(conn) | rule_trials.ensure_tables(conn)
             | learned_rules.ensure_tables(conn)
             | alert_review.ensure_tables(conn)
-            | device_hold.ensure_tables(conn))
+            | device_hold.ensure_tables(conn)
+            | capture_service.ensure_tables(conn))
 
 
 def _migrate_merge_carried(conn) -> int:

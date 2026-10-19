@@ -130,9 +130,9 @@ your account.
 This adds two launchers, each in three places: your app menu, your desktop
 and the project folder.
 
-- **AgentalSec**: runs as you. Packet capture and firewall changes are off.
-- **AgentalSec (privileged)**: asks for your password and runs as root, with
-  every sensor working.
+- **AgentalSec**: runs as you.
+- **AgentalSec (privileged)**: the old way, as root. Once the capture service
+  is installed (step 10) it also starts the app as you, so either icon works.
 
 Use these to start the app from now on. If a desktop icon says "untrusted",
 right-click it and choose "Allow launching". If you move or rename the project
@@ -142,7 +142,18 @@ different folder.
 Check it worked: `python3 main.py --check` now says "Launchers are installed
 for this folder".
 
-## 10. Optional helpers
+## 10. Helpers
+
+The installer does this step for you, and `./scripts/update.sh` reinstalls a
+helper whenever an update changes it. By hand:
+
+Capture service and names helper, so the app runs without root and still
+captures every packet and names the program behind it:
+
+```bash
+sudo ./scripts/install_capture_service.sh --apply
+./scripts/install_capture_service.sh --verify
+```
 
 Root action helper, which runs approved actions (block, kill, quarantine) while
 the app stays unprivileged:
@@ -159,7 +170,7 @@ sudo ./scripts/install_read_helper.sh --apply
 ./scripts/install_read_helper.sh --verify
 ```
 
-eBPF kernel camera, needs the step 1 extras:
+Optional, the eBPF kernel camera, which needs the step 1 extras:
 
 ```bash
 ./ebpf/build.sh
@@ -224,8 +235,6 @@ User=YOUR_USER
 WorkingDirectory=/path/to/agental_sec_linux
 ExecStart=/usr/bin/python3 main.py
 Restart=on-failure
-AmbientCapabilities=CAP_NET_RAW
-CapabilityBoundingSet=CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target
@@ -235,7 +244,8 @@ sudo systemctl enable --now agental-sec
 ```
 
 Replace `YOUR_USER` and the path first, and set `flask.auto_open_browser` to
-`false` in `config.json`.
+`false` in `config.json`. The app needs no special rights here: packet capture
+comes from the capture service (step 10), which starts on boot by itself.
 
 ## 13. Verify
 
@@ -316,7 +326,8 @@ pip install --user --break-system-packages --upgrade -r requirements.txt
 - **A launcher starts nothing, or an old copy**: the project folder was moved
   or renamed. Run `./scripts/install_launchers.sh` again.
 - **Missing dependencies at start**: step 3 was skipped or run as another user.
-- **Packet capture off**: use the privileged launcher.
+- **Packet capture off**: install the capture service (step 10) and check it
+  with `./scripts/install_capture_service.sh --verify`.
 - **Analyst unavailable**: `AGENTAL_API_KEY`, `provider.api_url` or
   `provider.model` is empty.
 - **Threat map empty**: run `scripts/fetch_geoip.py`.

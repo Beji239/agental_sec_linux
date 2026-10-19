@@ -39,7 +39,7 @@ done
 
 STEP=0
 WARNINGS=()
-step() { STEP=$((STEP + 1)); echo; echo "[$STEP/9] $*"; }
+step() { STEP=$((STEP + 1)); echo; echo "[$STEP/10] $*"; }
 ok()   { echo "      done: $*"; }
 warn() { echo "      NOTE: $*"; WARNINGS+=("$*"); }
 die()  { echo; echo "install stopped: $*" >&2; exit 1; }
@@ -310,6 +310,22 @@ else
 fi
 rm -f "$launch_out"
 
+# 10. The parts that hold the rights, so the app itself runs as you.
+step "Root helpers"
+helpers=("install_capture_service.sh:the capture service and the names helper"
+         "install_read_helper.sh:the read helper, for what only root can read"
+         "install_action_helper.sh:the action helper, for the actions you approve")
+for h in "${helpers[@]}"; do
+    script="${h%%:*}" what="${h#*:}"
+    if [[ "$SYSTEM" == 0 ]]; then
+        ok "skipped (--skip-system). Later: sudo ./scripts/$script --apply"
+    elif sudo "./scripts/$script" --apply </dev/null >/dev/null 2>&1; then
+        ok "$what"
+    else
+        warn "$what did not install. Later: sudo ./scripts/$script --apply"
+    fi
+done
+
 # Optional: the security test tools, in their own folder.
 if [[ "$TESTTOOLS" == yes ]]; then
     echo
@@ -329,8 +345,7 @@ echo "    python3 main.py"
 echo "Then open http://127.0.0.1:5000 and enter the dashboard key:"
 echo "    $(env_get AGENTAL_APP_API_KEY)"
 echo "It is kept in .env as AGENTAL_APP_API_KEY."
-echo "AgentalSec (privileged) asks for your password and turns on packet"
-echo "capture and firewall changes."
+echo "It runs as you: packets are captured by the capture service."
 if [[ ${#WARNINGS[@]} -gt 0 ]]; then
     echo
     echo "Still to do:"
@@ -338,8 +353,7 @@ if [[ ${#WARNINGS[@]} -gt 0 ]]; then
 fi
 echo
 echo "Optional, see SETUP.md steps 10 to 12:"
-echo "  - root action helper:  sudo ./scripts/install_action_helper.sh --apply"
-echo "  - read helper:         sudo ./scripts/install_read_helper.sh --apply"
+echo "  - kernel camera:       ./ebpf/build.sh && sudo ./scripts/install_ebpf_camera.sh --apply"
 echo "  - your router:         ./scripts/install_gateway_agent.sh --enroll ROUTER_ADDRESS"
 echo "  - start on boot:       SETUP.md step 12"
 echo "  - security test tools: ./scripts/install_test_tools.sh (developers only)"

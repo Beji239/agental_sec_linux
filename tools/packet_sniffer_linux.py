@@ -553,6 +553,10 @@ def _get_direction(scope: str) -> str:
 # the lookup tries the local end FIRST, which is the end the packet's own
 # scope already says it is.
 ATTRIBUTION_TTL = 1.0        # seconds a socket snapshot is trusted
+# Written by the names helper (tools/names_helper.py, root), read when this
+# runs without root so root's programs are still named.
+NAMES_FILE = "/var/lib/agental_sec/names.json"
+_helper_programs = {}
 PID_INFO_TTL = 5.0           # seconds a pid's name/cmdline is reused
 PID_INFO_MAX = 2048          # ceiling on the pid description cache
 
@@ -575,10 +579,13 @@ def _walk_connections() -> tuple[dict, str]:
     if not PSUTIL_AVAILABLE:
         return {}, "psutil is not available, so no packet can be attributed"
     index = {}
+    unreadable = 0
     try:
         for conn in psutil.net_connections(kind="inet"):
             pid = conn.pid
             laddr = getattr(conn, "laddr", None)
+            if laddr and pid is None:
+                unreadable += 1
             if not laddr or pid is None:
                 continue
             ip = getattr(laddr, "ip", None)
@@ -593,7 +600,43 @@ def _walk_connections() -> tuple[dict, str]:
             index.setdefault((ip, port), pid)
     except Exception as e:
         return {}, f"the socket table could not be read ({e})"
-    return index, f"{len(index)} local endpoints indexed"
+    note = f"{len(index)} local endpoints indexed"
+    if unreadable and os.geteuid() != 0:
+        # The capture service runs with the capture rights only.
+        added, why = _names_from_helper(index)
+        if why is None:
+            note += (f"; {added} more named by the names helper, root's "
+                     f"programs included")
+        else:
+            note += (f"; {unreadable} belong to programs of other accounts, "
+                     f"root included, and {why}, so their packets carry no "
+                     f"program name. The kernel camera records those "
+                     f"connections by program")
+    return index, note
+
+
+def _names_from_helper(index: dict) -> tuple[int, str | None]:
+    """Fill the index from the names helper's file. (added, None), or
+    (0, why not)."""
+    global _helper_programs
+    from tools import names_helper
+    data, why = names_helper.read(NAMES_FILE)
+    if data is None:
+        return 0, why
+    added = 0
+    for key, pid in (data.get("endpoints") or {}).items():
+        try:
+            _proto, ip, port = key.split(" ")
+            port = int(port)
+        except ValueError:
+            continue
+        if ":" in ip:
+            ip = _v6_text(ip) or ip
+        if (ip, port) not in index:
+            index[(ip, port)] = int(pid)
+            added += 1
+    _helper_programs = data.get("programs") or {}
+    return added, None
 
 
 def _refresh_conn_index() -> tuple[dict, str]:
@@ -653,7 +696,8 @@ def _describe_pid(pid):
         name, cmdline = proc.name(), " ".join(proc.cmdline())
     except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
         logger.debug(f"pid {pid} could not be described: {e}")
-        name, cmdline = None, None
+        known = _helper_programs.get(str(pid)) or {}
+        name, cmdline = known.get("comm"), known.get("cmdline")
     except Exception as e:
         logger.debug(f"pid {pid} lookup failed: {e}")
         name, cmdline = None, None

@@ -58,6 +58,9 @@ def check_true(label, got):
 
 
 from core import capabilities as C          # noqa: E402
+# These checks are about a run with no helper; on a machine that has them
+# installed, the rows would rightly say the helpers hold those rights.
+C._held_by_helper = lambda name: None
 from core import privilege_linux as privilege  # noqa: E402
 from core import sensor_health as sh        # noqa: E402
 from core import settings as st             # noqa: E402

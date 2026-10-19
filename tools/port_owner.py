@@ -377,8 +377,33 @@ def socket_owners() -> dict:
                 continue                     # raced with the process exiting
             if target.startswith("socket:[") and target.endswith("]"):
                 owners.setdefault(target[8:-1], []).append(int(pid))
-    return {"owners": owners, "denied": denied, "processes": processes,
-            "fds": fds, "readable": True, "note": None}
+    out = {"owners": owners, "denied": denied, "processes": processes,
+           "fds": fds, "readable": True, "note": None, "named_by_helper": 0}
+    if denied and os.geteuid() != 0:
+        _from_names_helper(out)
+    return out
+
+
+def _from_names_helper(walked: dict) -> None:
+    """Without root, the names helper (root, read only) supplies the owners
+    of the sockets this account cannot read."""
+    global _helper_programs
+    from tools import names_helper
+    data, why = names_helper.read()
+    if data is None:
+        walked["note"] = why
+        return
+    for inode, pids in (data.get("inodes") or {}).items():
+        if inode not in walked["owners"]:
+            walked["owners"][inode] = [int(p) for p in pids]
+            walked["named_by_helper"] += 1
+    _helper_programs = data.get("programs") or {}
+    if not data.get("processes_unreadable"):
+        walked["denied"] = []
+        walked["note"] = "the names helper read every process as root"
+
+
+_helper_programs: dict = {}
 
 
 def process_detail(pid: int) -> dict:
@@ -415,6 +440,9 @@ def process_detail(pid: int) -> dict:
         out["cmdline"] = cmd.strip() or None
     except OSError:
         pass
+    known = _helper_programs.get(str(pid)) or {}
+    if out["exe"] is None and known.get("exe"):
+        out["exe"] = known["exe"]                   # read by the names helper
     out["readable"] = bool(out["comm"] or out["exe"])
     return out
 
@@ -634,6 +662,8 @@ def correlate() -> dict:
         "fds_seen": walked["fds"],
         "processes_denied": len(walked["denied"]),
         "proc_readable": walked["readable"],
+        "named_by_helper": walked.get("named_by_helper", 0),
+        "note": walked.get("note"),
     }
     return {
         "sockets": out,

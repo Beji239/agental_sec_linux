@@ -104,9 +104,9 @@ out once by the executor, a worker outside any chat, so an approval still
 holds if you close the tab. A card nobody answers expires after ten days
 (`action_queue.expiry_days`). The Inbox keeps the full record.
 
-Firewall changes and ending processes need root. Run the privileged launcher,
-or install the root action helper (see [SETUP.md](../SETUP.md)) so the app
-stays unprivileged and only approved actions run as root.
+Firewall changes and ending processes need root. The app runs as you, so
+install the root action helper (see [SETUP.md](../SETUP.md)): only approved
+actions run as root, through it.
 
 ## Working while you are away
 

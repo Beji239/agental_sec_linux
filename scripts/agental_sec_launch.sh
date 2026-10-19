@@ -248,6 +248,17 @@ the project folder was, and it is not going to guess which."
     local python
     python="$(command -v python3)" || die "python3 not found on PATH"
 
+    # With the capture service installed, nothing in the app needs root.
+    if [[ "$ELEVATED" == "1" && "$IS_ROOT" == "0" \
+          && -f /etc/systemd/system/agentalsec-capture.service ]]; then
+        say "AgentalSec"
+        say "  The capture service is installed, so the app no longer needs"
+        say "  root: packets are captured by that service, and the dashboard"
+        say "  and the analyst run as $REAL_USER. Starting it as you."
+        say ""
+        exec "$python" main.py
+    fi
+
     if [[ "$ELEVATED" == "1" && "$IS_ROOT" == "0" ]]; then
         # Hand off to sudo, and say what is about to happen BEFORE the prompt
         # appears, so a password box that comes out of nowhere is never a
@@ -277,8 +288,13 @@ the project folder was, and it is not going to guess which."
 
     say "AgentalSec — normal boot"
     say "  Running as $REAL_USER, without elevation."
-    say "  Sensors that need raw access will report themselves as blind"
-    say "  rather than pretending. Use the privileged launcher for those."
+    if [[ -f /etc/systemd/system/agentalsec-capture.service ]]; then
+        say "  Packets are captured by the capture service."
+    else
+        say "  Sensors that need raw access will report themselves as blind"
+        say "  rather than pretending. Install the capture service once with:"
+        say "      sudo ./scripts/install_capture_service.sh --apply"
+    fi
     say ""
     exec "$python" main.py
 }

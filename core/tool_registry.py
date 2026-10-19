@@ -5918,6 +5918,19 @@ def _local_integrity_report(mod) -> dict:
     return st
 
 
+def _ring_in_service():
+    """The armed list's keeper when the capture service holds the live ring:
+    a ring object only used to check and save the list, which the service
+    reloads within seconds."""
+    from core import capture_service
+    from tools import payload_ring
+    last = capture_service.latest()
+    if not last or last.get("stopped_at") or \
+            (last.get("age_seconds") or 1e9) > capture_service.STALE_SECONDS:
+        return None
+    return payload_ring.PayloadRing(_session_id or "core")
+
+
 def _query_lan_watch() -> dict:
     """
     What the LAN sensor has been able to look at, notes included.
@@ -5929,6 +5942,13 @@ def _query_lan_watch() -> dict:
     from tools import lan_watch
 
     watcher = lan_watch.active()
+    remote = _modules.get("packet_sniffer")
+    if watcher is None and hasattr(remote, "lan_watch_status"):
+        st = remote.lan_watch_status()
+        if st is not None:
+            st["running"] = True
+            st["where"] = "the capture service"
+            return st
     if watcher is None:
         return {
             "running": False,
@@ -6472,7 +6492,7 @@ def _dispatch(name: str, params: dict):
 
     if name == "arm_payload_capture":
         from tools import payload_ring
-        ring = payload_ring.active()
+        ring = payload_ring.active() or _ring_in_service()
         if ring is None:
             return {
                 "armed": False,
@@ -6509,7 +6529,7 @@ def _dispatch(name: str, params: dict):
 
     if name == "disarm_payload_capture":
         from tools import payload_ring
-        ring = payload_ring.active()
+        ring = payload_ring.active() or _ring_in_service()
         if ring is None:
             return {
                 "armed": False, "was_armed": None,

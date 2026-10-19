@@ -49,6 +49,9 @@ def check(label, got, want):
 
 
 from core import capabilities as caps  # noqa: E402
+# These checks are about a run with no helper; on a machine that has them
+# installed, the rows would rightly say the helpers hold those rights.
+caps._held_by_helper = lambda name: None
 
 C = caps.Capabilities()
 

@@ -137,6 +137,33 @@ DEFAULT_SNAPLEN = 512
 # Defender's cmdlets. They were removed with those capabilities; these are the
 # rows that were already being used on this platform, unchanged apart from a
 # corrected comment about what the read row needs.
+def _held_by_helper(name: str) -> str | None:
+    """The part that holds this right for an app running as the owner, when
+    it is there and working, else None."""
+    try:
+        if name == "capture":
+            from core import capture_service
+            return "the capture service" if capture_service.reporting() \
+                else None
+        if name == "conn_table":
+            from tools import names_helper
+            return "the names helper" if names_helper.read()[0] else None
+        if name in ("process_details", "firewall_read"):
+            from tools import local_integrity
+            st = local_integrity.helper_status()
+            verb = "proc_exe" if name == "process_details" else \
+                "firewall_rules"
+            return "the read helper" if st.get("available") and \
+                verb in st.get("verbs", ()) else None
+        if name in ("process_kill", "firewall_write"):
+            from tools import action_broker
+            return ("the action helper, after your password"
+                    if action_broker.installed()["installed"] else None)
+    except Exception:                                       # noqa: BLE001
+        return None
+    return None
+
+
 CANNOT_WITHOUT_ELEVATION = {
     "firewall_write": "ufw, nft and iptables all refuse to change the ruleset",
     "capture": "AF_PACKET cannot be opened without root or CAP_NET_RAW, so "
@@ -374,6 +401,13 @@ class Capabilities:
         # Windows capabilities, so there is nothing here that can print a
         # netsh sentence on a Linux host.
         for name, row in rows.items():
+            helper = _held_by_helper(name) if elevated is False else None
+            if helper:
+                # That part holds the right, so this process needs neither
+                # the right nor, for capture, the capture library.
+                row.update(available=True, why_not=None, limited=None,
+                           via=helper)
+                continue
             if not row["available"]:
                 continue                            # a missing library wins
 

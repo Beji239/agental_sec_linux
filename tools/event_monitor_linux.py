@@ -1745,6 +1745,31 @@ def _login_record_entry(rec: bytes, kind: str) -> dict | None:
     return entry
 
 
+def _login_records_from_helper(kind: str, st, offset: int,
+                               limit: int) -> tuple | None:
+    """(records, the offset they start at), read by the read helper (root,
+    read only) when this account is refused btmp. None when it cannot."""
+    if kind != "btmp":
+        return None
+    try:
+        import base64
+        from tools import local_integrity as li
+        if "btmp" not in (li.helper_status().get("verbs") or ()):
+            return None
+        got = li.helper_call("btmp", timeout=60)
+        if not got.get("ok") or int(got["data"]["ino"]) != st.st_ino:
+            return None
+        raw = base64.b64decode(got["data"]["data_b64"])
+        start = int(got["data"]["start"])
+        at = max(offset, start)
+        at += (UTMP_SIZE - (at - start) % UTMP_SIZE) % UTMP_SIZE
+        begin = at - start
+        return raw[begin:begin + (limit or EVENT_RETURN_CAP) * UTMP_SIZE], at
+    except Exception as e:                                  # noqa: BLE001
+        logger.debug(f"btmp through the read helper failed: {e}")
+        return None
+
+
 def _read_login_records(path: Path, kind: str, marker: dict = None,
                         limit: int = EVENT_RETURN_CAP) -> dict:
     """
@@ -1781,10 +1806,13 @@ def _read_login_records(path: Path, kind: str, marker: dict = None,
             fh.seek(offset)
             data = fh.read((limit or EVENT_RETURN_CAP) * UTMP_SIZE)
     except PermissionError:
-        result["error"] = (f"{path.name} exists and this account cannot read it "
-                           f"(it is root:utmp); the records only it holds are "
-                           f"not seen unelevated")
-        return result
+        got = _login_records_from_helper(kind, st, offset, limit)
+        data, offset = got if got else (None, offset)
+        if data is None:
+            result["error"] = (f"{path.name} exists and this account cannot "
+                               f"read it (it is root:utmp); the records only "
+                               f"it holds are not seen unelevated")
+            return result
     except OSError as e:
         result["error"] = f"{path.name}: {e.strerror or e}"
         return result

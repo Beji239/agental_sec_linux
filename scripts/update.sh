@@ -78,15 +78,34 @@ todo=()
 if touched 'scripts/install_launchers.sh|scripts/agental_sec_launch.sh|assets/logo/.*'; then
     todo+=("The launchers changed. Run: ./scripts/install_launchers.sh")
 fi
+# Root helpers run from their own root-owned copies, so a change here only
+# reaches them through their installer. Offered now, with one password.
+refresh=()
 if touched 'tools/action_helper.py|scripts/install_action_helper.sh'; then
-    todo+=("The root helper changed. Run: sudo ./scripts/install_action_helper.sh --apply")
+    refresh+=("./scripts/install_action_helper.sh")
 fi
 if touched 'tools/read_helper.py|scripts/install_read_helper.sh'; then
-    todo+=("The read helper changed. Run: sudo ./scripts/install_read_helper.sh --apply")
+    refresh+=("./scripts/install_read_helper.sh")
 fi
 if [[ -f /etc/systemd/system/agentalsec-ebpf-camera.service ]] \
         && touched 'ebpf/ebpf_monitor.py|scripts/install_ebpf_camera.sh'; then
-    todo+=("The kernel camera changed. Run: sudo ./scripts/install_ebpf_camera.sh --apply")
+    refresh+=("./scripts/install_ebpf_camera.sh")
+fi
+if [[ ! -f /etc/systemd/system/agentalsec-capture.service ]] \
+        || touched 'tools/names_helper.py|scripts/install_capture_service.sh'; then
+    refresh+=("./scripts/install_capture_service.sh")
+fi
+if [[ ${#refresh[@]} -gt 0 ]]; then
+    echo
+    echo "These root helpers need installing again: ${refresh[*]}"
+    answer=""
+    [[ -t 0 ]] && read -r -p "Do it now? It asks for your password once. [Y/n] " answer
+    if [[ -t 0 && ! "$answer" =~ ^[Nn] ]] \
+            && sudo bash -c "$(printf '%q --apply && ' "${refresh[@]}") true"; then
+        echo "Root helpers installed again."
+    else
+        for r in "${refresh[@]}"; do todo+=("Run: sudo $r --apply"); done
+    fi
 fi
 # The security test tools, only when they were installed before.
 tools_home="${AGENTAL_TEST_TOOLS:-${XDG_DATA_HOME:-$HOME/.local/share}/agentalsec-test-tools}"

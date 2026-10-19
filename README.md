@@ -257,7 +257,8 @@ expectations. A tour of each: [docs/TOUR.md](docs/TOUR.md).
   22.04 (the base of Linux Mint 21) and Debian 12; the app runs on Linux Mint.
 - Any CPU that runs Python, including x86-64 and ARM64.
 - Python 3.10 or newer.
-- Root or `CAP_NET_RAW` for packet capture, given by the privileged launcher.
+- For packet capture, the capture service, which the installer sets up (see
+  [Running without root](#running-without-root)).
 - For the analyst: an account with a model provider, or a local
   OpenAI-compatible server. Everything else runs without one.
 - Python packages from `requirements.txt` (maxminddb reads the map data).
@@ -286,10 +287,10 @@ and set later on the Settings tab), and whether to add the optional malware
 scanner. Then it runs on its own, asking for your password once, for the
 system packages, and does every install step in [SETUP.md](SETUP.md): system
 and Python packages, the config files, a new dashboard key, the map and
-vendor data, a check of the result, and both launchers, **AgentalSec** and
-**AgentalSec (privileged)**, in your app menu, on your desktop and in the
-project folder. Running it again is safe: it keeps your settings and
-downloads nothing it already has.
+vendor data, a check of the result, the capture service and the root
+helpers, and the **AgentalSec** launchers in your app menu, on your desktop and in the project
+folder. Running it again is safe: it keeps your settings and downloads
+nothing it already has.
 
 When it finishes, start AgentalSec from its icon. The dashboard opens at
 http://127.0.0.1:5000, already signed in. Opened by hand, it asks once for the
@@ -297,22 +298,58 @@ dashboard key the installer printed (it is also in `.env` as
 `AGENTAL_APP_API_KEY`), and that browser stays signed in for 30 days. If a
 desktop icon says "untrusted", right-click it and choose "Allow launching".
 
-The optional parts (root helpers, your router, start on boot) and every step
-done by hand are in [SETUP.md](SETUP.md). To update later:
+The optional parts (the kernel camera, your router, start on boot) and every
+step done by hand are in [SETUP.md](SETUP.md). To update later:
 `./scripts/update.sh`.
 
-## Normal and privileged
+## Running without root
 
-`install_launchers.sh` adds two launchers:
+Since 18 October 2026 AgentalSec runs without root, and that is how it runs
+on my own network. Before, packet capture meant starting the whole app as
+root. Now the app is split by the rights each part needs:
 
-- **AgentalSec** runs as you. Packet capture and firewall changes are off, and
-  some host details are hidden, such as other users' process command lines.
-  Each sensor reports what it is missing.
-- **AgentalSec (privileged)** asks for your password and runs as root, with
-  every sensor working.
+- **The app itself** (the dashboard, the analyst, the database, incidents and
+  reports) runs as you, with no special rights.
+- **The capture service** reads the packets and runs the LAN checks. It runs
+  as you too, with only the two network rights packet capture needs.
+- **The names helper** runs as root and does one thing: every second it reads
+  the kernel's list of connections and writes down which program owns each
+  one. It accepts nothing, has no network, and never sees a packet. With it,
+  every packet still names the program behind it, root's programs included.
+- **The kernel camera, the read helper and the action helper** were already
+  separate: the camera records every program start and connection, the read
+  helper reads the few things only root can read (such as failed logins and
+  the firewall's rules), and the action helper carries out the actions you
+  approve.
 
-To keep the app unprivileged and still carry out approved actions, install
-the root action helper described in [SETUP.md](SETUP.md).
+**Why.** The code that reads packets reads bytes that anyone on the network
+can send. Running it as root meant one bug there could hand the whole computer
+to whoever sent the packet. Now that code holds only the right to capture, the
+dashboard and the analyst hold nothing, and root is left to small helpers
+whose only inputs are the kernel's own tables.
+
+**What you get.**
+
+- A bug in the packet code can no longer give anyone root.
+- The same view as before: every packet, every program named, every check.
+- If the capture service stops, the dashboard and the analyst keep running,
+  say capture is not reporting, and systemd starts it again.
+- No password to start the app, and it starts faster.
+- About the same memory as before, spread over smaller processes.
+
+The installer sets all of this up, and `./scripts/update.sh` reinstalls a
+helper whenever an update changes it, asking for your password once. On an
+older install, `./scripts/update.sh` offers to install the capture service, or
+run once:
+
+```bash
+sudo ./scripts/install_capture_service.sh --apply
+```
+
+Then start AgentalSec from its icon. Both icons start it as you once the
+service is installed. `./scripts/install_capture_service.sh --verify` checks
+the services, and the dashboard says when a root helper's installed copy is
+older than the project, with the command that brings it level.
 
 ## Privacy
 

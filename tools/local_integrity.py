@@ -389,7 +389,7 @@ def helper_call(verb: str, timeout: int = 1800) -> dict:
     function returns a dict instead of raising.
     """
     if verb not in ("sudoers", "sudoers_d", "root_ssh", "dpkg_verify",
-                    "proc_exe"):
+                    "proc_exe", "firewall_rules", "btmp"):
         return {"ok": False, "data": None,
                 "reason": (f"{verb!r} is not one of the helper's verbs. The "
                            f"table is fixed and nothing here may ask for a "

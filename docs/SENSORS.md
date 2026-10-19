@@ -14,8 +14,10 @@ that is off, missing a tool or missing a privilege says which, by name.
 
 The app runs as you by default. These are the things that need more:
 
-- **Packet capture** needs root or `CAP_NET_RAW`. The privileged launcher
-  gives it.
+- **Packet capture** needs `CAP_NET_RAW`. The capture service holds it, and
+  only it: the app runs as you (see [README](../README.md#running-without-root)).
+  The names helper, a small root service that only reads the kernel's list of
+  connections, lets every packet name its program, root's included.
 - **Firewall changes and ending other users' processes** need root. The root
   action helper (see [SETUP.md](../SETUP.md)) carries out approved actions so
   the app itself can stay unprivileged.
@@ -35,8 +37,10 @@ The app runs as you by default. These are the things that need more:
 Captures every packet on the link that carries the default route, with the
 owning process where the kernel can say. Feeds most of the detectors below.
 
-- Needs: root or `CAP_NET_RAW`, libpcap.
-- If it lacks something: start AgentalSec with the privileged launcher.
+- Needs: the capture service (`sudo ./scripts/install_capture_service.sh
+  --apply`), libpcap.
+- If it lacks something: install or start the capture service; check it with
+  `./scripts/install_capture_service.sh --verify`.
   Until then the dashboard says plainly that capture is off, so a quiet
   network and an unwatched one never look alike. If the kernel drops frames
   because the sensor fell behind, that is raised as a finding of its own.
@@ -155,8 +159,7 @@ The systemd journal, syslog and the auth log: logins, failed logins, sudo,
 service failures.
 
 - Needs: the `systemd-journal` group or root for entries beyond your own.
-- If it lacks something: add yourself to the `systemd-journal` group or use
-  the privileged launcher. Until then the monitor says the journal is
+- If it lacks something: add yourself to the `systemd-journal` group. Until then the monitor says the journal is
   unreadable instead of reporting a quiet log.
 - Config: `sensors.event_monitor.sources`, `linux.log_sources`.
 

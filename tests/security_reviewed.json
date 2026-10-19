@@ -2483,5 +2483,12 @@
   "path": "core/questions.py",
   "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
   "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/read_helper.py",
+  "text": "res = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "argv is one of three fixed lists in FIREWALL_COMMANDS (ufw and nft by full path, fixed arguments); no shell and nothing from the caller"
  }
 ]

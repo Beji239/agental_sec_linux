@@ -268,6 +268,24 @@ def _is_v6(value: str) -> bool:
 
 # UFW BACKEND
 
+def _as_user() -> bool:
+    return os.geteuid() != 0
+
+
+def _helper_listing() -> dict | None:
+    """The ruleset as the read helper (root, read only) sees it, or None."""
+    try:
+        from tools import local_integrity as li
+        st = li.helper_status()
+        if not st.get("available") or "firewall_rules" not in st["verbs"]:
+            return None
+        got = li.helper_call("firewall_rules", timeout=60)
+        return got["data"] if got.get("ok") else None
+    except Exception as e:                                  # noqa: BLE001
+        logger.debug(f"read helper firewall listing failed: {e}")
+        return None
+
+
 def _ufw_out(argv: list, timeout: int = _DEFAULT_TIMEOUT):
     return _run([UFW, *argv], timeout=timeout)
 
@@ -284,6 +302,11 @@ def _ufw_listing_text() -> tuple:
     when it is present is its own kind of falsehood.
     """
     rc, out, err, e = _ufw_out(["status", "numbered"])
+    if (e or rc != 0) and _as_user():
+        got = _helper_listing()
+        if got and (got.get("ufw_status") or {}).get("rc") == 0:
+            return True, (got["ufw_status"]["stdout"] + "\n" +
+                          ((got.get("ufw_added") or {}).get("stdout") or "")), ""
     if e:
         return False, "", e
     if rc != 0:
@@ -1020,6 +1043,10 @@ def _list_ufw() -> dict:
 def _list_nft() -> dict:
     rc, out, err, _e = _nft_out(["list", "table", NFT_FAMILY, NFT_TABLE],
                                 timeout=_LIST_TIMEOUT)
+    if rc != 0 and _as_user():
+        got = (_helper_listing() or {}).get("nft") or {}
+        if got.get("rc") == 0:
+            rc, out, err = 0, got.get("stdout") or "", ""
     if rc != 0:
         if "No such file or directory" in (err or "") or \
                 "does not exist" in (err or ""):

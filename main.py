@@ -315,10 +315,19 @@ def _report_privileges():
         logger.info("=" * 60)
         logger.info("AGENTALSEC LINUX - PRIVILEGE REPORT")
         logger.info("=" * 60)
-        logger.info(posture["summary"])
+        from core import root_copies
+        sp = root_copies.split()
+        logger.info("Not elevated, by design." if sp["installed"]
+                    and not posture["elevated"] else posture["summary"])
         logger.info("")
-
-        if posture["elevated"]:
+        if sp["installed"] and not posture["elevated"]:
+            logger.info("Running as you, by design. Each right sits with "
+                        "one part:")
+            for x in sp["parts"]:
+                logger.info(f"  - {x['part']}: {x['holds']}"
+                            + ("" if x["ok"] else
+                               f" -- NOT WORKING: {x['why']}"))
+        elif posture["elevated"]:
             logger.info("Running as ROOT - all capabilities available")
         else:
             logger.info("Running unelevated:")
@@ -328,7 +337,10 @@ def _report_privileges():
                 logger.info(f"  - {name}: {consequence} (degraded)")
 
         logger.info("")
-        logger.info(f"Packet capture: {'YES' if posture['can_capture_packets'] else 'NO'} - {posture['capture_reason']}")
+        if sp["installed"] and not posture["elevated"]:
+            logger.info("Packet capture: by the capture service")
+        else:
+            logger.info(f"Packet capture: {'YES' if posture['can_capture_packets'] else 'NO'} - {posture['capture_reason']}")
         logger.info("=" * 60)
 
     except ImportError:
@@ -617,9 +629,19 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
             f"backend is tools.packet_sniffer_linux. Fix the platform entry "
             f"in main.py or the config, and do not point it at a Windows "
             f"module, which is not in this tree and cannot run here.")
-    from adapters import LinuxPacketSniffer
-    modules["packet_sniffer"] = try_load(
-        "packet_sniffer", lambda: LinuxPacketSniffer(session_id, config))
+    from core import root_copies
+    modules["root_helpers"] = try_load("root_helpers", root_copies.RootCopies)
+
+    from core import capture_service
+    if capture_service.mode(config) == "service":
+        # Captured by the capture service with only the capture rights;
+        # this process reads its reports.
+        modules["packet_sniffer"] = try_load(
+            "packet_sniffer", capture_service.RemoteCapture)
+    else:
+        from adapters import LinuxPacketSniffer
+        modules["packet_sniffer"] = try_load(
+            "packet_sniffer", lambda: LinuxPacketSniffer(session_id, config))
 
     role = _sensor_backend(config, "process_monitor")
     if role != "tools.process_monitor_linux":
@@ -1933,6 +1955,11 @@ def _parse_args(argv=None):
         description=("AgentalSec Linux. With no arguments, starts the "
                      "monitor, its sensors and the dashboard."))
     parser.add_argument(
+        "--capture", action="store_true",
+        help=("run only the packet sensor and the LAN checks, as the capture "
+              "service. Started by agentalsec-capture.service with the two "
+              "network capture rights; the dashboard runs separately."))
+    parser.add_argument(
         "--check", action="store_true",
         help=("report dependencies, privileges and whether config.json and "
               ".env are readable, then exit. Starts nothing, reads no "
@@ -2006,11 +2033,28 @@ def _run_check() -> int:
     return 0 if ok else 1
 
 
+def _run_capture() -> int:
+    """The --capture path: the packet sensor alone, reporting to the core."""
+    logger.info(f"AgentalSec capture service starting. PID {os.getpid()}")
+    if not _check_dependencies():
+        logger.error("Cannot start the capture service: missing dependencies")
+        return 1
+    _report_privileges()
+    config = _load_config()
+    if not _initialize_database():
+        logger.error("Cannot start the capture service: no database")
+        return 1
+    from core import capture_service
+    return capture_service.run(config)
+
+
 def main(argv=None):
     """Main entry point."""
     args = _parse_args(argv)
     if args.check:
         return _run_check()
+    if args.capture:
+        return _run_capture()
 
     logger.info("=" * 70)
     logger.info(f"AgentalSec Linux starting. PID {os.getpid()}")

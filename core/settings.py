@@ -1214,12 +1214,26 @@ def _privilege_rows() -> list[dict]:
     # the launcher that asks for a password, so there is no second process for
     # this row to describe. `mode` is gone from core/capabilities.py.
     try:
+        from core import root_copies
+        sp = root_copies.split()
         p = _reg.posture()
-        state = {True: "ok", False: "problem", None: "off"}[p["elevated"]]
-        rows.append(_row("Privileged access", "Administrator rights", state,
-                         p["summary"],
-                         "" if p["elevated"] else
-                         _ELEVATION_FIX.get("posix", "")))
+        if sp["installed"] and not p["elevated"]:
+            # Runs as the owner by design; each right sits with one part.
+            missing = [x for x in sp["parts"] if not x["ok"]]
+            rows.append(_row(
+                "Privileged access", "Administrator rights",
+                "problem" if missing else "ok",
+                "Runs as you, by design. " + "; ".join(
+                    f"{x['part']}: {x['holds']}"
+                    + ("" if x["ok"] else f", NOT WORKING ({x['why']})")
+                    for x in sp["parts"]) + ".",
+                "; ".join(f"{x['part']}: {x['why']}" for x in missing)))
+        else:
+            state = {True: "ok", False: "problem", None: "off"}[p["elevated"]]
+            rows.append(_row("Privileged access", "Administrator rights",
+                             state, p["summary"],
+                             "" if p["elevated"] else
+                             _ELEVATION_FIX.get("posix", "")))
     except Exception as e:                          # pragma: no cover
         rows.append(_row("Privileged access", "Administrator rights", "problem",
                          f"could not be read: {type(e).__name__}: {e}"))
@@ -1264,9 +1278,11 @@ def _privilege_rows() -> list[dict]:
     # left core/capabilities.py, the row left this function, and there is no
     # `not_on_this_platform` branch left to render.
     if not broken and not narrowed:
+        via = sorted({v["via"] for v in avail.values() if v.get("via")})
         rows.append(_row("Privileged access", "Capabilities", "ok",
-                         f"all {len(avail)} available, "
-                         f"running in-process."))
+                         f"all {len(avail)} available"
+                         + (f", through {', '.join(via)}." if via
+                            else ", running in-process.")))
         return rows
 
     for name, row in sorted(broken.items()):
