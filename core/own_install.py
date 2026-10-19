@@ -131,6 +131,8 @@ def _heredoc(script: str, var: str):
 
 
 _cache = {}
+# Which installer writes each path, filled with the table.
+INSTALLER = {}
 
 
 def expected(root: Path = None) -> dict:
@@ -170,6 +172,7 @@ def _build(root: Path) -> dict:
         rx = _pattern(body, known) if body is not None else None
         if path and rx:
             out[path] = ("file", rx)
+            INSTALLER[path] = name
     for name in COPIERS:
         script = scripts.get(name)
         if script is None:
@@ -182,6 +185,7 @@ def _build(root: Path) -> dict:
             dst = known.get(var[:-4] + "_DST") if var.endswith("_SRC") else None
             if dst:
                 out[dst] = ("copy", src)
+                INSTALLER[dst] = name
         for var in ("HELPER_DIR", "INSTALL_DIR"):
             if known.get(var, "").startswith("/usr/local/lib/agentalsec"):
                 out[known[var]] = ("dir", None)
@@ -296,6 +300,24 @@ def reason(path: str, digest: str = None, root: Path = None):
     if digest and hash16(data) != digest:
         return None
     return what if _matches(how, data) else None
+
+
+def stale(root: Path = None) -> dict:
+    """{installer: [paths]} for installed files that no longer match what
+    the project's installer writes. A file this process cannot read is left
+    out, not guessed at."""
+    root = Path(root or PROJECT_ROOT)
+    table = expected(root)
+    out = {}
+    for path in sorted(table):
+        name = INSTALLER.get(path)
+        if not name or not os.path.lexists(path):
+            continue
+        if not os.access(path, os.R_OK):
+            continue
+        if reason(path, root=root) is None:
+            out.setdefault(name, []).append(path)
+    return out
 
 
 def inert_check_file(path: str):

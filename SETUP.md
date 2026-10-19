@@ -295,6 +295,14 @@ changed and names anything else to run. Then restart AgentalSec; the database
 updates itself at that start. `./scripts/update.sh --check` only shows whether
 an update is waiting.
 
+The helpers that run as root use their own copies, so they only change when
+their installers run again. The update offers that for you. To check them any
+time, and bring every one level with one password:
+
+```bash
+sudo ./scripts/refresh_helpers.sh --apply
+```
+
 The same by hand:
 
 ```bash

@@ -102,6 +102,8 @@ try:
                                       "ExecStart=/tmp/evil"))
     check("not when one line differs",
           oi.reason(str(unit), root=proj), None)
+    check("a unit that differs is listed under the installer that fixes it",
+          oi.stale(proj), {"install_capture_service.sh": [str(unit)]})
     copied.write_bytes(helper + b"import os\n")
     check("not when the helper differs from the project",
           oi.reason(str(copied), root=proj), None)

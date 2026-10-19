@@ -59,6 +59,23 @@ class RootCopies:
             self._rows, self._at = check(self.root, self.installed), time.time()
         return self._rows
 
+    def _others(self) -> dict:
+        """Service files and other installed files, on the real system only;
+        the four helpers above are reported by name."""
+        if self.installed != INSTALLED:
+            return {}
+        try:
+            from core import own_install
+            helpers = {str(self.installed / dst) for _, _, dst, _ in COPIES}
+            out = {}
+            for name, paths in own_install.stale(self.root).items():
+                rest = [p for p in paths if p not in helpers]
+                if rest:
+                    out[name] = rest
+            return out
+        except Exception:                                   # noqa: BLE001
+            return {}
+
     def liveness(self) -> dict:
         self._current()
         return {"started": True, "running": True, "thread_alive": True,
@@ -68,12 +85,18 @@ class RootCopies:
     def status(self) -> dict:
         rows = self._current()
         stale = [r for r in rows if r["installed"] and not r["matches"]]
+        others = self._others()
         st = {"running": True, "role": self.role, "copies": rows}
-        if stale:
+        if stale or others:
             st["blind"] = True
-            st["blind_reason"] = "; ".join(
-                f"the installed {r['helper']} differs from the project, run "
-                f"{r['fix']}" for r in stale)
+            st["blind_reason"] = (
+                "; ".join([f"the installed {r['helper']} differs from the "
+                           f"project, run {r['fix']}" for r in stale]
+                          + [f"{', '.join(paths)} differs from what "
+                             f"{name} writes" for name, paths in
+                             others.items()])
+                + f". One command updates them all: sudo "
+                  f"{self.root / 'scripts/refresh_helpers.sh'} --apply")
         elif not any(r["installed"] for r in rows):
             st["idle_reason"] = "no root helper is installed"
         return st

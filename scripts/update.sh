@@ -88,7 +88,7 @@ if touched 'tools/read_helper.py|scripts/install_read_helper.sh'; then
     refresh+=("./scripts/install_read_helper.sh")
 fi
 if [[ -f /etc/systemd/system/agentalsec-ebpf-camera.service ]] \
-        && touched 'ebpf/ebpf_monitor.py|scripts/install_ebpf_camera.sh'; then
+        && touched 'ebpf/ebpf_monitor.py|ebpf/ebpf_monitor.bpf.o|scripts/install_ebpf_camera.sh'; then
     refresh+=("./scripts/install_ebpf_camera.sh")
 fi
 if [[ ! -f /etc/systemd/system/agentalsec-capture.service ]] \
