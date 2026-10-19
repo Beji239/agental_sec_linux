@@ -2554,6 +2554,14 @@
         is a rule, not an alert.</b> When what a rule watches for happens, the
         rule raises an alert on the Alerts tab and its <b>Times fired</b> count
         goes up.</p>
+        <p><b>What they are good for.</b> Each rule is one question the app
+        keeps asking about your home, such as "did a new device join" or "did
+        someone add a login key". Open <b>Why it is here</b> under a row to see
+        what the rule protects you from and what to do when it fires.</p>
+        <p><b>This tab and Expectations.</b> This tab says what each rule is and
+        lets you switch it off. Expectations says how each rule has been doing,
+        day by day, from your Real and False alarm answers. Find the noisy rule
+        there, mute it here.</p>
         <p><b>How to read a row.</b> Start with <b>What it watches for</b>, which
         says in plain words what would set the rule off. <b>Severity</b> is how
         serious its alerts can be. <b>Times fired</b> is how many alerts it has
@@ -2562,11 +2570,19 @@
         <p><b>When the Alerts tab is quiet</b>, it means one of three things:
         nothing happened, no rule here covers it, or the rule that covers it is
         muted. This page is how you tell which.</p>
-        <p><b>Mute</b> stops one rule raising alerts, for one address or for
-        every address. Use it for a rule that keeps firing about something you
-        know is fine. Nothing is deleted and <b>Unmute</b> brings it back. The
-        AI analyst reads this list too, can see what you muted, and cannot mute
-        anything itself.</p>
+        <p><b>Mute</b> a rule that keeps firing about something you know is
+        fine, such as a backup server that sends a lot every night. You give a
+        reason, then choose one device, program, file or account, or
+        everything. Its open alerts close. The sensors keep watching, but the
+        rule raises no alert, no incident and no dot on Expectations, and what
+        it would have caught while muted is not kept. Old incidents stay as
+        they were.</p>
+        <p><b>Unmute</b> makes the rule fire again and brings back the alerts
+        the mute closed. If a rule is mostly noise but sometimes right, answer
+        False alarm on its alerts instead: the model learns the harmless
+        pattern and holds back only that, where a mute holds back everything.
+        The AI analyst can see what you muted and cannot mute anything
+        itself.</p>
         <p>Rows marked <b>Record</b> are not things the app saw. They are a
         trail of things the app did, such as blocking a device, and they cannot
         be muted.</p>
@@ -2603,11 +2619,11 @@
         <thead><tr>
           <th style="width:90px;" title="The rule's permanent name. It never changes, so old alerts always point at the right rule.">Rule</th>
           <th style="width:70px;" title="Goes up when the rule's logic changes, for example a new threshold. Each alert remembers which version raised it. Safe to ignore day to day.">Version</th>
-          <th title="In plain words, what sets this rule off. Open Technical detail for the exact condition.">What it watches for</th>
+          <th title="In plain words, what sets this rule off. Open Why it is here for what it is good for, what to do and the exact condition.">What it watches for</th>
           <th style="width:130px;" title="The part of the app that runs this rule.">Watched by</th>
           <th style="width:110px;" title="How serious this rule's alerts can be, worst first.">Severity</th>
           <th style="width:100px;" title="How many alerts this rule has raised. The number in brackets is still open on the Alerts tab.">Times fired</th>
-          <th style="width:230px;" title="Whether you switched this rule off. Muted rules raise no alerts for the address shown, or for every address.">Muted</th>
+          <th style="width:230px;" title="Whether you switched this rule off. Muted rules raise no alerts for the item shown, or for anything.">Muted</th>
         </tr></thead>
         <tbody id="detection-rows"></tbody>
       </table>
@@ -8821,7 +8837,7 @@ function renderDetections() {
     const supCell = sup.length
       ? sup.map(x =>
           '<div class="det-muted">Muted for '
-          + esc(x.entity_value === '*' ? 'every address' : x.entity_value)
+          + esc(x.entity_value === '*' ? 'everything' : x.entity_value)
           + (x.reason ? ', because: ' + esc(x.reason) : '')
           + '<br><button class="btn-unmute" data-onclick="unsuppressDetection('
           + "'" + esc(r.detection_id) + "','" + esc(x.entity_type) + "','"
@@ -8832,7 +8848,8 @@ function renderDetections() {
           ? '<span class="det-off">Cannot be muted</span>'
           : '<span class="det-off">Not muted</span> '
             + '<button class="btn-mute" data-onclick="suppressDetection('
-            + "'" + esc(r.detection_id) + "'" + ')">Mute</button>');
+            + "'" + esc(r.detection_id) + "','" + esc(r.entity_type) + "'"
+            + ')">Mute</button>');
 
     // A page that could not count shows "-" rather than a zero it cannot back.
     const fires = !d.counted ? '-'
@@ -8845,9 +8862,11 @@ function renderDetections() {
       + (r.retired && r.retired_reason
           ? '<div class="det-note" style="font-size:11px;">No longer used: '
             + esc(r.retired_reason) + '</div>' : '')
-      + (r.plain
-          ? '<details class="det-tech"><summary>Technical detail</summary><div>'
-            + esc(r.summary) + '</div></details>' : '');
+      + '<details class="det-tech"><summary>Why it is here</summary>'
+        + (r.why ? '<div><b>Why it is here.</b> ' + esc(r.why) + '</div>' : '')
+        + (r.todo ? '<div><b>When it fires.</b> ' + esc(r.todo) + '</div>' : '')
+        + '<div class="det-note"><b>Exact condition.</b> ' + esc(r.summary)
+        + '</div></details>';
 
     return '<tr>'
       + '<td><code>' + esc(r.detection_id) + '</code></td>'
@@ -8874,22 +8893,30 @@ const SOURCE_NAMES = {
   sensor_watch: 'Sensor check',
 };
 
-async function suppressDetection(did) {
+// What one item of each rule is called, as its alerts name it.
+const MUTE_ITEM = {
+  ip: 'address', process: 'program or service name', user: 'account name',
+  file: 'file path or name', port: 'port',
+};
+
+async function suppressDetection(did, et) {
   // A reason is required by the route as well. Asking here too means the
   // person writes it while they still remember why, rather than meeting a
   // 400 and typing whatever gets past it.
   const reason = prompt('Mute ' + did + '. Why? A short note for later, '
     + 'for example: my backup server, this is normal.');
   if (reason === null || !reason.trim()) return;
-  const ev = prompt('Mute it for one address only? Type the address, '
-    + 'or leave blank to mute it for every address.') || '*';
+  const item = MUTE_ITEM[et] || 'item';
+  const ev = (prompt('Mute it for one ' + item + ' only? Type the ' + item
+    + ' exactly as the alert shows it, or leave blank to mute it for '
+    + 'everything.') || '').trim() || '*';
   try {
     const r = await fetch('/api/detections/suppress', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
       body: JSON.stringify({
         detection_id: did, reason: reason.trim(),
-        entity_type: ev === '*' ? '*' : 'ip', entity_value: ev || '*',
+        entity_type: ev === '*' ? '*' : (et || 'ip'), entity_value: ev,
       }),
     }).then(x => x.json());
     if (r.error) { alert(r.error); return; }

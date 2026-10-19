@@ -100,6 +100,7 @@
 import logging
 
 from core.detection_plain import PLAIN
+from core.detection_why import why_for
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +208,9 @@ class Detection:
             "summary": self.summary,
             # Plain-English line for the Detections page.
             "plain": PLAIN.get(self.did, ""),
+            # Why the rule exists and what to do when it fires, page only.
+            "why": why_for(self.did, self.kind, self.retired)[0],
+            "todo": why_for(self.did, self.kind, self.retired)[1],
             "retired": self.retired,
             "retired_reason": self.retired_reason,
             "kind": self.kind,

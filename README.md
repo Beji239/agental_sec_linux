@@ -22,6 +22,18 @@ learns what is normal for each device, tells me plainly when something is
 not, says so when it cannot see, and never acts without my approval. That is
 AgentalSec.
 
+You do not have to sit and watch it. If the terminal output looks like
+gibberish to you, that is fine: set the rules the way you want them, close the
+browser and leave the app running in its terminal. Minimise the terminal, do
+not close it, because closing it stops the app. AgentalSec keeps watching on
+its own, and with no browser open it uses less RAM. If you run an agent such as
+OpenClaw or Hermes, let it do the reading for you: it can ask AgentalSec's
+local API for the same data the dashboard shows, with your
+`AGENTAL_APP_API_KEY`, and tell you exactly what is happening. Want the
+dashboard back? Open http://127.0.0.1:5000 again. Done for the day? Press
+Ctrl+C in the terminal, or the Stop AgentalSec button on the Settings tab,
+which stops it just as cleanly, and start it again whenever you like.
+
 ## What it is
 
 Network and host security monitoring for Linux, with an AI analyst that

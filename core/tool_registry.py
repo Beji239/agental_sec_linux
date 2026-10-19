@@ -6964,8 +6964,9 @@ def _dispatch(name: str, params: dict):
             rows = [r for r in rows if r["source"] == params["source"]]
         if params.get("suppressed_only"):
             rows = [r for r in rows if r["suppressions"]]
-        # The plain line is for the page; the agent reads the precise summary.
-        out["detections"] = [{k: v for k, v in r.items() if k != "plain"}
+        # The plain and why lines are for the page; the agent reads the summary.
+        out["detections"] = [{k: v for k, v in r.items()
+                              if k not in ("plain", "why", "todo")}
                              for r in rows]
         # The filters narrow the list, never the caveat. A filtered view whose
         # counts could not be read is still a view whose counts could not be

@@ -479,7 +479,22 @@ check_true("the page data carries the plain line",
            det.get("PKT-1002").as_dict()["plain"] == PLAIN["PKT-1002"])
 REGISTRY = (ROOT / "core" / "tool_registry.py").read_text(encoding="utf-8")
 check_true("the agent tool leaves the plain line out",
-           'if k != "plain"' in REGISTRY)
+           'if k not in ("plain", "why", "todo")' in REGISTRY)
+# Every live rule says why it is here and what to do when it fires.
+from core.detection_why import WHY
+live = [d.did for d in det._REGISTER
+        if d.kind == "detection" and not d.retired]
+check("every live rule has a why and a todo",
+      [i for i in live if not all(x.strip() for x in WHY.get(i, ("", "")))],
+      [])
+check("no why line for a rule that does not exist or is not live",
+      sorted(set(WHY) - set(live)), [])
+check("no dashes or pipes in the why lines",
+      [k for k, v in WHY.items() for t in v
+       if any(x in t for x in (" - ", " -- ", "\u2014", "\u2013", "|"))], [])
+check_true("the page data carries why and todo",
+           det.get("PKT-1002").as_dict()["todo"] == WHY["PKT-1002"][1]
+           and det.get("REM-1001").as_dict()["why"].startswith("Every change"))
 
 
 
