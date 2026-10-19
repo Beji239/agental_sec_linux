@@ -85,6 +85,8 @@ import time
 
 import requests
 
+from core import safe_http
+
 logger = logging.getLogger(__name__)
 
 DDG_INSTANT_URL = "https://api.duckduckgo.com/"
@@ -322,7 +324,7 @@ def _exception_kind(e: Exception) -> tuple[str, str]:
 
 def _clean(text: str) -> str:
     """Strip tags and decode entities so snippets read as prose."""
-    return html_mod.unescape(re.sub(r"<[^>]+>", "", text or "")).strip()
+    return html_mod.unescape(re.sub(r"<[^<>]+>", "", text or "")).strip()
 
 
 def classify_page(text: str, parsed: int) -> tuple[str, str]:
@@ -685,8 +687,8 @@ class WebSearch:
 
     def _google_cse(self, query: str) -> tuple[list[dict], str, str]:
         """Programmable Search JSON API. 100 a day, and the day resets."""
-        return self._keyed_call("google_cse", lambda: requests.get(
-            "https://www.googleapis.com/customsearch/v1",
+        return self._keyed_call("google_cse", lambda: safe_http.get(
+            "https://www.googleapis.com/customsearch/v1", same_host=True,
             params={
                 "key": os.environ.get("AGENTAL_GOOGLE_CSE_KEY", "").strip(),
                 "cx":  os.environ.get("AGENTAL_GOOGLE_CSE_CX", "").strip(),
@@ -698,8 +700,8 @@ class WebSearch:
 
     def _tavily(self, query: str) -> tuple[list[dict], str, str]:
         """Tavily. The key goes in a header, not the query string."""
-        return self._keyed_call("tavily", lambda: requests.post(
-            "https://api.tavily.com/search",
+        return self._keyed_call("tavily", lambda: safe_http.post(
+            "https://api.tavily.com/search", same_host=True,
             json={"query": query, "max_results": MAX_RESULTS},
             headers={"Authorization":
                      f"Bearer {os.environ.get('AGENTAL_TAVILY_KEY', '').strip()}",
@@ -709,8 +711,8 @@ class WebSearch:
 
     def _serpapi(self, query: str) -> tuple[list[dict], str, str]:
         """SerpAPI. Somebody else takes the scraping problem, for 250 a month."""
-        return self._keyed_call("serpapi", lambda: requests.get(
-            "https://serpapi.com/search.json",
+        return self._keyed_call("serpapi", lambda: safe_http.get(
+            "https://serpapi.com/search.json", same_host=True,
             params={
                 "api_key": os.environ.get("AGENTAL_SERPAPI_KEY", "").strip(),
                 "q":       query,
@@ -728,7 +730,7 @@ class WebSearch:
         above needs all three to agree rather than trusting any one of them.
         """
         try:
-            resp = requests.get(
+            resp = safe_http.get(
                 DDG_INSTANT_URL,
                 params={"q": query, "format": "json", "no_html": "1"},
                 headers=HEADERS, timeout=TIMEOUT,
@@ -795,12 +797,12 @@ class WebSearch:
                 time.sleep(BACKOFF_AFTER_BLOCK)
             try:
                 if method == "get":
-                    resp = requests.get(url, params=params,
+                    resp = safe_http.get(url, params=params,
                                         headers=HEADERS, timeout=TIMEOUT)
                 else:
                     # POST wants the same fields as form data rather than as a
                     # query string. Same query, different envelope.
-                    resp = requests.post(url, data=params,
+                    resp = safe_http.post(url, data=params,
                                          headers=HEADERS, timeout=TIMEOUT)
             except requests.RequestException as e:
                 kind, detail = _exception_kind(e)

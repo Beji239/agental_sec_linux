@@ -108,6 +108,8 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from core import safe_http
+
 logger = logging.getLogger(__name__)
 
 
@@ -374,9 +376,10 @@ def _identity_tokens(fields: dict) -> set:
 def _get_json(url: str, source: str, params: dict = None) -> tuple[dict | None, str | None]:
     _throttle(source)
     try:
-        resp = requests.get(
+        resp = safe_http.get(
             url,
             params=params,
+            same_host=(source == "nvd"),
             # The NVD key rides along here rather than being passed in by the
             # caller. One place decides, so a second NVD call added later
             # cannot forget it, and the signature every test stub copies does
@@ -755,7 +758,7 @@ def _load_lolbas() -> dict | None:
         if raw is None:
             _throttle("lolbas")
             try:
-                resp = requests.get(LOLBAS_URL, timeout=20,
+                resp = safe_http.get(LOLBAS_URL, timeout=20,
                                     headers={"User-Agent": USER_AGENT})
                 if resp.status_code == 200 and len(resp.content) <= LOLBAS_MAX_BYTES:
                     raw = resp.json()

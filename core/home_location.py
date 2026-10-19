@@ -133,11 +133,12 @@ def public_ip(timeout: float = 4.0) -> str | None:
     """This network's IPv4 address on the internet, asked of a public echo service."""
     try:
         import requests
+        from core import safe_http
     except ImportError:
         return None
     for url in PUBLIC_IP_URLS:
         try:
-            r = requests.get(url, timeout=timeout)
+            r = safe_http.get(url, timeout=timeout)
             text = r.text.strip() if r.ok else ""
             addr = ipaddress.ip_address(text)
         except Exception:

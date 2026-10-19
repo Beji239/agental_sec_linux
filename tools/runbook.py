@@ -7,6 +7,8 @@ import threading
 
 import requests
 
+from core import safe_http
+
 logger = logging.getLogger(__name__)
 
 from core import memory_engine as me
@@ -324,7 +326,7 @@ class Runbook:
             # compromised gateway handing out its own resolver as a scenario
             # this tool exists to catch, and that is precisely the position
             # from which something else answers for this hostname.
-            resp = requests.get(CISA_KEV_URL, timeout=15, stream=True)
+            resp = safe_http.get(CISA_KEV_URL, timeout=15, stream=True)
             resp.raise_for_status()
 
             chunks, total = [], 0
