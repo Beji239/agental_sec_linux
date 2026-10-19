@@ -105,7 +105,7 @@ RE_CALLS = {"search": 2, "match": 2, "fullmatch": 2, "findall": 2,
 
 
 def _flags(node):
-    """The flags argument when it is written as re.X or re.X | re.Y."""
+    """The flags argument when it is written as re.X, or several joined."""
     if node is None:
         return 0
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
