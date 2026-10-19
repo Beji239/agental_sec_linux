@@ -165,9 +165,13 @@ check("and it is the right one", "192.0.2.9" in w[0], True)
 
 
 print("\n[6] what the MACHINE refuses, not just what the module says")
+from core import capabilities as caps  # noqa: E402
 from core import privilege_linux as privilege  # noqa: E402
 _real = privilege.is_elevated
+_real_helper = caps._held_by_helper
 try:
+    # Not root, and no installed helper holding the right either.
+    caps._held_by_helper = lambda name: None
     privilege.is_elevated = lambda: False
     w = sh.warnings_for("block_port", {"remediation": Fake(HEALTHY)})
     check("an action the machine will refuse is flagged before it runs",
@@ -180,6 +184,7 @@ try:
           sh.warnings_for("block_port", {"remediation": Fake(HEALTHY)}), [])
 finally:
     privilege.is_elevated = _real
+    caps._held_by_helper = _real_helper
 
 
 print("\n[7] the write tools are covered, which is where the damage lasts")
