@@ -228,5 +228,47 @@ def gitleaks() -> list:
     return found
 
 
+def trivy() -> list:
+    """The Docker image, built here and deleted after, scanned for known
+    flaws with a fix available and for secrets. Flaws the distribution has
+    not fixed yet are counted, not failed: nothing here can act on them."""
+    if not (ROOT / "Dockerfile").exists():
+        raise Unavailable("no Dockerfile in this folder")
+    exe = _tools.need("trivy")
+    if not _tools.find("docker"):
+        raise Unavailable("needs docker")
+    tag = "agentalsec-trivy-scan:test"
+    _run(["docker", "build", "-q", "-t", tag, "."], timeout=1800, ok=(0,))
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            rep = os.path.join(tmp, "trivy.json")
+            _run([exe, "image", "--quiet", "--scanners", "vuln,secret",
+                  "--cache-dir", str(_tools.TOOLS_HOME / "trivy-cache"),
+                  "--format", "json", "--output", rep, tag],
+                 timeout=1800, ok=(0,))
+            data = json.loads(open(rep).read())
+    finally:
+        subprocess.run(["docker", "rmi", "-f", tag], capture_output=True)
+    out, trivy.unfixed = [], 0
+    for r in data.get("Results") or []:
+        for v in r.get("Vulnerabilities") or []:
+            if not v.get("FixedVersion"):
+                trivy.unfixed += 1
+                continue
+            out.append({"tool": "trivy", "rule": v["VulnerabilityID"],
+                        "path": r["Target"], "line": 0,
+                        "text": f"{v['PkgName']} {v['InstalledVersion']} "
+                                f"fixed in {v['FixedVersion']}",
+                        "message": v.get("Title") or v["Severity"]})
+        for x in r.get("Secrets") or []:
+            out.append({"tool": "trivy", "rule": x.get("RuleID", "secret"),
+                        "path": r["Target"], "line": x.get("StartLine", 0),
+                        "text": "secret", "message": x.get("Title", "")})
+    return out
+
+
+trivy.unfixed = 0
+
+
 SCANNERS = {"bandit": bandit, "shellcheck": shellcheck, "semgrep": semgrep,
             "gitleaks": gitleaks, "pip-audit": pip_audit}

@@ -3803,6 +3803,9 @@ def create_fresh_database(db_path: Path) -> dict:
                          f"({e}). It has to go before a new one can be built.")
             raise
 
+    # Owner only from the first byte; SQLite gives -wal and -shm the same mode.
+    os.close(os.open(db_path, os.O_CREAT | os.O_WRONLY, 0o600))
+    os.chmod(db_path, 0o600)
     conn = sqlite3.connect(db_path)
     try:
         conn.executescript(schema_file.read_text(encoding="utf-8"))

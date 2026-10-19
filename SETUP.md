@@ -96,6 +96,28 @@ In `config.json`, under `provider`:
 
 You can also set both later on the dashboard's Settings tab.
 
+### A local model with LM Studio
+
+Nothing leaves the computer this way. Load a model in LM Studio, start its
+local server, and in `config.json`:
+
+```json
+"provider": {
+  "model": "the model id LM Studio shows",
+  "api_url": "http://localhost:1234/v1/chat/completions",
+  "api_style": "openai"
+}
+```
+
+- `AGENTAL_API_KEY` must not be empty, or the analyst refuses to start. LM
+  Studio ignores it, so any word works, for example `lm-studio`, unless you
+  turned on LM Studio's own key.
+- Pick a model that can call tools (Qwen 2.5 or 3, Llama 3.1 or later,
+  Mistral). The analyst works through tools; a model without them can only
+  talk.
+- Raise the context length in LM Studio well above its default of 4096. The
+  analyst's instructions alone do not fit in that.
+
 ## 7. Data files
 
 ```bash
