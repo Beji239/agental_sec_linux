@@ -8,6 +8,7 @@ import sqlite3
 import json
 import logging
 import os
+import time as _time
 import re
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -322,6 +323,24 @@ MAX_SILENCE_CONFIDENCE = "medium"
 LOCK_WAIT_SECONDS = 30
 
 
+# A write held longer than this is named in the log, with the code that held
+# it, so a "database is locked" elsewhere can be traced to its cause.
+LONG_WRITE_SECONDS = 10
+
+
+def _long_write(started: float) -> None:
+    held = _time.monotonic() - started
+    if held < LONG_WRITE_SECONDS:
+        return
+    import traceback
+    frames = [f"{Path(f.filename).name}:{f.lineno} {f.name}"
+              for f in traceback.extract_stack()[:-2]
+              if "contextlib" not in f.filename
+              and f.name not in ("_get_conn", "_long_write")]
+    logger.warning(f"A database write was held for {held:.1f} s, so other "
+                   f"writers waited: {' < '.join(reversed(frames[-4:]))}")
+
+
 @contextmanager
 def _get_conn():
     """Context manager, always returns dicts, always closes cleanly."""
@@ -329,14 +348,19 @@ def _get_conn():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    started = _time.monotonic()
+    wrote = False
     try:
         yield conn
+        wrote = conn.total_changes > 0
         conn.commit()
     except Exception:
         conn.rollback()
         raise
     finally:
         conn.close()
+        if wrote:
+            _long_write(started)
 
 
 @contextmanager

@@ -286,6 +286,41 @@ check("wtmp never goes through the helper",
       em._login_records_from_helper("wtmp", fake_st, 0, 10) is None)
 li.helper_status, li.helper_call = real_status, real_call
 
+print("\n[5e] A long write names the code that held it")
+import logging  # noqa: E402
+seen = []
+
+
+class _Catch(logging.Handler):
+    def emit(self, record):
+        seen.append(record.getMessage())
+
+
+me.logger.addHandler(_Catch())
+real_limit = me.LONG_WRITE_SECONDS
+me.LONG_WRITE_SECONDS = 0.2
+
+
+def slow_writer():
+    with me._get_conn() as c:
+        c.execute("UPDATE sensor_service SET pid = pid")
+        c.execute("INSERT INTO user_preferences (key, value) VALUES "
+                  "('t_slow', '1') ON CONFLICT(key) DO UPDATE SET value = '2'")
+        time.sleep(0.3)
+
+
+def slow_reader():
+    with me._get_conn() as c:
+        c.execute("SELECT 1")
+        time.sleep(0.3)
+
+
+slow_writer()
+slow_reader()
+me.LONG_WRITE_SECONDS = real_limit
+check("a write held too long is logged with its caller",
+      len(seen) == 1 and "slow_writer" in seen[0], seen)
+
 print("\n[6] A code change makes the service start again on the new code")
 proj = pathlib.Path(tempfile.mkdtemp())
 (proj / "VERSION").write_text("1\n")

@@ -2039,7 +2039,11 @@ def _run_capture() -> int:
     if not _check_dependencies():
         logger.error("Cannot start the capture service: missing dependencies")
         return 1
-    _report_privileges()
+    # Its own rights only: it holds the capture right and nothing else, and
+    # it cannot use sudo, so the app's helper report does not apply here.
+    from core import privilege_linux as _priv
+    ok, why = _priv.check_packet_capture_capability()
+    logger.info(f"Capture right: {'yes' if ok else 'NO'} ({why})")
     config = _load_config()
     if not _initialize_database():
         logger.error("Cannot start the capture service: no database")
