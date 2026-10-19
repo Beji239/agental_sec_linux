@@ -25,6 +25,7 @@ _isolate_db.isolate()
 from core import daily_report as dr                   # noqa: E402
 from core import memory_engine as me                  # noqa: E402
 from core import migrations                           # noqa: E402
+from core import own_install                          # noqa: E402
 from tools import ebpf_events, local_integrity as li, port_owner  # noqa: E402
 
 migrations.run_migrations(me.DB_PATH)
@@ -146,29 +147,21 @@ check("not when root does not own it",
 
 script = (ROOT / "scripts" / "install_read_helper.sh").read_text()
 (proj / "scripts" / "install_read_helper.sh").write_text(script)
-grant = li._read_helper_grant(proj)
-check("the sudoers grant is rendered from the installer",
-      bool(grant) and grant[0].endswith("read_helper.py sudoers, \\")
-      and "$" not in "".join(grant), True)
-sudoers = proj / "agentalsec-read-helper"
-body = ("# Installed 2026-03-04T10:00:00Z by the installer.\n#\n"
-        + "\n".join(grant) + "\n").encode()
-sudoers.write_bytes(body)
-real = li._READ_HELPER_SUDOERS
-li._READ_HELPER_SUDOERS = str(sudoers)
-try:
-    check("a sudoers drop-in with exactly that grant is the app's own",
-          bool(li.own_file_check(str(sudoers),
-                                 f"440:0:0:{len(body)}:{li._hash16(body)}",
-                                 proj)), True)
-    wider = body.replace(b"--verbs", b"--verbs, /bin/sh")
-    sudoers.write_bytes(wider)
-    check("one with a wider grant is not",
-          li.own_file_check(str(sudoers),
-                            f"440:0:0:{len(wider)}:{li._hash16(wider)}",
-                            proj), None)
-finally:
-    li._READ_HELPER_SUDOERS = real
+drop = own_install.expected(proj)[
+    "/etc/sudoers.d/agentalsec-read-helper"][1].exact
+check("the sudoers drop-in is rendered from the installer, nothing left open",
+      bool(drop) and "read_helper.py sudoers, \\" in drop
+      and "$" not in drop, True)
+body = drop.encode()
+sudoers = "/etc/sudoers.d/agentalsec-read-helper"
+check("a drop-in with exactly that text is the app's own, by its hash alone",
+      bool(li.own_file_check(sudoers,
+                             f"440:0:0:{len(body)}:{li._hash16(body)}",
+                             proj)), True)
+wider = body.replace(b"--verbs", b"--verbs, /bin/sh")
+check("one with a wider grant is not",
+      li.own_file_check(sudoers, f"440:0:0:{len(wider)}:{li._hash16(wider)}",
+                        proj), None)
 
 old = {"dirs": {"/etc/systemd/system": {"entries": {}}}}
 new = {"dirs": {"/etc/systemd/system": {"entries": {

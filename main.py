@@ -489,6 +489,14 @@ def _initialize_database():
     else:
         logger.warning(f"Migration reported {status!r}: {result}")
 
+    try:
+        from core import own_install
+        n = own_install.close_open_alerts()
+        if n:
+            logger.info(f"Closed {n} open alerts about the app's own install.")
+    except Exception as e:                              # noqa: BLE001
+        logger.warning(f"Could not check open alerts against the app's own "
+                       f"install: {e}")
     return True
 
 

@@ -2911,62 +2911,26 @@ def _entry_mode_int(meta: str) -> int:
 
 # The app's own installed files, checked against what its installers write.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-_HARDENING = re.compile(r"/etc/systemd/system/(agentalsec-[\w.-]+)\.service\.d/"
-                        r"hardening\.conf")
-_READ_HELPER_SUDOERS = "/etc/sudoers.d/agentalsec-read-helper"
-
-
-def _grant_lines(text: str) -> list:
-    return [l.rstrip() for l in text.splitlines()
-            if l.strip() and not l.lstrip().startswith("#")]
-
-
-def _read_helper_grant(root: Path = None) -> list | None:
-    """The grant lines install_read_helper.sh writes, for the project's owner.
-    The comment header is left out: it carries the install time."""
-    import pwd
-    root = root or PROJECT_ROOT
-    try:
-        script = (root / "scripts" / "install_read_helper.sh").read_text()
-        body = script.split('DROP_IN_CONTENT="$(cat <<EOF\n', 1)[1].split(
-            "\nEOF\n", 1)[0]
-        helper_dir = re.search(r'^HELPER_DIR="([^"$]+)"', script, re.M).group(1)
-        user = pwd.getpwuid(root.stat().st_uid).pw_name
-    except (OSError, IndexError, AttributeError, KeyError):
-        return None
-    dst = f"{helper_dir}/read_helper.py"
-    return [l.replace("$HELPER_DST", dst).replace("$REAL_USER", user)
-            .replace("\\\\", "\\") for l in _grant_lines(body)]
 
 
 def own_file_check(target: str, now_value, root: Path = None) -> str | None:
     """Why a changed file is the app's own as its installer writes it, or
-    None. Only root-owned files not writable by others count."""
+    None. Only root-owned files not writable by others count; a boot link is
+    checked on disk, with the unit it points at."""
+    from core import own_install
     root = root or PROJECT_ROOT
     parts = str(now_value or "").split(":")
     if len(parts) < 5 or parts[1] != "0" or parts[4] in ("", "-"):
         return None
     try:
-        if int(parts[0], 8) & 0o022:
-            return None
+        mode = int(parts[0], 8)
     except ValueError:
         return None
-    m = _HARDENING.fullmatch(target)
-    if m:
-        src = root / "scripts" / "systemd-hardening" / f"{m.group(1)}.conf"
-        data, _ = _read_bytes(src)
-        if data is not None and _hash16(data) == parts[4]:
-            return (f"identical to {src.relative_to(root)}, the hardening "
-                    f"the app ships for {m.group(1)}")
+    if mode == 0o777:
+        return own_install.reason(target, root=root)
+    if mode & 0o022:
         return None
-    if target == _READ_HELPER_SUDOERS:
-        data, _ = _read_bytes(target)
-        want = _read_helper_grant(root)
-        if (data is not None and want and _hash16(data) == parts[4]
-                and _grant_lines(data.decode("utf-8", "replace")) == want):
-            return ("its grant is exactly what scripts/install_read_helper.sh "
-                    "writes for the project's owner")
-    return None
+    return own_install.by_digest(target, parts[4], root)
 
 
 def _own_file_finding(target: str, now_value, why: str, raw: dict) -> dict:

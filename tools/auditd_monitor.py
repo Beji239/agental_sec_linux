@@ -1457,6 +1457,12 @@ def _findings_from(records: list):
     """
     out, counts = [], {}
     seen_paths = set()
+    # What each event changed, so a folder record can defer to its file.
+    children = {}
+    for record in records:
+        f = record.get("fields") or {}
+        if f.get("nametype") not in (None, "PARENT") and watched_path(record):
+            children.setdefault(record.get("msg_id"), []).append(f["name"])
 
     for record in records:
         rtype = record.get("type")
@@ -1558,6 +1564,11 @@ def _findings_from(records: list):
             counts["path_repeat"] = counts.get("path_repeat", 0) + 1
             continue
         seen_paths.add(key)
+        own = _own_explains(path, record, children)
+        if own:
+            counts["by_own_install"] = counts.get("by_own_install", 0) + 1
+            logger.info(f"AUD-1002 not raised for {path}: {own}")
+            continue
         counts["path"] = counts.get("path", 0) + 1
         if counts["path"] > CAP_PER_ID_PER_PASS:
             counts["path_cut"] = counts.get("path_cut", 0) + 1
@@ -1603,6 +1614,47 @@ def _findings_from(records: list):
         })
 
     return out, counts
+
+
+def _own_explains(path: str, record: dict, children: dict):
+    """Why a watched path hit needs no alert, from facts on disk, or None."""
+    from core import own_install
+    fields = record.get("fields") or {}
+    if fields.get("nametype") == "PARENT":
+        folder = path.rstrip("/")
+        inside = [c for c in children.get(record.get("msg_id"), ())
+                  if os.path.dirname(c.rstrip("/")) == folder]
+        if inside:
+            return f"the folder record for {inside[0]}, judged on its own"
+    try:
+        ino = int(fields.get("inode") or 0)
+    except ValueError:
+        ino = 0
+    why = own_install.inert_check_file(path)
+    if why:
+        became = _same_inode(own_install.SUDOERS_D, ino) if ino else None
+        return why + (f"; it became {became}" if became else "")
+    why = own_install.reason(path)
+    if not why:
+        return None
+    # The record must be about the file there now, or about the one it replaced.
+    try:
+        now = os.lstat(path).st_ino
+    except OSError:
+        return None
+    if ino == now or fields.get("nametype") == "DELETE":
+        return f"the app's own install, {why}"
+    return None
+
+
+def _same_inode(folder: str, ino: int):
+    try:
+        for entry in os.scandir(folder):
+            if entry.inode() == ino:
+                return entry.path
+    except OSError:
+        pass
+    return None
 
 
 def _package_explains(path: str, at_iso) -> bool:

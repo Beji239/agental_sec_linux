@@ -1210,7 +1210,7 @@ _REGISTER: list[Detection] = [
        "itself, and nothing else in this tree can see it.",
        ("availability", "integrity")),
 
-    _d("AUD-1002", 1, "audit_watch_touched", "auditd", "file",
+    _d("AUD-1002", 2, "audit_watch_touched", "auditd", "file",
        {"low"},
        "A path under a kernel audit watch was touched, recorded by the KERNEL "
        "with the identity of whoever did it. Unlike a polling check this does "
@@ -1218,7 +1218,9 @@ _REGISTER: list[Detection] = [
        "lasted milliseconds is still in the record. LOW because a watch firing "
        "is usually the answer its owner wanted, not a surprise, and because "
        "this app has the path and the identity and not the content: the local "
-       "integrity sensor is what compares files against what they were.",
+       "integrity sensor is what compares files against what they were. "
+       "Not raised for the app's own installers' work, proven on disk: "
+       "root-owned and identical to what the installer writes.",
        ("integrity",)),
 
     # AND THE TWO THAT SAY THE RECORDING STOPPED.
@@ -1530,11 +1532,13 @@ _REGISTER: list[Detection] = [
        "reporting and is not a backdoor.",
        ("integrity", "confidentiality")),
 
-    _d("LNX-4004", 1, "autorun_entry_added", "registry_monitor",
+    _d("LNX-4004", 2, "autorun_entry_added", "registry_monitor",
        "file", {"medium"},
        "A systemd unit, user unit, cron entry, init script or shell startup "
        "file appeared since the autorun monitor's last reading. The change is "
-       "the signal: a new way for something to start on its own.",
+       "the signal: a new way for something to start on its own. Not raised "
+       "for the app's own units when the unit and the helper it starts are "
+       "exactly what its installer writes.",
        ("integrity",)),
 
     _d("LNX-4005", 1, "autorun_entry_changed", "registry_monitor",

@@ -74,8 +74,8 @@ fi
 # all would also work: naming them documents exactly what the machine has
 # granted, so a reader auditing sudoers does not have to trust the script.
 DROP_IN_CONTENT="$(cat <<EOF
-# AgentalSec read-only helper. Installed $(date -u +%Y-%m-%dT%H:%M:%SZ) by
-# scripts/install_read_helper.sh.
+# AgentalSec read-only helper. Installed by scripts/install_read_helper.sh.
+# No install time here, so the app can check this file by its hash.
 #
 # WHAT THIS GRANTS: the account below may run ONE script, as root, with NO
 # password, with one of seven fixed words (or --verbs, which reads nothing).

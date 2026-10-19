@@ -241,6 +241,20 @@
   "tool": "bandit",
   "rule": "B608",
   "path": "core/incident.py",
+  "text": "f\"SELECT * FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders, the ids go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/incident.py",
+  "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/incident.py",
   "text": "f\"SELECT {_WATERMARK_COLUMN} FROM watcher_run \"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
  },
@@ -319,6 +333,27 @@
   "rule": "B608",
   "path": "core/intervals.py",
   "text": "f\"SELECT dst_ip, COUNT(*) n FROM packets WHERE {where} \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/learned_rules.py",
+  "text": "f\"SELECT 1 FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders, the ids go in as parameters"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/learned_rules.py",
+  "text": "f\"SELECT 1 FROM known_devices WHERE lower({col}) = lower(?) AND \"",
+  "reason": "col is mac or ip, chosen in code, the value goes in as a parameter"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "closed = conn.execute(f\"\"\"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
  },
  {
@@ -473,6 +508,20 @@
   "rule": "B608",
   "path": "core/memory_engine.py",
   "text": "f\"SELECT COUNT(DISTINCT session_id) FROM behavioral_session \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT id, title, description, severity FROM \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/memory_engine.py",
+  "text": "f\"SELECT ip, known_as, hostname FROM known_devices \"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
  },
  {
@@ -695,6 +744,48 @@
  {
   "tool": "bandit",
   "rule": "B608",
+  "path": "core/own_install.py",
+  "text": "f\"SELECT id, detection_id, entity_value, raw_data, dismissed \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/package_activity.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
+  "reason": "a fixed argument list, no shell; the path is passed as one argument"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
+  "reason": "a fixed argument list, no shell; the package name comes from dpkg itself"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B607",
+  "path": "core/package_activity.py",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
+  "reason": "a system program found on PATH"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
   "path": "core/perf.py",
   "text": "for row in conn.execute(f\"\"\"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
@@ -773,8 +864,22 @@
   "tool": "bandit",
   "rule": "B608",
   "path": "core/questions.py",
+  "text": "cur = conn.execute(f\"\"\"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
   "text": "f\"SELECT entity_value, entity_type, behavior_key, \"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/questions.py",
+  "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
+  "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
  },
  {
   "tool": "bandit",
@@ -887,6 +992,20 @@
   "path": "core/timeline.py",
   "text": "f\"SELECT COUNT(*) FROM {table} {where}\",",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/version.py",
+  "text": "import subprocess",
+  "reason": "runs git describe only, with an argument list and no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/version.py",
+  "text": "out = subprocess.run(",
+  "reason": "an argument list with no shell, git by its full path, fixed arguments"
  },
  {
   "tool": "bandit",
@@ -1230,6 +1349,20 @@
   "path": "tools/background_apps_linux.py",
   "text": "p = subprocess.run(argv, capture_output=True, text=True,",
   "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_inspector.py",
+  "text": "f\"SELECT MIN(queried_at), COUNT(DISTINCT client_ip) FROM \"",
+  "reason": "the clause is fixed text from _name_clause, the name goes in as a parameter"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "tools/dns_inspector.py",
+  "text": "f\"SELECT client_ip, MIN(domain), MIN(queried_at) FROM \"",
+  "reason": "the clause is fixed text, the pattern goes in as a parameter"
  },
  {
   "tool": "bandit",
@@ -2073,6 +2206,13 @@
  },
  {
   "tool": "bandit",
+  "rule": "B603",
+  "path": "tools/read_helper.py",
+  "text": "res = subprocess.run(argv, capture_output=True, text=True,",
+  "reason": "argv is one of three fixed lists in FIREWALL_COMMANDS (ufw and nft by full path, fixed arguments); no shell and nothing from the caller"
+ },
+ {
+  "tool": "bandit",
   "rule": "B607",
   "path": "tools/read_helper.py",
   "text": "res = subprocess.run(",
@@ -2378,117 +2518,5 @@
   "path": "tools/gateway_agent.sh",
   "text": "err=$(nft add rule inet $NFT_TABLE portal iifname \"$dev\" ether saddr != @msgdone meta nfproto ipv4 ip daddr != @portalip tcp dport 80 $(portal_action \"$a\") comment '\"msgall\"' 2>&1) \\",
   "reason": "portal_action returns several nft words on purpose, built from the router's own address"
- },
- {
-  "tool": "bandit",
-  "rule": "B404",
-  "path": "core/package_activity.py",
-  "text": "import subprocess",
-  "reason": "imports subprocess"
- },
- {
-  "tool": "bandit",
-  "rule": "B603",
-  "path": "core/package_activity.py",
-  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
-  "reason": "a fixed argument list, no shell; the path is passed as one argument"
- },
- {
-  "tool": "bandit",
-  "rule": "B607",
-  "path": "core/package_activity.py",
-  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
-  "reason": "a system program found on PATH"
- },
- {
-  "tool": "bandit",
-  "rule": "B603",
-  "path": "core/package_activity.py",
-  "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
-  "reason": "a fixed argument list, no shell; the package name comes from dpkg itself"
- },
- {
-  "tool": "bandit",
-  "rule": "B607",
-  "path": "core/package_activity.py",
-  "text": "r = subprocess.run([\"dpkg-query\", \"-W\", \"-f=${Conffiles}\\n\", package],",
-  "reason": "a system program found on PATH"
- },
- {
-  "tool": "bandit",
-  "rule": "B404",
-  "path": "core/version.py",
-  "text": "import subprocess",
-  "reason": "runs git describe only, with an argument list and no shell"
- },
- {
-  "tool": "bandit",
-  "rule": "B603",
-  "path": "core/version.py",
-  "text": "out = subprocess.run(",
-  "reason": "an argument list with no shell, git by its full path, fixed arguments"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "core/questions.py",
-  "text": "cur = conn.execute(f\"\"\"",
-  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "core/incident.py",
-  "text": "f\"SELECT * FROM incident WHERE detection_id IN ({marks}) \"",
-  "reason": "marks is only ? placeholders, the ids go in as parameters"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "core/learned_rules.py",
-  "text": "f\"SELECT 1 FROM known_devices WHERE lower({col}) = lower(?) AND \"",
-  "reason": "col is mac or ip, chosen in code, the value goes in as a parameter"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "core/learned_rules.py",
-  "text": "f\"SELECT 1 FROM incident WHERE detection_id IN ({marks}) \"",
-  "reason": "marks is only ? placeholders, the ids go in as parameters"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "tools/dns_inspector.py",
-  "text": "f\"SELECT MIN(queried_at), COUNT(DISTINCT client_ip) FROM \"",
-  "reason": "the clause is fixed text from _name_clause, the name goes in as a parameter"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "tools/dns_inspector.py",
-  "text": "f\"SELECT client_ip, MIN(domain), MIN(queried_at) FROM \"",
-  "reason": "the clause is fixed text, the pattern goes in as a parameter"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "core/incident.py",
-  "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
-  "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
- },
- {
-  "tool": "bandit",
-  "rule": "B608",
-  "path": "core/questions.py",
-  "text": "f\"SELECT id FROM incident WHERE detection_id IN ({marks}) \"",
-  "reason": "marks is only ? placeholders for the new device rules, the values go in as parameters"
- },
- {
-  "tool": "bandit",
-  "rule": "B603",
-  "path": "tools/read_helper.py",
-  "text": "res = subprocess.run(argv, capture_output=True, text=True,",
-  "reason": "argv is one of three fixed lists in FIREWALL_COMMANDS (ufw and nft by full path, fixed arguments); no shell and nothing from the caller"
  }
 ]

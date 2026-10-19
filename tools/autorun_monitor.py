@@ -1311,6 +1311,22 @@ def save_baseline(entries: Optional[dict] = None) -> bool:
         return False
 
 
+def _own_entry(e: dict):
+    """Why a new or changed unit is the app's own install, or None. The unit
+    must be what its installer writes, and so must any helper it starts."""
+    from core import own_install
+    if e.get("kind") != "systemd_service" or not e.get("path"):
+        return None
+    why = own_install.reason(e["path"])
+    if not why:
+        return None
+    for word in str(e.get("detail") or "").split():
+        if word.startswith("/usr/local/lib/agentalsec/") and \
+                not own_install.reason(word):
+            return None
+    return f"the app's own unit, {why}"
+
+
 def change_findings(changes: dict) -> list[dict]:
     """The changes as findings, in analyze_suspicious()'s shape."""
     out = []
@@ -1318,6 +1334,10 @@ def change_findings(changes: dict) -> list[dict]:
                             ("changed", "changed", "medium"),
                             ("removed", "disappeared", "low")):
         for e in changes.get(kind) or []:
+            own = _own_entry(e) if kind != "removed" else None
+            if own:
+                logger.info(f"autorun {e.get('path')} {verb}, not raised: {own}")
+                continue
             what = e.get("detail") or e.get("path") or e.get("name")
             head = (f"{e['kind'].replace('_', ' ')} {e.get('name')} {verb} "
                     f"since the last reading")
