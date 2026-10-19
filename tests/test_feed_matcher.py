@@ -1,4 +1,5 @@
 # tests/test_feed_matcher.py
+# runner-timeout: 900, takes three to six minutes on a busy machine.
 # AgentalSec V2, TODO 113.4. Tests for tools/feed_matcher.
 #
 # RULE ONE: failure cases first. Sections 1 to 6 are all the ways this can

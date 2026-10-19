@@ -1,3 +1,4 @@
+# runner-timeout: 900, takes three to six minutes on a busy machine.
 """
 tests/test_fuzz_parsers.py, malformed input never crashes or hangs a parser.
 

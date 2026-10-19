@@ -46,6 +46,10 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+import _isolate_db                                    # noqa: E402
+_isolate_db.isolate()
 
 fails = []
 

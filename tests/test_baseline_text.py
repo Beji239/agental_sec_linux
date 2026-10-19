@@ -1,4 +1,5 @@
 # tests/test_baseline_text.py
+# runner-timeout: 900, takes three to six minutes on a busy machine.
 # The Behavioural tab in plain words, and baselines that learn by themselves.
 #   1. every key the store accepts has a sentence template
 #   2. the sentences read values the way they are stored, JSON included

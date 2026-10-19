@@ -1,3 +1,4 @@
+# runner-timeout: 900, takes three to six minutes on a busy machine.
 """
 tests/test_local_integrity_fixes.py, the L3 audit round's defects, asserted.
 

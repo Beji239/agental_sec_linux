@@ -805,6 +805,23 @@ print("\n[31] the wiring: the adapter, the register, the tool and the file")
 adopter = (ROOT / "adapters.py").read_text(encoding="utf-8")
 check_true("the adapter persists the cursor",
            "event_monitor_cursors" in adopter)
+
+from adapters import LinuxEventMonitor                 # noqa: E402
+from core import memory_engine as _me                  # noqa: E402
+_mon = LinuxEventMonitor("t", {})
+with _me._get_conn() as _c:
+    _c.execute(_mon.CURSOR_DDL)
+    _c.execute("DELETE FROM event_cursor")
+_me.set_preference("event_monitor_cursors", '{"syslog": 7}')
+check("an old cursor in the policy table is carried over",
+      _mon._load_markers(), {"syslog": 7})
+check("and removed from it, so the tamper check stops seeing it move",
+      _me.get_preference("event_monitor_cursors", None), None)
+_mon._save_markers({"syslog": 9})
+check("a new position is saved in its own table",
+      LinuxEventMonitor("t", {})._load_markers(), {"syslog": 9})
+check("and never written to the policy table again",
+      _me.get_preference("event_monitor_cursors", None), None)
 check_true("and passes the record id to save_event",
            "source_record_id=entry.get(\"record_id\")" in adopter)
 check_true("and writes the coverage gaps the module returns",

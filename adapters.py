@@ -559,6 +559,29 @@ class LinuxEventMonitor(_BaseAdapter):
     # distinct lines per minute for twelve minutes and no cursor existed to
     # catch up from.
     PREF_MARKERS = "event_monitor_cursors"
+    # Kept in its own table: user_preferences is hashed as the policy, so a
+    # cursor there read as a policy change every hour.
+    CURSOR_DDL = ("CREATE TABLE IF NOT EXISTS event_cursor (name TEXT PRIMARY "
+                  "KEY, value TEXT NOT NULL, updated_at TIMESTAMP DEFAULT "
+                  "CURRENT_TIMESTAMP)")
+
+    def _cursor_read(self) -> str:
+        """The stored cursors, moving an old copy out of user_preferences."""
+        from core import memory_engine as me
+        with me._get_conn() as conn:
+            conn.execute(self.CURSOR_DDL)
+            row = conn.execute("SELECT value FROM event_cursor WHERE name = ?",
+                               (self.PREF_MARKERS,)).fetchone()
+            old = conn.execute("SELECT value FROM user_preferences "
+                               "WHERE key = ?", (self.PREF_MARKERS,)).fetchone()
+            if old is not None:
+                if row is None:
+                    conn.execute("INSERT INTO event_cursor (name, value) "
+                                 "VALUES (?, ?)", (self.PREF_MARKERS, old[0]))
+                conn.execute("DELETE FROM user_preferences WHERE key = ?",
+                             (self.PREF_MARKERS,))
+            return (row[0] if row is not None
+                    else old[0] if old is not None else "") or ""
 
     # NO SEVERITY TABLE HERE, and that is deliberate. The source module's
     # WATCHED_PATTERNS already declares a severity for every category it can
@@ -682,7 +705,7 @@ class LinuxEventMonitor(_BaseAdapter):
         from core import memory_engine as me
         self._marker_error = None
         try:
-            raw = me.get_preference(self.PREF_MARKERS, "") or ""
+            raw = self._cursor_read()
         except Exception as e:
             self._marker_error = f"the stored cursors could not be read: {e}"
             logger.warning(f"Event monitor: {self._marker_error}")
@@ -706,7 +729,13 @@ class LinuxEventMonitor(_BaseAdapter):
         """
         from core import memory_engine as me
         try:
-            me.set_preference(self.PREF_MARKERS, json.dumps(markers))
+            with me._get_conn() as conn:
+                conn.execute(self.CURSOR_DDL)
+                conn.execute(
+                    "INSERT INTO event_cursor (name, value) VALUES (?, ?) "
+                    "ON CONFLICT(name) DO UPDATE SET value = excluded.value, "
+                    "updated_at = CURRENT_TIMESTAMP",
+                    (self.PREF_MARKERS, json.dumps(markers)))
         except Exception as e:
             self._marker_error = f"the cursors could not be saved: {e}"
             logger.warning(

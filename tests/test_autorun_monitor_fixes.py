@@ -1,3 +1,4 @@
+# runner-timeout: 900, takes three to six minutes on a busy machine.
 """
 tests/test_autorun_monitor_fixes.py — register section 7, the autoruns round.
 
