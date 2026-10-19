@@ -385,6 +385,35 @@ check("no table gained or lost rows", before[1] == after[1],
       str({t: (before[1].get(t), n) for t, n in after[1].items()
            if before[1].get(t) != n}))
 
+# Part 3, a device is keyed by its address. Other text is refused.
+
+from core import memory_engine as me  # noqa: E402
+
+for bad in ('<scrIpt>alert(1);</scRipt>', '<!--#EXEC cmd="ls /"-->', "x"):
+    try:
+        me.identify_device(ip=bad, known_as="x", evidence="x",
+                           identified_by="user")
+        refused = False
+    except me.BadInput:
+        refused = True
+    check(f"identify_device refuses ip={bad!r}", refused)
+    for fn, kw in ((me.set_device_permanence, {"ip": bad, "is_permanent": True}),
+                   (me.merge_devices, {"source_ip": bad, "target_ip": "192.0.2.1"}),
+                   (me.unmerge_device, {"ip": bad})):
+        try:
+            fn(**kw)
+            refused = False
+        except me.BadInput:
+            refused = True
+        check(f"{fn.__name__} refuses {bad!r}", refused)
+with sqlite3.connect(db) as c:
+    junk = c.execute("SELECT COUNT(*) FROM known_devices "
+                     "WHERE ip NOT GLOB '*[0-9]*'").fetchone()[0]
+check("no device row was made from text that is not an address", junk == 0)
+res = me.identify_device(ip="192.0.2.9", known_as="printer",
+                         evidence="test", identified_by="user")
+check("a real address is still accepted", res.get("success"), str(res))
+
 print(f"\n{'FAILED' if failures else 'ALL PASSED'}"
       f"{f': {len(failures)} check(s)' if failures else ''}")
 sys.exit(1 if failures else 0)

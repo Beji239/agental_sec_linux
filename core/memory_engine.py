@@ -819,6 +819,16 @@ def _validate_entity(entity_type: str, entity_value: str, behavior_key: str = No
             )
 
 
+def _validate_device_ip(ip: str):
+    """A device is keyed by its address, so anything else is refused."""
+    import ipaddress
+    _validate_entity("ip", ip)
+    try:
+        ipaddress.ip_address(ip.strip())
+    except ValueError:
+        raise BadInput(f"{ip!r} is not an IP address.")
+
+
 # PREFERENCES
 
 def get_preference(key: str, default=None):
@@ -2449,7 +2459,7 @@ def set_device_permanence(ip: str, is_permanent: bool,
     because a starting point recorded later is a starting point that already
     includes whatever changed.
     """
-    _validate_entity("ip", ip)
+    _validate_device_ip(ip)
 
     with _get_conn() as conn:
         row = conn.execute(
@@ -2570,8 +2580,8 @@ def merge_devices(source_ip: str, target_ip: str) -> dict:
     Refused: a row into itself, a cycle, and moving permanence onto a target
     that cannot hold it (randomized or unreadable MAC, or retired).
     """
-    _validate_entity("ip", source_ip)
-    _validate_entity("ip", target_ip)
+    _validate_device_ip(source_ip)
+    _validate_device_ip(target_ip)
 
     if source_ip == target_ip:
         return {"success": False, "error": "A device cannot be merged into itself."}
@@ -2689,7 +2699,7 @@ def unmerge_device(ip: str) -> dict:
     target loses what this merge gave it, unless the user has changed that
     field since. Rows repointed onto the canonical row stay there.
     """
-    _validate_entity("ip", ip)
+    _validate_device_ip(ip)
 
     with _get_conn() as conn:
         row = conn.execute(
@@ -3310,7 +3320,7 @@ def identify_device(ip: str, known_as: str, device_type: str = None,
     Returns the row as it now stands, so the caller reports what was actually
     stored rather than what it meant to store.
     """
-    _validate_entity("ip", ip)
+    _validate_device_ip(ip)
 
     label = (known_as or "").strip()
     if not label:
