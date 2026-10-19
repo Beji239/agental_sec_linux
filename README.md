@@ -7,6 +7,23 @@
 
 # AgentalSec Linux
 
+## Why I built it
+
+I wanted to know what was happening on my own network: which devices were on
+it, what each one talked to, and when something changed, explained in plain
+words by something I could ask. I could not find that in one place. LuCI, the
+web page of an OpenWrt router, sets the router up and shows what is connected,
+but it does not judge anything or remember what normal looks like. Wazuh is a
+serious security platform, but it is built for companies: an agent on every
+computer, a central server to run, and its eyes mostly on logs rather than on
+the traffic between the devices. What I wanted sat between the two: one app,
+on one computer, that watches the whole home network through the router,
+learns what is normal for each device, tells me plainly when something is
+not, says so when it cannot see, and never acts without my approval. That is
+AgentalSec.
+
+## What it is
+
 Network and host security monitoring for Linux, with an AI analyst that
 investigates but never acts without your approval.
 
@@ -194,6 +211,35 @@ quarantines and background app changes can be undone from the Inbox.
 Alerts that turn out to be harmless can be silenced for one rule on one
 device or file, without hiding anything else about it, so the next real
 alert stands out.
+
+## Living with it
+
+**Give it time.** AgentalSec is meant to run for a while before you judge it.
+In the first days it learns what normal looks like on your network: every
+device, where each one connects, which programs run. Watch what it raises,
+answer its questions and give each incident a verdict. That review is what
+teaches it. Once the database knows your network, it carries on much more
+smoothly: fewer alarms, and the ones left are worth reading.
+
+**The rules keep the alarms clean.** The quiet rules the analyst learns, and
+the rules you mute or tune, decide only what AgentalSec raises and shows you.
+Most of them never touch the router's firewall, your devices or any other part
+of the network. Every rule is listed with what it held back and an Undo.
+
+**Cutting a device off is a convenience.** From the dashboard you can take a
+device, or one app on it, off the internet at the router, and let it back on.
+That is there because it is handy, not because the app needs it: AgentalSec
+watches either way, and it blocks nothing unless you say so.
+
+**It looks after itself.** As I kept improving the code, I wanted every change
+to reach my own install without steps I could forget. That is why there is an
+installer that does the whole setup, launchers, an update script that brings
+in a new version and reinstalls whatever it changed, and services that start
+again on their own when their code changes. The same path updates your copy.
+
+**Light on memory.** My own computer has always been short of memory. So the
+This Computer tab lists the ordinary background programs that nothing depends
+on, and lets you stop them to free memory, with an Undo for each.
 
 ## How well it detects malware
 
