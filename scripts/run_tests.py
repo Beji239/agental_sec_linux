@@ -124,6 +124,14 @@ def coverage_start():
     data.mkdir(parents=True, exist_ok=True)
 
 
+def coverage_floor() -> float:
+    """The floor kept in .coveragerc, [agentalsec] floor, or 0."""
+    import configparser
+    cp = configparser.ConfigParser(interpolation=None)
+    cp.read(ROOT / ".coveragerc")
+    return cp.getfloat("agentalsec", "floor", fallback=0.0)
+
+
 def coverage_finish(fail_under: float):
     """Combines the per-process data, prints the report, writes the HTML.
 
@@ -294,9 +302,12 @@ def main():
                     help="print the output of passing tests too")
     ap.add_argument("--coverage", action="store_true",
                     help="measure line and branch coverage of the run")
-    ap.add_argument("--fail-under", type=float, default=0.0,
-                    help="with --coverage, fail when the total is below this")
+    ap.add_argument("--fail-under", type=float, default=None,
+                    help="with --coverage, fail when the total is below this; "
+                         "the floor in .coveragerc when not given")
     args = ap.parse_args()
+    if args.fail_under is None:
+        args.fail_under = coverage_floor()
 
     if not TESTS.is_dir():
         print(f"No tests directory at {TESTS}")

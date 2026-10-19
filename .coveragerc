@@ -18,3 +18,8 @@ precision = 1
 
 [html]
 directory = ${COV_ROOT}/coverage/html
+
+# A --coverage run fails below this. Set just under the measured total
+# (73.3% on 2026-10-19); raise it as tests are added, never lower it.
+[agentalsec]
+floor = 73.0

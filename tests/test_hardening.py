@@ -21,6 +21,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import _isolate_db                                      # noqa: E402
+_isolate_db.isolate()
 import _skip                                            # noqa: E402
 from core import own_install                            # noqa: E402
 from tools import read_helper                           # noqa: E402
