@@ -609,7 +609,10 @@ def _manager_of(entry: dict) -> str:
 
 def _unit_of(message: str) -> str:
     """The unit name a systemd line is about, or "" when it carries none."""
-    m = re.search(r'([\w@.\-]+\.(?:service|socket|mount|timer|target))'
+    # Starts only where a name starts, and a unit name is at most 255
+    # characters, so a long line cannot make this quadratic.
+    m = re.search(r'(?<![\w@.\-])([\w@.\-]{1,255}\.'
+                  r'(?:service|socket|mount|timer|target))'
                   r'(?=[\s:,\'"]|$)', message or "")
     return m.group(1) if m else ""
 

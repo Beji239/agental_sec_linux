@@ -1223,8 +1223,10 @@ def register_routes(app):
         data = request.get_json(silent=True) or {}
         domain = _text(data, "domain").lower().rstrip(".")
         reason = _text(data, "reason")
-        if not re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
-                            r"(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", domain):
+        # Labels of at most 63 characters, as DNS allows, keep this linear.
+        if len(domain) > 253 or not re.fullmatch(
+                r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+                r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+", domain):
             return jsonify({"success": False, "error": "Not a domain name."}), 400
         if not reason:
             return jsonify({"success": False,
