@@ -995,6 +995,34 @@
   .det-muted { color: var(--amber); font-size: 12px; line-height: 1.4; }
   .det-muted + .det-muted { margin-top: 8px; }
   .det-off { font-size: 11px; color: var(--text); }
+  .det-fired { margin-top: 6px; }
+  .det-fired li { margin: 3px 0 0 16px; }
+  .det-when { white-space: nowrap; }
+  .det-when small { color: var(--text-dim); margin-left: 3px; }
+
+  /* Mute panel: what the rule caught, before anything is chosen */
+  #mute-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex;
+                  align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+  #mute-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+              padding: 22px 26px; width: 980px; max-width: 100%; max-height: 90vh; overflow-y: auto;
+              font-size: 12px; color: var(--text); line-height: 1.5; }
+  #mute-box h2 { font-size: 15px; color: var(--text-hi); margin-bottom: 4px; }
+  #mute-box h3 { font-size: 12px; color: var(--text-hi); margin: 14px 0 6px; }
+  #mute-box .det-plain { margin-bottom: 6px; }
+  .mute-hint { border-left: 3px solid var(--amber); padding: 6px 10px; margin: 10px 0; background: var(--bg3); }
+  .mute-table { width: 100%; border-collapse: collapse; }
+  .mute-table th { text-align: left; font-weight: normal; color: var(--text-dim); padding: 4px 6px;
+                   border-bottom: 1px solid var(--border); }
+  .mute-table td { padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .mute-table tr.pick { cursor: pointer; }
+  .mute-table tr.pick:hover td { background: var(--bg3); }
+  .mute-table tr.chosen td { background: var(--bg3); }
+  .mute-table code { color: var(--text-hi); word-break: break-all; }
+  .mute-sub { color: var(--text-dim); }
+  #mute-reason { width: 100%; min-height: 48px; margin-top: 4px; font-size: 12px; }
+  #mute-effect { margin: 10px 0; color: var(--text-hi); }
+  #mute-error { color: var(--red); margin-bottom: 8px; }
+  #mute-go:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /*
      PROCESSES
@@ -1677,6 +1705,23 @@
 </style>
 </head>
 <body>
+
+<!-- MUTE PANEL -->
+<div id="mute-overlay" style="display:none;" role="dialog" aria-label="Mute a rule">
+  <div id="mute-box">
+    <h2 id="mute-title">Mute a rule</h2>
+    <div id="mute-body"></div>
+    <h3>Why are you muting it?</h3>
+    <textarea class="input" id="mute-reason"
+      placeholder="A short note for later, for example: my backup server, this is normal."></textarea>
+    <div id="mute-effect"></div>
+    <div id="mute-error"></div>
+    <div class="row">
+      <button class="btn primary" id="mute-go" data-onclick="confirmMute()" disabled>Mute</button>
+      <button class="btn" data-onclick="closeMute()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- API KEY MODAL -->
 <div id="key-modal-overlay" style="display:none;">
@@ -2571,12 +2616,16 @@
         nothing happened, no rule here covers it, or the rule that covers it is
         muted. This page is how you tell which.</p>
         <p><b>Mute</b> a rule that keeps firing about something you know is
-        fine, such as a backup server that sends a lot every night. You give a
-        reason, then choose one device, program, file or account, or
-        everything. Its open alerts close. The sensors keep watching, but the
-        rule raises no alert, no incident and no dot on Expectations, and what
-        it would have caught while muted is not kept. Old incidents stay as
-        they were.</p>
+        fine, such as a backup server that sends a lot every night. The Mute
+        button first lists everything the rule has caught, each address,
+        program, file or account with what happened and the dates it fired,
+        so you can pick the one you know is fine, or everything. Its open
+        alerts close. The sensors keep watching, but the
+        rule raises no alert, no incident and no dot on Expectations. What it
+        would have caught while muted is counted, who and when, but not kept
+        as an alert. Old incidents stay as they were.</p>
+        <p>Open <b>Why it is here</b> to see what set a rule off, and for a
+        muted rule, what the mute has held back since and when.</p>
         <p><b>Unmute</b> makes the rule fire again and brings back the alerts
         the mute closed. If a rule is mostly noise but sometimes right, answer
         False alarm on its alerts instead: the model learns the harmless
@@ -3664,6 +3713,10 @@ const UI_ACTIONS = new Set([
   'stopApp',
   'stopCvssBackfill',
   'suppressDetection',
+  'closeMute',
+  'confirmMute',
+  'pickMute',
+  'loadFired',
   'syncRunbook',
   'takeAnchor',
   'testProvider',
@@ -4642,8 +4695,8 @@ async function loadFindings() {
         </div>
         <div class="finding-time">${fmtTime(f.found_at)}</div>
         ${f.detection_id ? `<button class="btn-dismiss"
-                title="Mute rule ${esc(f.detection_id)} for ${esc(f.entity_value)} only, with a reason you write. Other rules about it keep reporting. Unmute it on the Detections tab."
-                data-onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}',this)">mute</button>` : ''}
+                title="Mute rule ${esc(f.detection_id)}. First shows everything it has caught, with dates, and this alert's item already picked. Unmute it on the Detections tab."
+                data-onclick="silenceFinding('${escJs(f.detection_id)}','${escJs(f.entity_type)}','${escJs(f.entity_value)}')">mute</button>` : ''}
         <button class="btn-dismiss"
                 title="Hide the alerts about ${esc(f.entity_value)}. The same rule will not raise it about this again; other rules still can. Bring it back with Show dismissed."
                 data-type="${esc(f.entity_type)}" data-value="${esc(f.entity_value)}"
@@ -4652,36 +4705,11 @@ async function loadFindings() {
   } catch(e) {}
 }
 
-// Silence one rule for one thing, from the alert itself. The reason is asked
-// for because the route requires one, and the alerts it covers close with it.
-async function silenceFinding(did, type, value, btn) {
-  const reason = prompt('Mute rule ' + did + ' for ' + value + '. Why? '
-    + 'A short note for later.\n\nOther rules about it keep reporting. '
-    + 'Unmute it on the Detections tab.');
-  if (reason === null || !reason.trim()) return false;
-  const label = btn ? btn.textContent : '';
-  if (btn) btn.textContent = '...';
-  try {
-    const r = await fetch('/api/detections/suppress', {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-      body: JSON.stringify({ detection_id: did, reason: reason.trim(),
-                             entity_type: type, entity_value: value }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok || body.error) {
-      if (btn) { btn.textContent = 'failed';
-                 btn.title = body.error || ('The app answered ' + r.status
-                             + ' and nothing was muted.'); }
-      return false;
-    }
-    loadFindings();
-    return true;
-  } catch (e) {
-    if (btn) { btn.textContent = label || 'mute';
-               btn.title = 'The request never reached the app.'; }
-    return false;
-  }
+// Mute from the alert itself opens the same panel as the Detections tab,
+// with this alert's item already picked.
+function silenceFinding(did, type, value) {
+  openMute(did, type, value);
+  return false;
 }
 
 // A FAILED DISMISS USED TO LOOK EXACTLY LIKE A SUCCESSFUL ONE.
@@ -8838,17 +8866,21 @@ function renderDetections() {
       ? sup.map(x =>
           '<div class="det-muted">Muted for '
           + esc(x.entity_value === '*' ? 'everything' : x.entity_value)
+          + ' on ' + fmtDay(x.created_at)
           + (x.reason ? ', because: ' + esc(x.reason) : '')
+          + '<br>' + (x.held_total
+              ? 'Held back ' + x.held_total + ' since, last on ' + fmtDay(x.last_held_at)
+              : 'Has held nothing back yet')
           + '<br><button class="btn-unmute" data-onclick="unsuppressDetection('
-          + "'" + esc(r.detection_id) + "','" + esc(x.entity_type) + "','"
-          + esc(x.entity_value) + "'" + ')">Unmute</button></div>'
+          + "'" + escJs(r.detection_id) + "','" + escJs(x.entity_type) + "','"
+          + escJs(x.entity_value) + "'" + ')">Unmute</button></div>'
         ).join('')
       // Records are never muted: the app must not quietly stop logging what it did.
       : (r.kind === 'action_record' || r.retired
           ? '<span class="det-off">Cannot be muted</span>'
           : '<span class="det-off">Not muted</span> '
             + '<button class="btn-mute" data-onclick="suppressDetection('
-            + "'" + esc(r.detection_id) + "','" + esc(r.entity_type) + "'"
+            + "'" + escJs(r.detection_id) + "'"
             + ')">Mute</button>');
 
     // A page that could not count shows "-" rather than a zero it cannot back.
@@ -8862,11 +8894,12 @@ function renderDetections() {
       + (r.retired && r.retired_reason
           ? '<div class="det-note" style="font-size:11px;">No longer used: '
             + esc(r.retired_reason) + '</div>' : '')
-      + '<details class="det-tech"><summary>Why it is here</summary>'
+      + '<details class="det-tech" data-ontoggle="loadFired(this,\''
+        + escJs(r.detection_id) + '\')"><summary>Why it is here</summary>'
         + (r.why ? '<div><b>Why it is here.</b> ' + esc(r.why) + '</div>' : '')
         + (r.todo ? '<div><b>When it fires.</b> ' + esc(r.todo) + '</div>' : '')
         + '<div class="det-note"><b>Exact condition.</b> ' + esc(r.summary)
-        + '</div></details>';
+        + '</div><div class="det-fired"></div></details>';
 
     return '<tr>'
       + '<td><code>' + esc(r.detection_id) + '</code></td>'
@@ -8895,36 +8928,229 @@ const SOURCE_NAMES = {
 
 // What one item of each rule is called, as its alerts name it.
 const MUTE_ITEM = {
-  ip: 'address', process: 'program or service name', user: 'account name',
-  file: 'file path or name', port: 'port',
+  ip: 'address', process: 'program', user: 'account',
+  file: 'file', port: 'port',
 };
 
-async function suppressDetection(did, et) {
-  // A reason is required by the route as well. Asking here too means the
-  // person writes it while they still remember why, rather than meeting a
-  // 400 and typing whatever gets past it.
-  const reason = prompt('Mute ' + did + '. Why? A short note for later, '
-    + 'for example: my backup server, this is normal.');
-  if (reason === null || !reason.trim()) return;
-  const item = MUTE_ITEM[et] || 'item';
-  const ev = (prompt('Mute it for one ' + item + ' only? Type the ' + item
-    + ' exactly as the alert shows it, or leave blank to mute it for '
-    + 'everything.') || '').trim() || '*';
+// A date always, the time beside it smaller. The year only when it is not this one.
+function fmtDay(ts) {
+  if (!ts) return '-';
+  const d = parseUtc(ts);
+  if (isNaN(d.getTime())) return esc(String(ts));
+  const opts = { month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return '<span class="det-when">' + esc(d.toLocaleDateString([], opts))
+    + '<small>' + esc(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+    + '</small></span>';
+}
+
+function fetchFired(did) {
+  return fetch('/api/detections/fired/' + encodeURIComponent(did),
+               { headers: authHeaders() }).then(r => r.json());
+}
+
+function itemLabel(i) {
+  return '<code>' + esc(i.entity_value) + '</code>'
+    + (i.name ? ' <span class="mute-sub">' + esc(i.name) + '</span>' : '');
+}
+
+// Under Why it is here: what actually set this rule off, loaded when opened.
+async function loadFired(el, did) {
+  const box = el.querySelector('.det-fired');
+  if (!el.open || !box || box.dataset.loaded) return;
+  box.textContent = 'Reading what set it off...';
+  let d;
+  try { d = await fetchFired(did); } catch (e) { d = null; }
+  if (!d || !d.read) {
+    box.textContent = 'Could not read what set it off, so this says nothing about whether it fired.';
+    return;
+  }
+  box.dataset.loaded = '1';
+  if (!d.items.length) {
+    box.innerHTML = '<b>What set it off.</b> Nothing yet. This rule has never fired.';
+    return;
+  }
+  const top = d.items.slice(0, 10);
+  box.innerHTML = '<b>What set it off.</b> ' + Number(d.item_count) + ' different '
+    + (d.item_count === 1 ? 'item' : 'items') + ', first on ' + fmtDay(d.first_at)
+    + ', last on ' + fmtDay(d.last_at) + '.'
+    + '<ul>' + top.map(i => '<li>' + itemLabel(i) + ': ' + esc(i.title || '')
+        + '. ' + i.fired + (i.fired === 1 ? ' time' : ' times')
+        + (i.fired > 1 ? ', first ' + fmtDay(i.first_at) + ', last ' : ', on ')
+        + fmtDay(i.last_at) + '</li>').join('') + '</ul>'
+    + (d.items.length > top.length
+        ? 'And ' + (d.item_count - top.length) + ' more; the Mute button lists them all.' : '')
+    + d.mutes.map(m => '<div style="margin-top:6px;"><b>Muted for '
+        + esc(m.entity_value === '*' ? 'everything' : m.entity_value)
+        + '</b> on ' + fmtDay(m.created_at) + '. It closed ' + m.closed
+        + ' open ' + (m.closed === 1 ? 'alert' : 'alerts') + ' then and has held back '
+        + m.held_total + ' since' + (m.held.length ? ':' : '.')
+        + (m.held.length ? '<ul>' + m.held.slice(0, 10).map(h => '<li><code>'
+            + esc(h.entity_value) + '</code>, ' + h.count + (h.count === 1 ? ' time' : ' times')
+            + ', last ' + fmtDay(h.last_at) + (h.last_title ? ': ' + esc(h.last_title) : '')
+            + '</li>').join('') + '</ul>' : '')
+        + '</div>').join('');
+}
+
+let MUTE = null;
+
+function suppressDetection(did) { openMute(did); }
+
+// The mute panel. It shows everything the rule caught, with dates, before
+// anything is picked, and says what each choice would do.
+async function openMute(did, et, ev) {
+  if (!DETECTION_DATA) {
+    try {
+      DETECTION_DATA = await fetch('/api/detections', { headers: authHeaders() }).then(r => r.json());
+    } catch (e) { /* the panel still shows what fired */ }
+  }
+  const rule = (DETECTION_DATA && DETECTION_DATA.detections || [])
+    .find(r => r.detection_id === did) || {};
+  MUTE = { did: did, rule: rule, items: [], pick: null };
+  document.getElementById('mute-title').textContent = 'Mute rule ' + did;
+  document.getElementById('mute-body').innerHTML = 'Reading what this rule has caught...';
+  document.getElementById('mute-reason').value = '';
+  document.getElementById('mute-effect').textContent = '';
+  document.getElementById('mute-error').textContent = '';
+  document.getElementById('mute-go').disabled = true;
+  document.getElementById('mute-overlay').style.display = 'flex';
+  let d;
+  try { d = await fetchFired(did); } catch (e) { d = null; }
+  if (!MUTE || MUTE.did !== did) return;
+  if (!d || !d.read) {
+    document.getElementById('mute-body').innerHTML = '<div class="mute-hint">Could not read '
+      + 'what this rule has caught, so nothing can be shown to choose from. Close this and '
+      + 'try again in a moment.</div>';
+    return;
+  }
+  MUTE.data = d;
+  MUTE.items = d.items;
+  renderMute();
+  if (ev) {
+    const k = d.items.findIndex(i => i.entity_value === ev && (!et || i.entity_type === et));
+    if (k >= 0) pickMute(String(k));
+  } else if (!d.items.length) {
+    pickMute('all');
+  }
+}
+
+function muteHint(d) {
+  const items = d.items;
+  if (!items.length) return 'This rule has never fired, so there is nothing to pick one item '
+    + 'from. Muting it now switches it off for everything it would ever catch.';
+  const total = items.reduce((n, i) => n + i.fired, 0);
+  const top = items.reduce((a, b) => (b.fired > a.fired ? b : a));
+  const serious = items.filter(i => i.severity === 'high' || i.severity === 'critical');
+  let out = '';
+  if (d.item_count === 1) {
+    out = 'Everything it has caught is one ' + (MUTE_ITEM[top.entity_type] || 'item')
+      + '. Pick it if you know it is fine; pick everything only if you also do not want to '
+      + 'hear about new ones.';
+  } else if (top.fired / total >= 0.8) {
+    out = top.fired + ' of its ' + total + ' alerts are about ' + esc(top.entity_value)
+      + '. Muting just that one quiets most of it and keeps the rule watching the rest.';
+  } else if (d.item_count >= 5) {
+    out = 'Its alerts are spread over ' + d.item_count + ' different items and new ones keep '
+      + 'appearing, so muting one item will not quiet it. Mute everything only if you '
+      + 'recognise every item below as fine; if most are fine but some might not be, answer '
+      + 'False alarm on its alerts instead and the model learns the harmless pattern.';
+  } else {
+    out = 'Pick the one item you know is fine. The rule keeps watching the others.';
+  }
+  if (serious.length) out += ' <b>' + serious.length + ' of these items raised a high or '
+    + 'critical alert.</b> Check those before muting everything.';
+  return out;
+}
+
+function renderMute() {
+  const d = MUTE.data, r = MUTE.rule;
+  const open = d.items.reduce((n, i) => n + (i.open || 0), 0);
+  const rows = d.items.map((i, k) => '<tr class="pick" data-onclick="pickMute(\'' + k + '\')">'
+    + '<td><input type="radio" name="mute-pick" value="' + k + '"></td>'
+    + '<td>' + itemLabel(i) + '<div class="mute-sub">'
+      + esc(MUTE_ITEM[i.entity_type] || i.entity_type || 'item') + '</div></td>'
+    + '<td>' + esc(i.title || '') + (i.detail ? '<div class="mute-sub">' + esc(i.detail) + '</div>' : '')
+    + '</td>'
+    + '<td>' + Number(i.fired) + (i.open ? ' <span class="mute-sub">(' + i.open + ' open)</span>' : '') + '</td>'
+    + '<td>' + fmtDay(i.first_at) + '</td>'
+    + '<td>' + fmtDay(i.last_at) + '</td></tr>').join('');
+  document.getElementById('mute-body').innerHTML =
+      '<div class="det-plain">' + esc(r.plain || r.summary || '') + '</div>'
+    + (r.why ? '<div><b>Why it is here.</b> ' + esc(r.why) + '</div>' : '')
+    + '<h3>What it has caught</h3>'
+    + (d.items.length
+        ? '<div>' + Number(d.item_count) + (d.item_count === 1 ? ' item' : ' different items')
+          + ', first on ' + fmtDay(d.first_at) + ', last on ' + fmtDay(d.last_at)
+          + (open ? ', ' + open + ' alerts still open' : '') + '.'
+          + (d.item_count > d.items.length ? ' Showing the latest ' + d.items.length + '.' : '')
+          + ' Click the one you want to mute.</div>'
+        : '')
+    + '<div class="mute-hint">' + muteHint(d) + '</div>'
+    + '<table class="mute-table"><thead><tr><th></th><th>Item</th><th>What happened, last time</th>'
+    + '<th>Times</th><th>First</th><th>Last</th></tr></thead><tbody>' + rows
+    + '<tr class="pick" data-onclick="pickMute(\'all\')"><td><input type="radio" name="mute-pick" value="all"></td>'
+    + '<td colspan="5"><b>Everything this rule catches</b><div class="mute-sub">All '
+    + (d.item_count || 'of the') + ' items above, and anything new it would catch later.</div></td></tr>'
+    + '</tbody></table>';
+}
+
+function pickMute(k) {
+  if (!MUTE || !MUTE.data) return;
+  MUTE.pick = k;
+  document.querySelectorAll('#mute-box input[name="mute-pick"]').forEach(x => {
+    x.checked = x.value === k;
+    x.closest('tr').classList.toggle('chosen', x.checked);
+  });
+  const did = MUTE.did, d = MUTE.data;
+  let txt;
+  if (k === 'all') {
+    const open = d.items.reduce((n, i) => n + (i.open || 0), 0);
+    txt = 'This switches ' + did + ' off completely. '
+      + (open ? open + ' open alerts close. ' : '')
+      + 'Nothing it sees raises an alert from now on, including things it has never seen. '
+      + 'What it holds back is counted on this tab, and Unmute brings the closed alerts back.';
+  } else {
+    const i = d.items[Number(k)];
+    txt = 'This mutes ' + did + ' for ' + i.entity_value + (i.name ? ' (' + i.name + ')' : '')
+      + ' only. ' + (i.open ? i.open + (i.open === 1 ? ' open alert closes. ' : ' open alerts close. ') : '')
+      + did + ' keeps reporting about everything else, and other rules keep reporting about '
+      + i.entity_value + '. Unmute brings the closed alerts back.';
+  }
+  document.getElementById('mute-effect').textContent = txt;
+  document.getElementById('mute-go').disabled = false;
+}
+
+function closeMute() {
+  MUTE = null;
+  document.getElementById('mute-overlay').style.display = 'none';
+}
+
+async function confirmMute() {
+  if (!MUTE || MUTE.pick === null) return;
+  const err = document.getElementById('mute-error');
+  const reason = document.getElementById('mute-reason').value.trim();
+  if (!reason) {
+    err.textContent = 'Write a short reason first. It is the record of why this stopped being reported.';
+    return;
+  }
+  const i = MUTE.pick === 'all' ? null : MUTE.items[Number(MUTE.pick)];
   try {
     const r = await fetch('/api/detections/suppress', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
       body: JSON.stringify({
-        detection_id: did, reason: reason.trim(),
-        entity_type: ev === '*' ? '*' : (et || 'ip'), entity_value: ev,
+        detection_id: MUTE.did, reason: reason,
+        entity_type: i ? i.entity_type : '*', entity_value: i ? i.entity_value : '*',
       }),
     }).then(x => x.json());
-    if (r.error) { alert(r.error); return; }
+    if (r.error) { err.textContent = r.error; return; }
   } catch (e) {
-    alert('The mute did not reach the app, so nothing was muted.');
+    err.textContent = 'The mute did not reach the app, so nothing was muted.';
     return;
   }
+  closeMute();
   loadDetections();
+  if (typeof loadFindings === 'function') loadFindings();
 }
 
 async function unsuppressDetection(did, et, ev) {

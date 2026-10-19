@@ -66,6 +66,8 @@ REVIEWED = {
         "column names kept only when a real column or in _MERGE_MOVED_FLAGS",
     ("core/memory_engine.py", "suppress_detection"):
         "_suppression_scope emits fixed text, values go in as parameters",
+    ("core/memory_engine.py", "detection_detail"):
+        "_suppression_scope emits fixed text, values go in as parameters",
     ("core/memory_engine.py", "unsuppress_detection"):
         "_suppression_scope emits fixed text, values go in as parameters",
     ("core/migrations.py", "_columns"):

@@ -117,8 +117,25 @@ r = me.save_finding(session_id="t", source="dns_inspector", severity="medium",
                     title="Possible DNS tunnel under c.example from " + OTHER,
                     detection_id="DNS-1003")
 check("a new one is not raised", r["saved"], False)
+
+d = me.detection_detail("DNS-1003")
+check("the rule's detail names what set it off, newest first",
+      [(i["entity_value"], i["fired"]) for i in d["items"]],
+      [(OTHER, 2), (DEVICE, 1)])
+check("with the date it first fired", bool(d["items"][0]["first_at"]), True)
+m = d["mutes"][0]
+check("the mute says what it closed", m["closed"], 2)
+check("and counts what it held back since", m["held_total"], 1)
+check("naming who", [h["entity_value"] for h in m["held"]], [OTHER])
+row = next(x for x in me.detection_overview()["detections"]
+           if x["detection_id"] == "DNS-1003")
+check("the register row carries the count",
+      row["suppressions"][0]["held_total"], 1)
+
 r = me.unsuppress_detection("DNS-1003", "ip", OTHER)
 check("letting it speak reopens what the silence closed", r.get("reopened"), 2)
+check("and forgets what it held back",
+      me.detection_detail("DNS-1003")["mutes"], [])
 check("and they are back in the list", len(open_rows("DNS-1003")), 2)
 
 print("\n[6] the alert list offers it")
@@ -126,9 +143,12 @@ page = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 alert_list = page.split("async function loadFindings()")[1].split(
     "\n}\n")[0]
 check("each alert has a silence button", "silenceFinding(" in alert_list, True)
-check("and it posts to the suppression route",
+check("which opens the mute panel",
+      "openMute(" in page.split("function silenceFinding(")[1].split(
+          "\n}\n")[0], True)
+check("and the panel posts to the suppression route",
       "/api/detections/suppress" in page.split(
-          "async function silenceFinding(")[1].split("\n}\n")[0], True)
+          "async function confirmMute(")[1].split("\n}\n")[0], True)
 
 print("\n" + ("ALL PASS" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

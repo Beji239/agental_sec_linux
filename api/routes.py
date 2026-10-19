@@ -2312,6 +2312,15 @@ def register_routes(app):
         """
         return jsonify(me.detection_overview())
 
+    @app.route("/api/detections/fired/<did>")
+    @require_api_key
+    def detections_fired(did):
+        """What set one rule off, item by item, and what its mutes hold back."""
+        from core import detections as det
+        if not det.exists(did):
+            return jsonify({"error": f"No detection registered as {did}"}), 404
+        return jsonify(me.detection_detail(did))
+
     @app.route("/api/detections/suppress", methods=["POST"])
     @require_api_key
     def detections_suppress():

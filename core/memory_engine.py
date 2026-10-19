@@ -6621,6 +6621,8 @@ def save_finding(session_id: str, source: str, severity: str,
         logger.info(
             f"{detection_id} not raised for {entity_value}: "
             f"{silenced.get('reason')}")
+        _count_mute_hold(detection_id, silenced, entity_type, entity_value,
+                         title)
         return {"saved": False, "detection_id": detection_id,
                 "reason": silenced.get("reason"),
                 "suppression_id": silenced.get("suppression_id")}
@@ -6730,7 +6732,8 @@ def detection_suppressed(detection_id: str, entity_type: str,
     try:
         with _get_conn() as conn:
             row = conn.execute("""
-                SELECT id, reason, entity_value FROM detection_suppression
+                SELECT id, reason, entity_type, entity_value
+                  FROM detection_suppression
                  WHERE detection_id = ?
                    AND (entity_type  = '*' OR entity_type  = ?)
                    AND (entity_value = '*' OR entity_value = ?)
@@ -6758,7 +6761,61 @@ def detection_suppressed(detection_id: str, entity_type: str,
         "suppression_id": row["id"],
         "reason": f"suppressed for {scope}: {row['reason']}",
         "checked": True,
+        "mute_type": row["entity_type"],
+        "mute_value": row["entity_value"],
     }
+
+
+# What each mute held back, one row per item, so the Detections tab can say
+# who it covered and when instead of a line in the log.
+MUTE_HELD_DDL = """CREATE TABLE IF NOT EXISTS detection_mute_held (
+    detection_id  TEXT NOT NULL,
+    mute_type     TEXT NOT NULL,
+    mute_value    TEXT NOT NULL,
+    entity_type   TEXT NOT NULL,
+    entity_value  TEXT NOT NULL,
+    count         INTEGER NOT NULL DEFAULT 0,
+    first_at      TIMESTAMP NOT NULL,
+    last_at       TIMESTAMP NOT NULL,
+    last_title    TEXT,
+    PRIMARY KEY (detection_id, mute_type, mute_value, entity_type,
+                 entity_value)
+)"""
+
+
+def _count_mute_hold(detection_id, silenced, entity_type, entity_value,
+                     title):
+    """Never blocks the hold itself; a failed count is only logged."""
+    try:
+        with _get_conn() as conn:
+            conn.execute(MUTE_HELD_DDL)
+            conn.execute("""
+                INSERT INTO detection_mute_held
+                    (detection_id, mute_type, mute_value, entity_type,
+                     entity_value, count, first_at, last_at, last_title)
+                VALUES (?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?)
+                ON CONFLICT (detection_id, mute_type, mute_value,
+                             entity_type, entity_value)
+                DO UPDATE SET count = count + 1, last_at = CURRENT_TIMESTAMP,
+                              last_title = excluded.last_title
+            """, (detection_id, silenced.get("mute_type") or "*",
+                  silenced.get("mute_value") or "*", entity_type or "",
+                  str(entity_value or "")[:300], (title or "")[:300]))
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning(f"Could not count what the mute on {detection_id} "
+                       f"held back: {e}")
+
+
+def _mute_held(conn, detection_id: str, et: str, ev: str) -> list:
+    if not _table_exists_ro(conn, "detection_mute_held"):
+        return []
+    return _rows_to_dicts(conn.execute("""
+        SELECT entity_type, entity_value, count, first_at, last_at,
+               last_title
+          FROM detection_mute_held
+         WHERE detection_id = ? AND mute_type = ? AND mute_value = ?
+         ORDER BY last_at DESC LIMIT 200
+    """, (detection_id, et, ev)).fetchall())
 
 
 def suppress_detection(detection_id: str, reason: str,
@@ -6853,6 +6910,11 @@ def unsuppress_detection(detection_id: str, entity_type: str = "*",
             """, (detection_id, et, ev))
             removed = cur.rowcount or 0
             reopened = 0
+            if removed and _table_exists_ro(conn, "detection_mute_held"):
+                conn.execute("""
+                    DELETE FROM detection_mute_held WHERE detection_id = ?
+                       AND mute_type = ? AND mute_value = ?
+                """, (detection_id, et, ev))
             if removed:
                 # Only the alerts the silencing closed come back.
                 where, args = _suppression_scope(detection_id, et, ev)
@@ -6952,7 +7014,23 @@ def detection_overview(since: str = None) -> dict:
 
     counts = detection_counts(since=since)
     supp: dict[str, list] = {}
+    held = {}
+    try:
+        with _get_readonly_conn() as conn:
+            if _table_exists_ro(conn, "detection_mute_held"):
+                for r in conn.execute("""
+                        SELECT detection_id, mute_type, mute_value,
+                               SUM(count) AS n, MAX(last_at) AS last_at
+                          FROM detection_mute_held
+                         GROUP BY detection_id, mute_type, mute_value"""):
+                    held[(r["detection_id"], r["mute_type"],
+                          r["mute_value"])] = (r["n"], r["last_at"])
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning(f"Could not count what mutes held back: {e}")
     for s in list_suppressions():
+        n, last = held.get((s["detection_id"], s["entity_type"],
+                            s["entity_value"]), (0, None))
+        s.update(held_total=n, last_held_at=last)
         supp.setdefault(s["detection_id"], []).append(s)
 
     rows = []
@@ -6981,6 +7059,122 @@ def detection_overview(since: str = None) -> dict:
                        "The findings table could not be read, so every count "
                        "here is 'I could not look', not zero."),
     }
+
+# Home network ranges only; is_private also counts documentation ranges.
+_HOME_NETS = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+              "169.254.0.0/16", "fc00::/7", "fe80::/10")
+
+
+def _item_names(conn, items: list) -> dict:
+    """{value: name} for addresses: the device's name, else a DNS name."""
+    import ipaddress
+    ips = [i["entity_value"] for i in items if i["entity_type"] == "ip"]
+    out = {}
+    if not ips:
+        return out
+    if _table_exists_ro(conn, "known_devices"):
+        marks = ",".join("?" * len(ips))
+        for r in conn.execute(
+                f"SELECT ip, known_as, hostname FROM known_devices "
+                f"WHERE ip IN ({marks}) AND merged_into IS NULL "
+                f"ORDER BY last_seen", ips):
+            if r["known_as"] or r["hostname"]:
+                out[r["ip"]] = r["known_as"] or r["hostname"]
+    try:
+        from core import place_map
+        for ip, names in place_map.names_for(
+                [i for i in ips if i not in out]).items():
+            if names:
+                out[ip] = names[0]
+    except Exception as e:                                  # noqa: BLE001
+        logger.debug(f"detection_detail: DNS names unreadable: {e}")
+    for ip in ips:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        home = any(a in ipaddress.ip_network(n) for n in _HOME_NETS
+                   if ipaddress.ip_network(n).version == a.version)
+        where = "on your network" if home else "outside your network"
+        out[ip] = f"{out[ip]}, {where}" if ip in out else where
+    return out
+
+
+def detection_detail(detection_id: str, limit: int = 200) -> dict:
+    """
+    What actually set one rule off: each address, program, file or account
+    behind its alerts, with counts and dates, and what each mute holds back.
+    """
+    from core import detections as det
+    det.get(detection_id)
+    out = {"detection_id": detection_id, "items": [], "item_count": 0,
+           "mutes": [], "first_at": None, "last_at": None, "read": False}
+    try:
+        with _get_readonly_conn() as conn:
+            head = conn.execute("""
+                SELECT COUNT(DISTINCT entity_type || ':' || entity_value) AS n,
+                       MIN(found_at) AS first_at, MAX(found_at) AS last_at
+                  FROM findings WHERE detection_id = ?
+            """, (detection_id,)).fetchone()
+            out.update(item_count=head["n"] or 0,
+                       first_at=_to_iso_utc(head["first_at"]),
+                       last_at=_to_iso_utc(head["last_at"]))
+            items = _rows_to_dicts(conn.execute("""
+                SELECT entity_type, entity_value,
+                       COUNT(*) AS fired,
+                       SUM(CASE WHEN dismissed = 0 THEN 1 ELSE 0 END) AS open,
+                       MIN(found_at) AS first_at, MAX(found_at) AS last_at,
+                       MAX(id) AS last_id
+                  FROM findings WHERE detection_id = ?
+                 GROUP BY entity_type, entity_value
+                 ORDER BY last_at DESC LIMIT ?
+            """, (detection_id, int(limit))).fetchall())
+            latest = {}
+            ids = [i["last_id"] for i in items]
+            for k in range(0, len(ids), 500):
+                chunk = ids[k:k + 500]
+                for r in conn.execute(
+                        f"SELECT id, title, description, severity FROM "
+                        f"findings WHERE id IN ({','.join('?' * len(chunk))})",
+                        chunk):
+                    latest[r["id"]] = r
+            names = _item_names(conn, items)
+            for i in items:
+                r = latest.get(i.pop("last_id"))
+                # The first line that says more than the item's own name.
+                lines = [ln.strip() for ln in
+                         ((r["description"] or "") if r else "").split("\n")]
+                desc = next((ln for ln in lines if ln and
+                             i["entity_value"] not in ln), "")
+                i.update(title=r["title"] if r else None,
+                         detail=desc[:240] or None,
+                         severity=r["severity"] if r else None,
+                         name=names.get(i["entity_value"]))
+            out["items"] = items
+
+            for m in list_suppressions():
+                if m["detection_id"] != detection_id:
+                    continue
+                where, args = _suppression_scope(
+                    detection_id, m["entity_type"], m["entity_value"])
+                closed = conn.execute(f"""
+                    SELECT COUNT(*) FROM findings
+                     WHERE dismissed = 1 AND dismissed_reason LIKE ?
+                       AND {where}
+                """, [RULE_SILENCED_MARK + "%"] + args).fetchone()[0]
+                held = _mute_held(conn, detection_id, m["entity_type"],
+                                  m["entity_value"])
+                out["mutes"].append({
+                    **m, "closed": closed, "held": held,
+                    "held_total": sum(h["count"] for h in held),
+                    "last_held_at": max((h["last_at"] for h in held),
+                                        default=None)})
+            out["read"] = True
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning(f"Could not read what fired {detection_id}: {e}")
+        out["error"] = str(e)
+    return out
+
 
 def query_endpoint_pairs(session_id: str = None, since: str = None) -> list[dict]:
     """
