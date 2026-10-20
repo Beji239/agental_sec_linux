@@ -5990,11 +5990,20 @@ class LinuxAutorunMonitor(_BaseAdapter):
                 "set sensors.autorun_monitor.enabled = true in config.json to "
                 "turn it back on.")
             return out
+        # What the Health tab says instead of "off": it reads when asked.
+        out["on_demand"] = (
+            "On demand: it reads systemd units, cron jobs, init.d scripts and "
+            "shell startup files when the analyst asks (query_autoruns), not "
+            "on a clock. Changes to the system's units and cron are also "
+            "recorded as they happen by the audit watches, when they are "
+            "installed.")
         if counts:
             out["counts"] = counts
             out["note"] = (f"{sum(counts.values())} autorun entries read: "
                            + ", ".join(f"{v} {k}" for k, v in counts.items())
                            + ". " + out["note"])
+            out["on_demand"] += (f" Last read this run: "
+                                 f"{sum(counts.values())} entries.")
         else:
             out["note"] = ("Nothing has been enumerated yet this session. "
                            "That is a statement about when this was asked, "

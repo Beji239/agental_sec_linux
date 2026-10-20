@@ -353,5 +353,29 @@ else:
               "capture_reason" in (last["status"].get("sniffer") or {}),
               list((last["status"].get("sniffer") or {}))[:8])
 
+    # A restart on new code leaves its last report standing, so the core
+    # neither goes blind nor raises for a stop that is back in seconds.
+    with me._get_conn() as c:
+        c.execute("DELETE FROM sensor_service")
+    code = ("import itertools, json; from core import capture_service as cs; "
+            "n = itertools.count(); "
+            "cs.code_stamp = lambda root=None: (next(n) > 2,); "
+            "cs.run(json.load(open('config.linux.example.json')), "
+            "report_seconds=1, stop_after=30)")
+    t0 = time.time()
+    p = subprocess.run(["unshare", "-rn", "sh", "-c",
+                        f"ip link set lo up; {sys.executable} -c \"{code}\""],
+                       cwd=ROOT, env=env, capture_output=True, text=True,
+                       timeout=120)
+    last = cs.latest()
+    check("a code change ends the run early",
+          p.returncode == 0 and time.time() - t0 < 25,
+          (p.returncode, p.stderr[-800:]))
+    check("and leaves the last report standing, not a stop",
+          bool(last) and not last["stopped_at"], last and last["stopped_at"])
+    check("so the core sees no stopped service while it restarts",
+          bool(last) and cs.RemoteCapture()._report()[1] is None,
+          last and cs.RemoteCapture()._report()[1])
+
 print("\nALL PASSED" if not failures else f"\nFAILED: {failures}")
 sys.exit(1 if failures else 0)

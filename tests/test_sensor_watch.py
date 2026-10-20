@@ -129,6 +129,19 @@ f.lv["started"] = False
 f.st = {"note": "No router agent is configured."}
 check("never started is off", sw.assess("x", f, T)["state"], "off")
 f = Fake(started_at=T)
+f.lv["started"] = False
+f.st = {"on_demand": "On demand: it reads when asked."}
+a = sw.assess("x", f, T)
+check("a sensor that reads when asked is off, marked on demand",
+      (a["state"], a.get("use"), a["reason"]),
+      ("off", "on demand", "On demand: it reads when asked."))
+f.st["off_by_config"] = True
+check("switched off wins over on demand",
+      sw.assess("x", f, T).get("use"), None)
+check("on demand is not counted as switched off",
+      {k: sw.summary([a, {"sensor": "y", "state": "off", "reason": "r"}], T)[k]
+       for k in ("off", "standby")}, {"off": 1, "standby": 1})
+f = Fake(started_at=T)
 f.st["capture_state"] = {"alive": False, "failure": "interface gone"}
 check("a stopped packet capture is quiet",
       sw.assess("x", f, T)["state"], "quiet")
@@ -231,6 +244,25 @@ lt = sw.LoopTracker(300, idle=lambda: "waiting for a resolver")
 check("a collector with nothing to read is off, with the reason",
       sw.assess("dns_monitor", lt, T), {"sensor": "dns_monitor", "state": "off",
                                         "reason": "waiting for a resolver"})
+lt = sw.LoopTracker(600, idle=lambda: {"reason": "Not in use here.",
+                                       "use": "not in use"})
+check("a collector this install does not use says not in use",
+      sw.assess("router_monitor", lt, T),
+      {"sensor": "router_monitor", "state": "off", "reason": "Not in use here.",
+       "use": "not in use"})
+from tools import router_monitor as rmon
+off_cfg = {"router_monitor": {"enabled": False, "host": "192.0.2.1"}}
+why = rmon.idle_why({**off_cfg, "gateway": {"enabled": True}})
+check("router SNMP off beside the router agent: not in use, says why",
+      (why["use"], "router agent already reads" in why["reason"]),
+      ("not in use", True))
+why = rmon.idle_why(off_cfg)
+check("router SNMP off with no router agent: points at both ways",
+      ("Devices tab" in why["reason"], "router agent" in why["reason"]),
+      (True, True))
+check("a router SNMP problem other than off stays a plain reason",
+      rmon.idle_why({"router_monitor": {"enabled": True, "host": ""}}),
+      "no router address set in config.json")
 reading = {"why": None}
 lt = sw.LoopTracker(300, idle=lambda: reading["why"])
 lt.begin(FakeThread())

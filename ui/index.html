@@ -1961,6 +1961,7 @@
   .hl-chip.hl-quiet .hl-chip-dot { background: var(--red); box-shadow: 0 0 8px var(--red); animation: hl-beat 0.9s ease-in-out infinite; }
   .hl-chip.hl-off { opacity: 0.55; }
   .hl-chip.hl-off .hl-chip-dot { border: 1px solid var(--text-dim); }
+  .hl-chip.hl-standby { opacity: 0.8; }
   .hl-chip-fact { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
   @keyframes hl-beat { 50% { opacity: 0.35; } }
 
@@ -4768,7 +4769,9 @@ async function refreshSensorWatch() {
   hlWatch(w);
   const tip = quiet.length
     ? quiet.map(s => `${s.sensor.replace(/_/g, ' ')}: ${s.reason}`).join('\n')
-    : (w.checked_at ? `${w.ok} collecting, ${w.off} switched off` : 'The first check runs a minute after start');
+    : (w.checked_at ? `${w.ok} collecting, ${w.off} switched off`
+                      + (w.standby ? `, ${w.standby} on demand or not in use` : '')
+                    : 'The first check runs a minute after start');
   setPill('pill-sensors', w.checked_at ? (quiet.length ? 'error' : 'ok') : '',
           w.label || 'Sensors', tip + '\nClick for details');
   const box = document.getElementById('sensor-watch-detail');
@@ -5242,10 +5245,10 @@ const HL_KEEP = 45;           // samples per sparkline, six minutes at 8 s
 const HL_NAMES = {
   packet_sniffer: 'Packet capture', dns_monitor: 'DNS watch',
   lan_live: 'Live LAN', gateway: 'Router agent', port_owner: 'Port owners',
-  router_monitor: 'Router monitor', process_monitor: 'Processes',
+  router_monitor: 'Router SNMP', process_monitor: 'Processes',
   ebpf_events: 'Kernel camera', auditd: 'Audit log',
   event_monitor: 'System logs', local_integrity: 'File integrity',
-  av_scanner: 'Virus scan', registry_monitor: 'Autoruns',
+  av_scanner: 'Virus scan', registry_monitor: 'Startup items',
   root_helpers: 'Root helpers', expectations: 'Expectations',
   place_watch: 'Place watch',
 };
@@ -5284,6 +5287,13 @@ function hlSensors() {
 function hlStateOf(name) {
   const s = hlSensors().find(x => x.sensor === name);
   return s ? s.state : null;
+}
+
+// "on demand" or "not in use" for a sensor that is off by its nature, not
+// switched off; the watch says which.
+function hlUseOf(name) {
+  const s = hlSensors().find(x => x.sensor === name);
+  return s && s.state === 'off' && s.use ? s.use : '';
 }
 
 // A short live fact for a chip, from the module's own numbers.
@@ -5361,14 +5371,17 @@ function hlRender() {
   const sensors = hlSensors();
   const quiet = sensors.filter(s => s.state === 'quiet');
   const ok = sensors.filter(s => s.state === 'ok');
-  const off = sensors.filter(s => s.state === 'off');
+  const off = sensors.filter(s => s.state === 'off' && !s.use);
+  const standby = sensors.filter(s => s.state === 'off' && s.use);
   const checked = HL.watch && HL.watch.checked_at;
 
   document.getElementById('hl-hero').classList.toggle('hl-alarm', quiet.length > 0);
   document.getElementById('hl-count').textContent =
     checked ? `${ok.length}/${ok.length + quiet.length}` : '-';
   document.getElementById('hl-count-lbl').textContent =
-    checked ? (off.length ? `collecting, ${off.length} off` : 'collecting') : 'sensors';
+    checked ? ['collecting'].concat(off.length ? [`${off.length} off`] : [],
+                                    standby.length ? [`${standby.length} on demand or not in use`] : []).join(', ')
+            : 'sensors';
   document.getElementById('hl-headline').textContent = !checked
     ? 'Waiting for the first sensor check'
     : quiet.length
@@ -5392,7 +5405,7 @@ function hlRender() {
     const r = 39;                     // percent of the radar from its centre
     const x = 50 + r * Math.cos(a), y = 50 + r * Math.sin(a);
     return `<button class="hl-blip hl-${esc(s.state)}${HL.sel === s.sensor ? ' hl-sel' : ''}"`
-         + ` data-hl-sensor="${esc(s.sensor)}" title="${esc(hlName(s.sensor))}: ${esc(s.state)}"`
+         + ` data-hl-sensor="${esc(s.sensor)}" title="${esc(hlName(s.sensor))}: ${esc(hlUseOf(s.sensor) || s.state)}"`
          + ` style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--hl-delay:${(i * 0.37).toFixed(2)}s"></button>`;
   }).join('');
 
@@ -5427,8 +5440,9 @@ function hlRender() {
          + `<div class="hl-lane-bar"><span style="width:${pct}%;${good < on ? 'background:var(--red)' : ''}"></span></div>`
          + `<div class="hl-chips">` + names.map(x => {
              const st = hlStateOf(x) || 'off';
-             const fact = hlFact(x);
-             return `<button class="hl-chip hl-${esc(st)}${HL.sel === x ? ' hl-sel' : ''}" data-hl-sensor="${esc(x)}">`
+             const use = hlUseOf(x);
+             const fact = hlFact(x) || use;
+             return `<button class="hl-chip hl-${esc(st)}${use ? ' hl-standby' : ''}${HL.sel === x ? ' hl-sel' : ''}" data-hl-sensor="${esc(x)}">`
                   + `<span class="hl-chip-dot"></span>${esc(hlName(x))}`
                   + (fact ? `<span class="hl-chip-fact">${esc(fact)}</span>` : '') + `</button>`;
            }).join('') + `</div></div>`;
@@ -5458,7 +5472,7 @@ function hlDrawer() {
   const own = mod && typeof mod === 'object' && (mod.headline || mod.note);
   box.className = 'hl-drawer hl-' + s.state;
   box.innerHTML = `<div class="hl-drawer-h"><span class="hl-drawer-name">${esc(hlName(name))}</span>`
-    + `<span class="hl-state hl-${esc(s.state)}">${esc(s.state === 'ok' ? 'collecting' : s.state)}</span>`
+    + `<span class="hl-state hl-${esc(s.state)}">${esc(s.state === 'ok' ? 'collecting' : (hlUseOf(name) || s.state))}</span>`
     + `<button class="hl-drawer-x" data-hl-close="1" title="Close">&#x2715;</button></div>`
     + (s.reason && s.reason !== 'collecting' ? `<p>${esc(s.reason)}</p>` : '')
     + (own && own !== s.reason ? `<p>${esc(own)}</p>` : '')

@@ -72,6 +72,9 @@ def _minutes(seconds: float) -> str:
 def assess(name: str, mod, now: float = None) -> dict | None:
     """
     One sensor: {"sensor", "state", "reason"}, state ok, quiet or off.
+    An off row may carry "use": "on demand" for a sensor that reads only when
+    asked, or "not in use" for one this install has no use for, so the page
+    can say so instead of showing it as switched off.
     None for a module that is not a polling sensor.
     """
     now = time.time() if now is None else now
@@ -89,13 +92,16 @@ def assess(name: str, mod, now: float = None) -> dict | None:
         st = {"_error": f"{type(e).__name__}: {e}"}
     st = st if isinstance(st, dict) else {}
 
-    def row(state, reason):
-        return {"sensor": name, "state": state, "reason": reason}
+    def row(state, reason, use=None):
+        out = {"sensor": name, "state": state, "reason": reason}
+        if use:
+            out["use"] = use
+        return out
 
     if st.get("off_by_config"):
         return row("off", "switched off in Settings")
     if st.get("idle_reason"):
-        return row("off", st["idle_reason"])
+        return row("off", st["idle_reason"], st.get("idle_use"))
     eng = st.get("engine")
     if isinstance(eng, dict) and eng.get("installed") is False:
         return row("off", "its scanning engine is not installed")
@@ -103,6 +109,8 @@ def assess(name: str, mod, now: float = None) -> dict | None:
         return row("quiet", f"could not report its own health ({st['_error']})")
     if st.get("blind"):
         return row("quiet", f"cannot see: {st.get('blind_reason') or 'no reason given'}")
+    if st.get("on_demand") and not lv.get("started"):
+        return row("off", st["on_demand"], "on demand")
     if not lv.get("started"):
         return row("off", st.get("reason") or st.get("note") or "not started")
     if not lv.get("running"):
@@ -168,6 +176,9 @@ class LoopTracker:
             why = self._idle()
         except Exception as e:
             return {"_error": f"{type(e).__name__}: {e}"}
+        if isinstance(why, dict):
+            return ({"idle_reason": why.get("reason"), "idle_use": why.get("use")}
+                    if why.get("reason") else {})
         return {"idle_reason": why} if why else {}
 
 
@@ -316,7 +327,8 @@ def summary(rows: list, checked_at: float = None) -> dict:
         label = "All sensors OK"
     return {"label": label, "quiet": len(quiet),
             "ok": sum(1 for r in rows if r["state"] == "ok"),
-            "off": sum(1 for r in rows if r["state"] == "off"),
+            "off": sum(1 for r in rows if r["state"] == "off" and not r.get("use")),
+            "standby": sum(1 for r in rows if r["state"] == "off" and r.get("use")),
             "checked_at": _sql(checked_at) if checked_at else None,
             "sensors": sorted(rows, key=lambda r: (r["state"] != "quiet",
                                                    r["state"] != "ok",

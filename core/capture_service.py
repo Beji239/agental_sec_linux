@@ -254,6 +254,7 @@ def run(config: dict, report_seconds: int = REPORT_SECONDS,
     sniffer = LinuxPacketSniffer(session_id, config)
     sniffer.start()
     stamp = code_stamp()
+    restarting = False
     logger.info(f"Capture service started, process {os.getpid()} as "
                 f"{pwd.getpwuid(os.geteuid()).pw_name}.")
     try:
@@ -268,15 +269,24 @@ def run(config: dict, report_seconds: int = REPORT_SECONDS,
             if code_stamp() != stamp:
                 logger.info("The app's code changed; stopping so systemd "
                             "starts the service again on the new code.")
+                restarting = True
                 break
             stop.wait(report_seconds)
     finally:
         try:
             sniffer.stop()
         finally:
-            try:
-                report(_snapshot(sniffer), started, stopped=True)
-            except Exception as e:                          # noqa: BLE001
-                logger.error(f"capture service final report failed: {e}")
-            logger.info("Capture service stopped.")
+            # A restart on new code is back in seconds, so the last report
+            # stands and the core does not go blind or raise for it. If the
+            # new process never reports, that report goes stale in
+            # STALE_SECONDS and the core says so.
+            if restarting:
+                logger.info("Capture service stopped for the restart; its "
+                            "last report stands until the new one.")
+            else:
+                try:
+                    report(_snapshot(sniffer), started, stopped=True)
+                except Exception as e:                      # noqa: BLE001
+                    logger.error(f"capture service final report failed: {e}")
+                logger.info("Capture service stopped.")
     return 0

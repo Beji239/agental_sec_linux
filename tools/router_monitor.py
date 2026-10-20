@@ -1224,9 +1224,30 @@ def tracker(config: dict):
         block = (config or {}).get("router_monitor", {}) or {}
         _tracker = LoopTracker(
             max(1, int(block.get("interval_minutes", 10) or 10)) * 60,
-            idle=lambda: (None if status(config)["available"]
-                          else status(config)["reason"]))
+            idle=lambda: idle_why(config))
     return _tracker
+
+
+def idle_why(config: dict):
+    """Why the collector is not reading, for the Health tab. Switched off is
+    "not in use" there, with what the collector is for, since most routers
+    do not offer SNMP and the router agent does the same job over SSH."""
+    st = status(config)
+    if st["available"]:
+        return None
+    if st["reason"] != "turned off in config.json":
+        return st["reason"]
+    gateway = (config or {}).get("gateway") or {}
+    if gateway.get("enabled"):
+        why = ("Not in use here. It reads a router's own tables over SNMP, "
+               "for routers that offer it. The router agent already reads "
+               "this router, so it stays switched off in config.json.")
+    else:
+        why = ("Not in use: switched off in config.json. It reads a router's "
+               "own tables over SNMP. Turn it on from the Devices tab if your "
+               "router offers SNMP, or enroll the router agent instead "
+               "(SETUP.md).")
+    return {"reason": why, "use": "not in use"}
 
 
 def ensure_collector(config: dict, session_id: str) -> bool:
