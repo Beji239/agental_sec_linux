@@ -268,9 +268,17 @@ would put every device on it at risk, so I never did.
 
 What the tests here do cover:
 
-- **Each detection fires.** Harmless stand-ins play the part of an attack: a
-  program started from a temporary folder, a fake program wearing a system
-  name, a regular check-in to a test server, a domain from a threat feed.
+- **Every sensor is tested by acting out the attack.** Packet capture and the
+  beacon detector, the eBPF camera, auditd, the DNS and threat feed checks,
+  the LAN and router watch, file integrity and autoruns each have their own
+  tests. Harmless stand-ins play the attacker: a program started from a
+  temporary folder, a fake program wearing a system name, a regular check-in
+  to a test server, a lookup of a domain from a threat feed, a new autostart
+  entry.
+- **The network tests use real traffic.** Real packets, raw sockets and
+  firewall rules run inside an isolated network namespace, so the detections
+  and blocks are exercised for real while nothing reaches the home network.
+- **Blocks are tested as well as alarms,** on this machine and on the router.
 - **Each detection stays quiet on normal use.** The same rules run against
   everyday activity on a real home network, and the noisy ones were tuned
   until they stopped raising alarms about ordinary devices and services.
@@ -278,6 +286,9 @@ What the tests here do cover:
   files in temporary and download folders are scanned against ClamAV's
   signatures, tested with the standard EICAR test file. This finds known
   malware families only; how much it catches depends on ClamAV's database.
+- **AgentalSec's own code is checked too.** Bandit, Semgrep, pip-audit,
+  gitleaks, Trivy and ShellCheck are part of the test suite, and the web API
+  is scanned with OWASP ZAP on a throwaway copy.
 
 What they cannot tell you:
 
@@ -293,6 +304,33 @@ antivirus: it scans on a schedule rather than at the moment a file is opened,
 and it does not scan memory. So treat it as a second pair of eyes, and its
 findings as leads to follow up. If you can test it in a proper malware lab,
 your results would be very welcome.
+
+## Where better detection will come from
+
+This is planned, not built yet. Each part will be an optional module in its
+own repository, and AgentalSec keeps working the same without them.
+
+- **A sandbox.** A throwaway Linux virtual machine, reset to a clean copy
+  before every job, with its network off by default. The agent can unpack
+  and read an unknown file there and, with your OK, run it and watch what it
+  does, without risking your computer. It needs a computer with
+  virtualization switched on.
+- **Hold before it runs.** When a new, unknown program tries to start from
+  Downloads, a temporary folder or a USB stick, fast fixed rules pause it,
+  and the agent checks it. Only if the agent finds a real problem does the
+  pause become a quarantine; if it finds nothing, the pause is lifted.
+  Nothing is deleted or blocked for good without your approval, and a
+  quarantined file can always be restored.
+- **More ways to recognise a file.** YARA rules next to ClamAV, and a
+  known-good lookup so ordinary software stops raising questions.
+- **Ransomware tripwires.** Decoy files that nothing legitimate ever touches,
+  and a watch for many files being rewritten at once. Both work without the
+  internet.
+
+The sandbox also changes the testing story. It is the first safe place on a
+home computer to run real samples, a few at a time, with a record of which
+ones were caught. That is still not a malware lab, but it is a step toward
+one.
 
 ## Keeping itself honest
 
