@@ -3951,12 +3951,14 @@ function startPolling() {
     checkQuestionPopup();
     refreshActionBadge();
     refreshAlertBadge();
+    if (currentPage !== 'alerts' && currentPage !== 'dashboard') refreshFindingsBadge();
   }, 8000);
   updateStatusPills();
   refreshModelInfo();
   refreshQuestionBadge();
   refreshActionBadge();
   refreshAlertBadge();
+  refreshFindingsBadge();
 }
 
 async function updateStatusPills() {
@@ -4528,6 +4530,24 @@ function statTile(mod, field, fallback) {
   return fallback ? '\u2713' : '0';
 }
 
+// The Alerts tab counter, kept by the poll on every tab. It used to be set
+// only by the dashboard, so it stayed hidden until the dashboard was opened
+// and then kept that visit's number. /api/findings returns 50 rows at most,
+// so a full page reads 50+.
+function setFindingsBadge(rows) {
+  const badge = document.getElementById('alert-badge');
+  if (!badge || !Array.isArray(rows)) return;
+  badge.textContent = rows.length >= 50 ? '50+' : rows.length;
+  badge.style.display = rows.length > 0 ? 'inline' : 'none';
+}
+
+async function refreshFindingsBadge() {
+  try {
+    setFindingsBadge(await fetch('/api/findings',
+      { headers: authHeaders() }).then(r => r.json()));
+  } catch (e) {}
+}
+
 async function loadDashboard() {
   try {
     const [f, p, e, d, r, s] = await Promise.all([
@@ -4555,13 +4575,7 @@ async function loadDashboard() {
     document.getElementById('stat-devices').textContent  =
       (Array.isArray(d) ? d.filter(x => !x.merged_into).length : 0);
 
-    const badge = document.getElementById('alert-badge');
-    if (f.length > 0) {
-      badge.textContent = f.length;
-      badge.style.display = 'inline';
-    } else {
-      badge.style.display = 'none';
-    }
+    setFindingsBadge(f);
 
     if (r && r.rolled_at) {
       document.getElementById('rollup-info').textContent =
@@ -4684,6 +4698,7 @@ async function demoteFinding(id, btn) {
 async function loadFindings() {
   try {
     const rows = await fetch('/api/findings', { headers: authHeaders() }).then(r=>r.json());
+    setFindingsBadge(rows);
     const el   = document.getElementById('findings-list');
     if (!rows.length) { el.innerHTML = '<div class="empty-state">No active findings.</div>'; return; }
     el.innerHTML = rows.map(f => `
