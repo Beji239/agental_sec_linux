@@ -22,6 +22,10 @@ ACTIONS = ("install", "upgrade", "configure", "trigproc")
 MERGED = (("/usr/lib/", "/lib/"), ("/usr/bin/", "/bin/"),
           ("/usr/sbin/", "/sbin/"), ("/usr/lib64/", "/lib64/"))
 LOG_CACHE_SECONDS = 30
+# Names dpkg gives a file while it unpacks or keeps a conffile. No package
+# owns them, so they are judged by the file they stand beside.
+DPKG_TEMP = (".dpkg-new", ".dpkg-tmp", ".dpkg-old", ".dpkg-dist",
+             ".dpkg-bak")
 
 _log_cache = {"at": 0.0, "mtime": None, "rows": []}
 
@@ -34,6 +38,15 @@ def _spellings(path: str) -> list:
         elif path.startswith(old):
             out.append(new + path[len(old):])
     return out
+
+
+def dpkg_temp_base(path: str) -> str | None:
+    """The real path behind one of dpkg's temporary names, else None."""
+    for suffix in DPKG_TEMP:
+        if path.endswith(suffix) and len(path) > len(suffix) and \
+                not path[:-len(suffix)].endswith("/"):
+            return path[:-len(suffix)]
+    return None
 
 
 def owner(path: str) -> str | None:
@@ -177,6 +190,17 @@ def _explains(path: str, at: datetime = None, depth: int = 0) -> dict | None:
         hit = _explains(target, at, depth + 1) if target != path else None
         if hit:
             return dict(hit, how=f"a link to {target}, " + hit["how"])
+    base = dpkg_temp_base(path)
+    if base:
+        # Its content is the new version, which dpkg has not recorded yet,
+        # so only the owner of the real file and its timing are checked.
+        pkg = owner(base)
+        act = recent_action(pkg, times) if pkg else None
+        if not act:
+            return None
+        return {"package": pkg, "action": act["action"], "at": act["at"],
+                "how": f"dpkg's temporary copy of {base}, owned by {pkg}, "
+                       f"{act['action']} at {act['at']}"}
     pkg = owner(path)
     if not pkg:
         return None

@@ -236,7 +236,11 @@ print("[AR-8] A REFUSAL TO LOOK IS REPORTED, NOT RETURNED AS A ZERO")
 
 _spool = getattr(am.get_cron_jobs, "user_spool", {})
 check_true("the per-user crontab spool is reported", bool(_spool.get("path")))
-if not os.access("/var/spool/cron/crontabs", os.R_OK | os.X_OK):
+if _spool.get("via") == "read helper":
+    # Refused to this account, read as root by the read-only helper.
+    check("a spool read through the helper says readable",
+          (_spool.get("readable"), _spool.get("refusal")), (True, None))
+elif not os.access("/var/spool/cron/crontabs", os.R_OK | os.X_OK):
     check("an unreadable spool is recorded as unreadable",
           _spool.get("readable"), False)
     check_true("and the refusal is carried in words",

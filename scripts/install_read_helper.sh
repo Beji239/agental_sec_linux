@@ -78,7 +78,7 @@ DROP_IN_CONTENT="$(cat <<EOF
 # No install time here, so the app can check this file by its hash.
 #
 # WHAT THIS GRANTS: the account below may run ONE script, as root, with NO
-# password, with one of seven fixed words (or --verbs, which reads nothing).
+# password, with one of eight fixed words (or --verbs, which reads nothing).
 # It cannot read an arbitrary file, it cannot run an arbitrary command, and
 # it cannot pass a path.
 #
@@ -88,7 +88,8 @@ DROP_IN_CONTENT="$(cat <<EOF
 # proc_exe lets the process sensor see which file another account's
 # process is running. firewall_rules lets the app check its own blocks are in
 # place, since ufw and nft only show the ruleset to root. btmp lets the event
-# monitor read failed logins that no text log kept.
+# monitor read failed logins that no text log kept. user_crontabs lets the
+# autorun check read every account's own cron jobs.
 #
 # TO REVOKE: sudo rm $SUDOERS_FILE   (and $HELPER_DST)
 #
@@ -102,6 +103,7 @@ $REAL_USER ALL=(root) NOPASSWD: $HELPER_DST sudoers, \\
     $HELPER_DST proc_exe, \\
     $HELPER_DST firewall_rules, \\
     $HELPER_DST btmp, \\
+    $HELPER_DST user_crontabs, \\
     $HELPER_DST --verbs
 EOF
 )"
@@ -173,7 +175,7 @@ verify() {
 
     say ""
     say "  reading the three file sets it exists for:"
-    for verb in sudoers sudoers_d root_ssh proc_exe firewall_rules btmp; do
+    for verb in sudoers sudoers_d root_ssh proc_exe firewall_rules btmp user_crontabs; do
         local res
         res="$(sudo -n "$HELPER_DST" "$verb" 2>&1)"
         if printf '%s' "$res" | grep -q '"ok": true'; then
@@ -258,7 +260,7 @@ so nothing was changed. Run 'sudo visudo -c' yourself to see why."
     say ""
     say "A note on what just happened and how to undo it:"
     say "  the account $REAL_USER may now run ONE script as root, without a"
-    say "  password, with one of seven fixed words and no other argument. That"
+    say "  password, with one of eight fixed words and no other argument. That"
     say "  is the whole grant."
     say "  TO UNDO:  sudo rm $SUDOERS_FILE $HELPER_DST"
     say ""

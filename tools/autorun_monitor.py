@@ -754,6 +754,15 @@ def get_cron_jobs() -> list[dict]:
     }
     if cron_spool and cron_spool.is_dir():
         user_crons, refusal = _list_dir_safe(cron_spool)
+        helper_tabs = _user_crontabs_via_helper() if refusal else None
+        if helper_tabs is not None:
+            # Read as root by the read-only helper, links never followed.
+            refusal = None
+            user_crons = []
+            get_cron_jobs.user_spool.update(readable=True, via="read helper")
+            for name, content in helper_tabs:
+                jobs.extend(_user_cron_jobs(name, str(cron_spool / name),
+                                            content))
         get_cron_jobs.user_spool["refusal"] = refusal
         if refusal:
             logger.warning(
@@ -765,27 +774,51 @@ def get_cron_jobs() -> list[dict]:
                 f"{_file_owner(cron_spool)}.")
         for user_cron in user_crons:
             content, refusal = _read_file_safe(user_cron)
-            if refusal:
+            if refusal or not content:
                 continue
-            if not content:
-                continue
-            for line_num, line in enumerate(content.split("\n"), 1):
-                parsed = _parse_crontab_line(line)
-                if parsed is None:
-                    continue
-                jobs.append({
-                    "name":     f"{user_cron.name}:{line_num}",
-                    "path":     str(user_cron),
-                    "schedule": parsed["schedule"],
-                    "command":  _cap(parsed["command"]),
-                    "user":     user_cron.name,
-                    "type":     "user_cron",
-                    "line":     line_num,
-                })
+            jobs.extend(_user_cron_jobs(user_cron.name, str(user_cron),
+                                        content))
         get_cron_jobs.user_spool["entries"] = sum(
             1 for j in jobs if j.get("type") == "user_cron")
 
     return jobs
+
+
+def _user_cron_jobs(user: str, path: str, content: str) -> list:
+    """The jobs in one account's crontab."""
+    out = []
+    for line_num, line in enumerate(content.split("\n"), 1):
+        parsed = _parse_crontab_line(line)
+        if parsed is None:
+            continue
+        out.append({
+            "name":     f"{user}:{line_num}",
+            "path":     path,
+            "schedule": parsed["schedule"],
+            "command":  _cap(parsed["command"]),
+            "user":     user,
+            "type":     "user_cron",
+            "line":     line_num,
+        })
+    return out
+
+
+def _user_crontabs_via_helper():
+    """[(account, content)] read by the read helper, or None when it cannot."""
+    try:
+        from tools import local_integrity as li
+        if "user_crontabs" not in (li.helper_status().get("verbs") or ()):
+            return None
+        got = li.helper_call("user_crontabs", timeout=60)
+        if not got.get("ok"):
+            logger.debug(f"user crontabs via the read helper: {got.get('reason')}")
+            return None
+        entries = got["data"].get("entries") or {}
+        return [(name, e.get("content") or "")
+                for name, e in sorted(entries.items())]
+    except Exception as e:                                  # noqa: BLE001
+        logger.debug(f"user crontabs via the read helper failed: {e}")
+        return None
 
 
 def _first_code_line(path: Path) -> Optional[str]:

@@ -76,9 +76,9 @@ _spec = importlib.util.spec_from_file_location("read_helper", HELPER)
 rh = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(rh)
 
-check("the verbs are exactly the seven this design approved",
+check("the verbs are exactly the eight this design approved",
       sorted(rh.VERBS), ["btmp", "dpkg_verify", "firewall_rules", "proc_exe",
-                         "root_ssh", "sudoers", "sudoers_d"])
+                         "root_ssh", "sudoers", "sudoers_d", "user_crontabs"])
 check("every verb's paths are absolute literals",
       all(p.startswith("/") for v in rh.VERBS.values() for p in v["paths"]), True)
 check("the verbs with no paths are the two that run fixed commands",
@@ -89,7 +89,7 @@ check("the firewall verb runs fixed commands by full path, no caller input",
           rh.FIREWALL_COMMANDS)
       and "def verb_firewall_rules():" in SRC, True)
 
-# the source-level assertions. These read the file, because the property
+# ,,,, the source-level assertions. These read the file, because the property
 # is about what the CODE can do rather than about what one call returns.
 check("no verb is a function of a caller-supplied path",
       "def verb_(" in SRC, False)
@@ -101,7 +101,7 @@ _handlers = re.search(r"HANDLERS\s*=\s*\{(.*?)\}", SRC, re.S).group(1)
 check("the handler table maps verb names to zero-argument functions",
       sorted(re.findall(r'"(\w+)":\s*verb_', _handlers)),
       ["btmp", "dpkg_verify", "firewall_rules", "proc_exe", "root_ssh",
-       "sudoers", "sudoers_d"])
+       "sudoers", "sudoers_d", "user_crontabs"])
 check("no handler takes a parameter",
       len(re.findall(r"def verb_\w+\(([^)]*)\)", SRC)
           ) == len([m for m in re.findall(r"def verb_\w+\(([^)]*)\)", SRC) if not m]),
@@ -162,10 +162,10 @@ print("\n[4] --verbs LISTS THE TABLE AND READS NOTHING")
 code, out, err = run("--verbs")
 check("it exits 0 unelevated, because listing the table needs no privilege",
       code, 0)
-check("and reports the seven verbs",
+check("and reports the eight verbs",
       sorted((out or {}).get("verbs", {})),
       ["btmp", "dpkg_verify", "firewall_rules", "proc_exe", "root_ssh",
-       "sudoers", "sudoers_d"])
+       "sudoers", "sudoers_d", "user_crontabs"])
 check_true("and publishes what it REFUSES, so the refusal is auditable",
            "/etc/shadow" in (out or {}).get("refuses", {}))
 # THE ASSERTION IS ABOUT THE STRUCTURE, NOT THE PROSE.
@@ -414,7 +414,7 @@ check_true("and says a file nobody read is not a file that did not change",
            "A file nobody read is not a file that did not change"
            in _note["note"])
 
-# and the shadow refusal is in the list in EVERY state, including a
+# ,,,, and the shadow refusal is in the list in EVERY state, including a
 # working one. It is a decision, not a gap, and it must not disappear when
 # the helper starts working.
 _verbs_state = dict(_absent_state, available=True, reason=None,

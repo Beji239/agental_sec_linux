@@ -179,6 +179,29 @@ with patched(rh, VERBS=dict(rh.VERBS, btmp={"paths": [str(work / "none")],
     except rh.Refusal:
         refused = True
     check("a missing log is a refusal", refused, True)
+spool = work / "crontabs"
+spool.mkdir()
+(spool / "alice").write_text("*/5 * * * * /home/alice/sync.sh\n")
+(spool / "big").write_text("#" * 200)
+secret = work / "secret"
+secret.write_text("root:hash:")
+(spool / "mallory").symlink_to(secret)
+with patched(rh, VERBS=dict(rh.VERBS, user_crontabs={"paths": [str(spool)],
+                                                     "why": "test"}),
+             CRONTAB_MAX_BYTES=100):
+    c = rh.verb_user_crontabs()
+    check("each account's crontab is read",
+          c["entries"]["alice"]["content"], "*/5 * * * * /home/alice/sync.sh\n")
+    check("a link in the spool is listed, never followed",
+          ("mallory" in c["entries"], c["skipped"].get("mallory", "")[:22]),
+          (False, "not a regular file (li"))
+    check("an oversized crontab is skipped and says so",
+          ("big" in c["entries"], "larger than" in c["skipped"].get("big", "")),
+          (False, True))
+with patched(rh, VERBS=dict(rh.VERBS, user_crontabs={
+        "paths": [str(work / "nospool")], "why": "test"})):
+    check("no spool at all is an empty answer, not an error",
+          rh.verb_user_crontabs()["total"], 0)
 p = rh.verb_proc_exe()
 me = p["processes"].get(str(os.getpid()))
 check("this process is listed with its file and start time",

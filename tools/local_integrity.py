@@ -389,7 +389,7 @@ def helper_call(verb: str, timeout: int = 1800) -> dict:
     function returns a dict instead of raising.
     """
     if verb not in ("sudoers", "sudoers_d", "root_ssh", "dpkg_verify",
-                    "proc_exe", "firewall_rules", "btmp"):
+                    "proc_exe", "firewall_rules", "btmp", "user_crontabs"):
         return {"ok": False, "data": None,
                 "reason": (f"{verb!r} is not one of the helper's verbs. The "
                            f"table is fixed and nothing here may ask for a "
@@ -3726,9 +3726,14 @@ def drop_package_changes(changes: list, out: dict) -> list:
     keep = []
     for f in changes:
         hit = None
-        if f.get("entity_type") == "file" and not (
-                f.get("title") or "").startswith("File removed"):
-            hit = package_activity.explains(f.get("entity_value"))
+        path = f.get("entity_value") or ""
+        removed = (f.get("title") or "").startswith("File removed")
+        # A removal is explained only for dpkg's temporary names, which dpkg
+        # renames away within the same upgrade.
+        if f.get("entity_type") == "file" and (
+                not removed or package_activity.dpkg_temp_base(path)):
+            hit = package_activity.explains(path)
+
         if hit:
             out.setdefault("by_packages", []).append(
                 {"path": f.get("entity_value"), "detection_id":

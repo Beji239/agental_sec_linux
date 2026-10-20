@@ -13,6 +13,7 @@
 #   proc_exe     the running file of every process, with its start time
 #   firewall_rules  what ufw and nft say about the ruleset, fixed commands
 #   btmp         the failed login records, /var/log/btmp
+#   user_crontabs  every account's crontab in /var/spool/cron/crontabs
 #
 # /etc/shadow and /etc/gshadow MUST NOT BE ADDED: they hold password hashes.
 #
@@ -74,6 +75,13 @@ VERBS = {
                "with fixed arguments; nothing from the caller reaches a "
                "command line.",
     },
+    "user_crontabs": {
+        "paths": ["/var/spool/cron/crontabs"],
+        "why": "the per-user crontab spool is mode 1730 root:crontab, so the "
+               "autorun check could not list it and every account's own cron "
+               "jobs were invisible. A cron job is a common way to survive a "
+               "reboot. Only regular files are read, never through a link.",
+    },
     "dpkg_verify": {
         "paths": [],
         "why": "runs dpkg -V with the package list computed inside this "
@@ -87,6 +95,8 @@ VERBS = {
 MAX_BYTES = 4 * 1024 * 1024
 MAX_KEYS = 500
 MAX_PIDS = 65536
+MAX_CRONTABS = 200
+CRONTAB_MAX_BYTES = 64 * 1024
 
 # dpkg -V is an integrity cross-check, not a security tool: md5sums, no
 # signatures. The verb reports what it said rather than endorsing it.
@@ -407,6 +417,44 @@ def verb_btmp():
             "data_b64": base64.b64encode(raw).decode("ascii")}
 
 
+def verb_user_crontabs():
+    """Every crontab in the spool. The folder is writable by the crontab
+    group, so a link there is listed and never followed."""
+    path = VERBS["user_crontabs"]["paths"][0]
+    out = {"verb": "user_crontabs", "note": VERBS["user_crontabs"]["why"],
+           "path": path, "entries": {}, "skipped": {}, "total": 0}
+    try:
+        names = sorted(os.listdir(path))
+    except FileNotFoundError:
+        return out
+    except OSError as e:
+        raise Refusal(f"{path} could not be listed: {e.strerror or e}")
+    for name in names:
+        full = os.path.join(path, name)
+        meta = _meta(full)
+        if meta.get("type") != "file":
+            out["skipped"][name] = f"not a regular file ({meta.get('type')})"
+            continue
+        if len(out["entries"]) >= MAX_CRONTABS:
+            out["capped"] = True
+            break
+        try:
+            fd = os.open(full, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as fh:
+                data = fh.read(CRONTAB_MAX_BYTES + 1)
+        except OSError as e:
+            out["skipped"][name] = f"{type(e).__name__}: {e.strerror or e}"
+            continue
+        if len(data) > CRONTAB_MAX_BYTES:
+            out["skipped"][name] = f"larger than {CRONTAB_MAX_BYTES} bytes"
+            continue
+        out["entries"][name] = {"meta": meta, "sha256": _sha(data),
+                                "content": data.decode("utf-8",
+                                                       errors="replace")}
+    out["total"] = len(out["entries"])
+    return out
+
+
 def verb_firewall_rules():
     """The firewall's own listings, read as root. Fixed commands only."""
     out = {"verb": "firewall_rules", "note": VERBS["firewall_rules"]["why"]}
@@ -485,6 +533,7 @@ HANDLERS = {
     "proc_exe": verb_proc_exe,
     "firewall_rules": verb_firewall_rules,
     "btmp": verb_btmp,
+    "user_crontabs": verb_user_crontabs,
 }
 
 

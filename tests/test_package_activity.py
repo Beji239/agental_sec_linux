@@ -70,7 +70,48 @@ ACTIONS[:] = [(NOW - timedelta(minutes=2), "install", "other-tools")]
 check("an install of a different package", pa.explains(str(unit), NOW), None)
 check("a path that does not exist", pa.explains(str(tmp / "nope"), NOW), None)
 
-print("\n[3] Merged /usr spellings")
+print("\n[3] dpkg's temporary names")
+new = tmp / "lib" / "example.service.dpkg-new"
+new.write_text("[Service]\nExecStart=/usr/sbin/example --new\n")
+ACTIONS[:] = [(NOW - timedelta(minutes=2), "upgrade", "example-tools")]
+hit = pa.explains(str(new), NOW)
+check("a .dpkg-new beside a file just upgraded", (hit or {}).get("package"),
+      "example-tools")
+check("it is described as dpkg's copy",
+      "temporary copy" in (hit or {}).get("how", ""), True)
+gone = str(tmp / "lib" / "example.service.dpkg-tmp")
+check("one already renamed away",
+      (pa.explains(gone, NOW) or {}).get("package"), "example-tools")
+check("one beside a file no package owns",
+      pa.explains(str(stray) + ".dpkg-new", NOW), None)
+ACTIONS[:] = [(NOW - timedelta(days=3), "upgrade", "example-tools")]
+check("one long after the upgrade", pa.explains(str(new), NOW), None)
+ACTIONS[:] = [(NOW - timedelta(minutes=2), "install", "example-tools")]
+check("the base of a temporary name", pa.dpkg_temp_base("/etc/a.dpkg-old"),
+      "/etc/a")
+check("an ordinary name has none", pa.dpkg_temp_base("/etc/a.conf"), None)
+check("a bare suffix has none", pa.dpkg_temp_base("/etc/.dpkg-new"), None)
+
+print("\n[4] Removals in the integrity pass")
+from tools import local_integrity as li              # noqa: E402
+
+
+def finding(title, path):
+    return {"entity_type": "file", "entity_value": path, "title": title,
+            "detection_id": "LNX-2001"}
+
+
+out = {}
+kept = li.drop_package_changes(
+    [finding(f"File removed from a watched directory: {gone}", gone),
+     finding(f"File removed from a watched directory: {unit}", str(unit))],
+    out)
+check("a removed temporary name is left out",
+      [f["entity_value"] for f in kept], [str(unit)])
+check("and listed as explained",
+      [b["path"] for b in out.get("by_packages", [])], [gone])
+
+print("\n[5] Merged /usr spellings")
 check("both spellings tried", pa._spellings("/usr/lib/systemd/x.service"),
       ["/usr/lib/systemd/x.service", "/lib/systemd/x.service"])
 
