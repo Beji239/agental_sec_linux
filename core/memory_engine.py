@@ -7137,7 +7137,7 @@ def detection_detail(detection_id: str, limit: int = 200) -> dict:
                        MAX(id) AS last_id
                   FROM findings WHERE detection_id = ?
                  GROUP BY entity_type, entity_value
-                 ORDER BY last_at DESC LIMIT ?
+                 ORDER BY last_at DESC, last_id DESC LIMIT ?
             """, (detection_id, int(limit))).fetchall())
             latest = {}
             ids = [i["last_id"] for i in items]
