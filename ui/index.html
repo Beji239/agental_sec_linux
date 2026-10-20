@@ -1702,6 +1702,356 @@
   @media (prefers-reduced-motion: reduce) {
     .exp-ring, .exp-dot-broken, .wall-dot { animation: none !important; }
   }
+  /*
+     HEALTH TAB
+     A live view, so it moves: the radar sweeps, the pulse cards draw their
+     own history, and every sensor opens a drawer. Settings is for choices.
+  */
+
+  .hl-hero {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 28px;
+    align-items: center;
+    padding: 22px 24px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background:
+      radial-gradient(ellipse at 18% 50%, rgba(0, 229, 160, 0.10), transparent 60%),
+      linear-gradient(180deg, var(--bg2), var(--bg));
+    transition: background 0.6s;
+  }
+  .hl-hero.hl-alarm {
+    background:
+      radial-gradient(ellipse at 18% 50%, rgba(229, 51, 74, 0.14), transparent 60%),
+      linear-gradient(180deg, var(--bg2), var(--bg));
+  }
+  @media (max-width: 860px) {
+    .hl-hero { grid-template-columns: 1fr; justify-items: center; }
+  }
+
+  .hl-radar {
+    --hl-c: var(--green);
+    position: relative;
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 229, 160, 0.06), transparent 70%);
+  }
+  .hl-alarm .hl-radar { --hl-c: var(--red); }
+  .hl-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid var(--hl-c);
+    opacity: 0.18;
+  }
+  .hl-r1 { inset: 0; }
+  .hl-r2 { inset: 22%; }
+  .hl-r3 { inset: 40%; opacity: 0.28; }
+  .hl-cross {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(var(--hl-c), var(--hl-c)) center / 1px 100% no-repeat,
+      linear-gradient(var(--hl-c), var(--hl-c)) center / 100% 1px no-repeat;
+    opacity: 0.08;
+  }
+  .hl-sweep {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0deg, transparent 300deg,
+                               var(--hl-c) 360deg);
+    opacity: 0.22;
+    animation: hl-spin 6s linear infinite;
+  }
+  @keyframes hl-spin { to { transform: rotate(360deg); } }
+
+  .hl-blip {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .hl-blip::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    opacity: 0;
+    animation: hl-ping 3s ease-out infinite;
+    animation-delay: var(--hl-delay, 0s);
+  }
+  .hl-blip.hl-ok { color: var(--green); }
+  .hl-blip.hl-quiet {
+    color: var(--red);
+    background: var(--red);
+    box-shadow: 0 0 14px var(--red);
+  }
+  .hl-blip.hl-quiet::after { animation-duration: 1.2s; }
+  .hl-blip.hl-off {
+    color: var(--text-dim);
+    background: var(--bg3);
+    border: 1px solid var(--text-dim);
+    box-shadow: none;
+  }
+  .hl-blip.hl-off::after { display: none; }
+  .hl-blip:hover, .hl-blip.hl-sel { transform: scale(1.45); }
+  .hl-blip.hl-sel { outline: 2px solid var(--text-hi); outline-offset: 3px; }
+  @keyframes hl-ping {
+    0%   { transform: scale(0.6); opacity: 0.8; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  .hl-core {
+    position: absolute;
+    inset: 36%;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+  }
+  .hl-count {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--hl-c);
+    line-height: 1;
+  }
+  .hl-count-lbl {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .hl-hero-side { min-width: 0; width: 100%; }
+  .hl-kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .hl-headline {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-hi);
+    margin: 4px 0 6px;
+  }
+  .hl-alarm .hl-headline { color: var(--red); }
+  .hl-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+  .hl-hero #sensor-watch-detail { margin-bottom: 14px; }
+  .hl-hero #sensor-watch-detail .k-green { display: none; }
+
+  .hl-pulse {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .hl-card {
+    position: relative;
+    overflow: hidden;
+    padding: 10px 12px 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(17, 19, 24, 0.85);
+    text-align: left;
+    color: inherit;
+    font: inherit;
+  }
+  button.hl-card { cursor: pointer; }
+  button.hl-card:hover { border-color: var(--blue); }
+  .hl-card-lbl { font-size: 10.5px; color: var(--text-dim); }
+  .hl-card-val {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-hi);
+    margin-top: 2px;
+  }
+  .hl-card-unit { font-size: 11px; color: var(--text-dim); margin-left: 3px; font-weight: 400; }
+  .hl-card-val.hl-dim { color: var(--text-dim); font-size: 14px; padding: 5px 0; }
+  .hl-spark { display: block; width: 100%; height: 34px; margin-top: 4px; }
+
+  .hl-hint { font-size: 11px; color: var(--text-dim); margin: -6px 0 12px; }
+  .hl-lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .hl-lane {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--bg3);
+  }
+  .hl-lane-h {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .hl-lane-name { font-weight: 600; color: var(--text-hi); }
+  .hl-lane-score { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .hl-lane-bar {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--border);
+    margin: -4px 0 10px;
+    overflow: hidden;
+  }
+  .hl-lane-bar span {
+    display: block;
+    height: 100%;
+    background: var(--green);
+    transition: width 0.8s ease;
+  }
+  .hl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hl-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg2);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .hl-chip:hover { transform: translateY(-1px); border-color: var(--text-dim); }
+  .hl-chip.hl-sel { border-color: var(--text-hi); }
+  .hl-chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .hl-chip.hl-ok .hl-chip-dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: hl-beat 2.4s ease-in-out infinite; }
+  .hl-chip.hl-quiet { border-color: var(--red); }
+  .hl-chip.hl-quiet .hl-chip-dot { background: var(--red); box-shadow: 0 0 8px var(--red); animation: hl-beat 0.9s ease-in-out infinite; }
+  .hl-chip.hl-off { opacity: 0.55; }
+  .hl-chip.hl-off .hl-chip-dot { border: 1px solid var(--text-dim); }
+  .hl-chip-fact { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); }
+  @keyframes hl-beat { 50% { opacity: 0.35; } }
+
+  .hl-drawer {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 8px;
+    background: var(--bg);
+    animation: hl-open 0.25s ease;
+  }
+  .hl-drawer.hl-quiet { border-left-color: var(--red); }
+  .hl-drawer.hl-off { border-left-color: var(--text-dim); }
+  @keyframes hl-open { from { opacity: 0; transform: translateY(-4px); } }
+  .hl-drawer-h { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .hl-drawer-name { font-size: 15px; font-weight: 600; color: var(--text-hi); }
+  .hl-state {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .hl-state.hl-ok { color: var(--green); background: rgba(0, 229, 160, 0.12); }
+  .hl-state.hl-quiet { color: var(--red); background: rgba(229, 51, 74, 0.14); }
+  .hl-state.hl-off { color: var(--text-dim); background: var(--bg3); }
+  .hl-drawer-x {
+    margin-left: auto;
+    background: none;
+    border: 0;
+    color: var(--text-dim);
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .hl-drawer-x:hover { color: var(--text-hi); }
+  .hl-drawer p { font-size: 12px; line-height: 1.6; margin-bottom: 8px; }
+  .hl-facts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .hl-fact {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--bg3);
+    color: var(--text-dim);
+  }
+  .hl-fact b { color: var(--text); font-weight: 500; }
+
+  .hl-flow {
+    display: grid;
+    grid-template-columns: 1fr 44px 1fr 44px 1fr;
+    align-items: stretch;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 860px) {
+    .hl-flow { grid-template-columns: 1fr; }
+    .hl-flow .hl-link { height: 28px; }
+    .hl-flow .hl-link span {
+      width: 2px;
+      height: 100%;
+      background: repeating-linear-gradient(180deg, var(--text-dim) 0 6px, transparent 6px 12px);
+      background-size: 2px 24px;
+      animation-name: hl-flowing-down;
+    }
+  }
+  .hl-node {
+    padding: 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--hl-n);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--hl-n) 9%, var(--bg3)), var(--bg3));
+  }
+  .hl-node.measured { --hl-n: var(--green); }
+  .hl-node.external { --hl-n: var(--blue); }
+  .hl-node.reasoned { --hl-n: var(--amber); }
+  .hl-node-h { font-size: 15px; font-weight: 600; color: var(--hl-n); }
+  .hl-node-who { font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); margin-bottom: 8px; }
+  .hl-node p { font-size: 12px; line-height: 1.55; margin-bottom: 8px; }
+  .hl-node-f { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+  .hl-link { display: flex; align-items: center; justify-content: center; }
+  .hl-link span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--text-dim) 0 6px, transparent 6px 12px);
+    background-size: 24px 2px;
+    animation: hl-flowing 1.2s linear infinite;
+  }
+  @keyframes hl-flowing { to { background-position: 24px 0; } }
+  @keyframes hl-flowing-down { to { background-position: 0 24px; } }
+
+  .hl-fold { margin-top: 10px; }
+  .hl-fold summary, .hl-fold-card summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-dim);
+    list-style-position: inside;
+  }
+  .hl-fold-card summary { margin-bottom: 0; }
+  .hl-fold-card[open] summary { margin-bottom: 12px; }
+  .hl-fold summary:hover, .hl-fold-card summary:hover { color: var(--text-hi); }
+  .hl-rollup { margin-top: 12px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .hl-rollup-k { color: var(--text); margin-right: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hl-sweep, .hl-blip::after, .hl-chip-dot, .hl-link span { animation: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -1791,7 +2141,7 @@
 <!-- NAV -->
 <div id="nav">
   <div class="nav-tab active" data-onclick="showPage('chat')"     data-page="chat">Chat</div>
-  <div class="nav-tab"        data-onclick="showPage('dashboard')"data-page="dashboard">Dashboard</div>
+  <div class="nav-tab"        data-onclick="showPage('dashboard')"data-page="dashboard">Health</div>
   <div class="nav-tab"        data-onclick="showPage('alerts')"   data-page="alerts">Alerts <span class="badge" id="alert-badge" style="display:none">0</span></div>
   <div class="nav-tab"        data-onclick="showPage('timeline')" data-page="timeline">Timeline</div>
   <div class="nav-tab"        data-onclick="showPage('devices')"  data-page="devices">Devices <span class="badge" id="inventory-badge" style="display:none">0</span></div>
@@ -1837,57 +2187,70 @@
 
   <!-- DASHBOARD -->
   <div class="page" id="page-dashboard">
-    <div class="card">
-      <div class="card-title">System Overview</div>
-      <div class="stat-grid" id="dash-stats">
-        <div class="stat"><div class="stat-val" id="stat-findings">-</div><div class="stat-lbl">Active Findings, this session</div></div>
-        <div class="stat"><div class="stat-val" id="stat-packets">-</div><div class="stat-lbl">Packets Captured</div></div>
-        <div class="stat"><div class="stat-val" id="stat-events">-</div><div class="stat-lbl">Events Logged</div></div>
-        <div class="stat"><div class="stat-val" id="stat-devices">-</div><div class="stat-lbl">Known Devices</div></div>
+    <div class="hl-hero" id="hl-hero">
+      <div class="hl-radar" id="hl-radar" aria-hidden="false">
+        <div class="hl-ring hl-r1"></div>
+        <div class="hl-ring hl-r2"></div>
+        <div class="hl-ring hl-r3"></div>
+        <div class="hl-cross"></div>
+        <div class="hl-sweep"></div>
+        <div id="hl-blips"></div>
+        <div class="hl-core">
+          <div class="hl-count" id="hl-count">-</div>
+          <div class="hl-count-lbl" id="hl-count-lbl">sensors</div>
+        </div>
+      </div>
+      <div class="hl-hero-side">
+        <div class="hl-kicker">The watch</div>
+        <div class="hl-headline" id="hl-headline">Waiting for the first sensor check</div>
+        <div class="hl-sub" id="hl-sub">The first check runs a minute after start.</div>
+        <div id="sensor-watch-detail"></div>
+        <div class="hl-pulse" id="hl-pulse"></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">Module Status</div>
-      <div id="sensor-watch-detail"></div>
-      <div id="module-pending"></div>
-      <div id="module-grid"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">What The Tool Knows, And How It Knows It</div>
 
-      <div class="know-grid">
-        <div class="know measured">
-          <div class="know-h">Measured, the sensors</div>
+    <div class="card hl-lanes-card">
+      <div class="card-title">Sensors, by what they watch</div>
+      <div class="hl-hint">Click a sensor, here or on the radar, to see what it is doing.</div>
+      <div class="hl-lanes" id="hl-lanes"></div>
+      <div class="hl-drawer" id="hl-drawer" hidden></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">How it knows what it tells you</div>
+      <div class="hl-flow">
+        <div class="hl-node measured">
+          <div class="hl-node-h">Measured</div>
+          <div class="hl-node-who">the sensors</div>
           <p>Packets, system logs, processes, port scans, presence sweeps.
              Things this machine watched happen.</p>
-          <p class="dim">Strongest evidence here. It is also the narrowest: a
-             sensor on this host cannot see traffic between two other devices.</p>
+          <div class="hl-node-f">Strongest, and the narrowest: a sensor on
+             this host cannot see traffic between two other devices.</div>
         </div>
-
-        <div class="know external">
-          <div class="know-h">Looked up, the research worker</div>
+        <div class="hl-link"><span></span></div>
+        <div class="hl-node external">
+          <div class="hl-node-h">Looked up</div>
+          <div class="hl-node-who">the research worker</div>
           <p>Asks public databases what an address, domain, CVE, hardware
-             prefix or Windows binary is. Runs in the background, never blocks
-             the chat.</p>
-          <p class="dim">Second-hand and dated. Every answer keeps its source
-             and expires, so a stale fact gets re-checked instead of believed
-             forever.</p>
-          <div class="src-row" id="know-sources"></div>
+             prefix or Windows binary is, in the background.</p>
+          <div class="hl-node-f">Second hand and dated. Every answer keeps
+             its source and expires, so a stale fact gets checked again.</div>
         </div>
-
-        <div class="know reasoned">
-          <div class="know-h">Worked out, the model</div>
-          <p>The conclusion drawn from the two above. Useful, and the weakest
-             of the three.</p>
-          <p class="dim">Nothing outside this tool backs it. Marked as such so
-             a later session treats it as a starting point rather than a
-             settled fact.</p>
+        <div class="hl-link"><span></span></div>
+        <div class="hl-node reasoned">
+          <div class="hl-node-h">Worked out</div>
+          <div class="hl-node-who">the model</div>
+          <p>The conclusion drawn from the two before it. Useful, and the
+             weakest of the three.</p>
+          <div class="hl-node-f">Nothing outside this tool backs it, so a
+             later session treats it as a starting point.</div>
         </div>
       </div>
-
+      <div class="src-row" id="know-sources"></div>
       <div id="know-sources-detail"></div>
-
-      <div class="know-note">
+      <details class="hl-fold">
+        <summary>The rules behind the colours</summary>
+        <div class="know-note">
         <p><b>Every answer says which of the three it came from.</b> That is the
         whole point of the colours. A finding built on a measurement and a
         finding built on a guess should never look the same.</p>
@@ -1900,15 +2263,17 @@
         Blocking a port, killing a process or quarantining a file still stops
         and asks you.</p>
       </div>
+      </details>
     </div>
 
-    <div class="card">
-      <div class="card-title">Last Rollup</div>
-      <div id="rollup-info" style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">No rollup yet this session.</div>
-    </div>
+    <details class="card hl-fold-card">
+      <summary class="card-title">Every module in detail</summary>
+      <div id="module-pending"></div>
+      <div id="module-grid"></div>
+      <div class="hl-rollup"><span class="hl-rollup-k">Last rollup</span>
+        <span id="rollup-info">No rollup yet this session.</span></div>
+    </details>
   </div>
-
-  <!-- ALERTS -->
   <div class="page" id="page-alerts">
 
     <!-- TODO 84. Findings that matter. Hidden until there is something in it,
@@ -4050,6 +4415,7 @@ async function updateStatusPills() {
     }
 
     updateModuleGrid(d.modules || {}, d.module_settings || {});
+    hlStatus(d);
     if (typeof d.operator_name === 'string' && d.operator_name !== operatorName) {
       setOperatorName(d.operator_name);
     }
@@ -4066,6 +4432,7 @@ async function refreshSensorWatch() {
     w = await r.json();
   } catch (e) { return; }
   const quiet = (w.sensors || []).filter(s => s.state === 'quiet');
+  hlWatch(w);
   const tip = quiet.length
     ? quiet.map(s => `${s.sensor.replace(/_/g, ' ')}: ${s.reason}`).join('\n')
     : (w.checked_at ? `${w.ok} collecting, ${w.off} switched off` : 'The first check runs a minute after start');
@@ -4530,6 +4897,260 @@ function statTile(mod, field, fallback) {
   return fallback ? '\u2713' : '0';
 }
 
+// THE HEALTH TAB
+//
+// Fed by the status poll and the sensor watch, which run on every tab, so the
+// pulse cards already have a history when the tab is opened. Clicks are bound
+// here rather than through data-onclick, which only runs listed functions.
+
+const HL = { status: null, watch: null, samples: {}, last: {}, sel: null,
+             bound: false };
+const HL_KEEP = 45;           // samples per sparkline, six minutes at 8 s
+const HL_NAMES = {
+  packet_sniffer: 'Packet capture', dns_monitor: 'DNS watch',
+  lan_live: 'Live LAN', gateway: 'Router agent', port_owner: 'Port owners',
+  router_monitor: 'Router monitor', process_monitor: 'Processes',
+  ebpf_events: 'Kernel camera', auditd: 'Audit log',
+  event_monitor: 'System logs', local_integrity: 'File integrity',
+  av_scanner: 'Virus scan', registry_monitor: 'Autoruns',
+  root_helpers: 'Root helpers', expectations: 'Expectations',
+  place_watch: 'Place watch',
+};
+const HL_LANES = [
+  ['Network', ['packet_sniffer', 'dns_monitor', 'lan_live', 'gateway',
+               'port_owner', 'router_monitor']],
+  ['This computer', ['process_monitor', 'ebpf_events', 'auditd',
+                     'event_monitor', 'local_integrity', 'av_scanner',
+                     'registry_monitor', 'root_helpers']],
+  ['Expectations', ['expectations', 'place_watch']],
+];
+// What each pulse card reads. rate cards turn a running total into a speed.
+const HL_PULSE = [
+  { key: 'packets', label: 'Packets on the wire', unit: '/s', rate: true,
+    blind: m => m.packet_sniffer && m.packet_sniffer.blind,
+    get: m => { const c = m.packet_sniffer && m.packet_sniffer.counters
+                  && m.packet_sniffer.counters.current;
+                return c ? (c.rx_packets || 0) + (c.tx_packets || 0) : null; } },
+  { key: 'kernel', label: 'Kernel events', unit: '/s', rate: true,
+    get: m => m.ebpf_events && m.ebpf_events.camera
+              ? m.ebpf_events.camera.total_events : null },
+  { key: 'procs', label: 'Processes running', unit: '',
+    get: m => m.process_monitor ? m.process_monitor.process_count : null },
+  { key: 'devices', label: 'Devices the router sees', unit: '',
+    get: m => m.gateway ? m.gateway.clients_seen : null },
+  { key: 'incidents', label: 'Open incidents', unit: '', go: 'inbox',
+    get: m => m.incident_watcher ? m.incident_watcher.open_incidents : null },
+];
+
+function hlName(n) { return HL_NAMES[n] || String(n).replace(/_/g, ' '); }
+
+function hlSensors() {
+  return (HL.watch && Array.isArray(HL.watch.sensors)) ? HL.watch.sensors : [];
+}
+
+function hlStateOf(name) {
+  const s = hlSensors().find(x => x.sensor === name);
+  return s ? s.state : null;
+}
+
+// A short live fact for a chip, from the module's own numbers.
+function hlFact(name) {
+  const m = (HL.status && HL.status.modules) || {};
+  const v = m[name];
+  const rate = k => HL.samples[k] && HL.samples[k].length
+    ? fmtNum(HL.samples[k][HL.samples[k].length - 1]) : null;
+  if (name === 'packet_sniffer') return rate('packets') ? rate('packets') + ' pkt/s' : '';
+  if (name === 'ebpf_events') return rate('kernel') ? rate('kernel') + ' ev/s' : '';
+  if (!v || typeof v !== 'object') return '';
+  if (name === 'process_monitor' && v.process_count != null) return v.process_count + ' running';
+  if (name === 'gateway' && v.clients_seen != null) return v.clients_seen + ' devices';
+  if (name === 'av_scanner' && v.scanned != null) return v.scanned + ' scanned';
+  if (name === 'event_monitor' && v.events_written != null) return v.events_written + ' events';
+  return '';
+}
+
+function fmtNum(n) {
+  if (n == null || !isFinite(n)) return '-';
+  if (n >= 10000) return Math.round(n / 1000) + 'k';
+  if (n >= 100) return String(Math.round(n));
+  return n >= 10 ? n.toFixed(0) : (Math.round(n * 10) / 10).toString();
+}
+
+// Called by updateStatusPills every 8 s, on every tab.
+function hlStatus(d) {
+  if (!d || !d.modules) return;
+  const now = Date.now() / 1000;
+  for (const p of HL_PULSE) {
+    let v = null;
+    try { v = p.get(d.modules); } catch (e) { v = null; }
+    if (v == null || !isFinite(v)) continue;
+    let point = v;
+    if (p.rate) {
+      const prev = HL.last[p.key];
+      HL.last[p.key] = { v, t: now };
+      if (!prev || now - prev.t < 1 || v < prev.v) continue;
+      point = (v - prev.v) / (now - prev.t);
+    }
+    const arr = HL.samples[p.key] || (HL.samples[p.key] = []);
+    arr.push(point);
+    if (arr.length > HL_KEEP) arr.shift();
+  }
+  HL.status = d;
+  hlRender();
+}
+
+// Called by refreshSensorWatch with the server's once-a-minute verdict.
+function hlWatch(w) {
+  HL.watch = w;
+  hlRender();
+}
+
+function hlSpark(arr) {
+  if (!arr || arr.length < 2) return '<svg class="hl-spark"></svg>';
+  const w = 150, h = 34, lo = Math.min(...arr), hi = Math.max(...arr);
+  const span = hi - lo;
+  // A steady value draws through the middle, not along the floor.
+  const pts = arr.map((v, i) => [
+    (i / (arr.length - 1)) * w,
+    span ? h - 3 - ((v - lo) / span) * (h - 8) : h / 2]);
+  const line = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  return `<svg class="hl-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">`
+       + `<polygon points="0,${h} ${line} ${w},${h}" fill="var(--green)" opacity="0.10"/>`
+       + `<polyline points="${line}" fill="none" stroke="var(--green)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`
+       + `</svg>`;
+}
+
+function hlRender() {
+  const page = document.getElementById('page-dashboard');
+  if (!page) return;
+  hlBind(page);
+  const m = (HL.status && HL.status.modules) || {};
+  const sensors = hlSensors();
+  const quiet = sensors.filter(s => s.state === 'quiet');
+  const ok = sensors.filter(s => s.state === 'ok');
+  const off = sensors.filter(s => s.state === 'off');
+  const checked = HL.watch && HL.watch.checked_at;
+
+  document.getElementById('hl-hero').classList.toggle('hl-alarm', quiet.length > 0);
+  document.getElementById('hl-count').textContent =
+    checked ? `${ok.length}/${ok.length + quiet.length}` : '-';
+  document.getElementById('hl-count-lbl').textContent =
+    checked ? (off.length ? `collecting, ${off.length} off` : 'collecting') : 'sensors';
+  document.getElementById('hl-headline').textContent = !checked
+    ? 'Waiting for the first sensor check'
+    : quiet.length
+      ? `${quiet.length} sensor${quiet.length > 1 ? 's are' : ' is'} quiet: `
+        + quiet.map(s => hlName(s.sensor)).join(', ')
+      : `All ${ok.length} sensors are watching`;
+  const host = m.host_info || {};
+  const bits = [];
+  if (checked) bits.push('checked ' + fmtTime(checked));
+  if (host.watched_human) bits.push('watching for ' + host.watched_human);
+  if (host.uptime_human) bits.push('computer up ' + host.uptime_human);
+  document.getElementById('hl-sub').textContent = bits.length
+    ? bits.join(', ').replace(/^./, c => c.toUpperCase()) + '.'
+    : 'The first check runs a minute after start.';
+
+  // Radar blips, one per sensor, evenly round the outer ring.
+  const blips = document.getElementById('hl-blips');
+  const n = sensors.length;
+  blips.innerHTML = sensors.map((s, i) => {
+    const a = (i / Math.max(n, 1)) * 2 * Math.PI - Math.PI / 2;
+    const r = 39;                     // percent of the radar from its centre
+    const x = 50 + r * Math.cos(a), y = 50 + r * Math.sin(a);
+    return `<button class="hl-blip hl-${esc(s.state)}${HL.sel === s.sensor ? ' hl-sel' : ''}"`
+         + ` data-hl-sensor="${esc(s.sensor)}" title="${esc(hlName(s.sensor))}: ${esc(s.state)}"`
+         + ` style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;--hl-delay:${(i * 0.37).toFixed(2)}s"></button>`;
+  }).join('');
+
+  // Pulse cards.
+  document.getElementById('hl-pulse').innerHTML = HL_PULSE.map(p => {
+    const arr = HL.samples[p.key] || [];
+    const blind = p.blind && (() => { try { return p.blind(m); } catch (e) { return false; } })();
+    let val;
+    if (blind) val = '<div class="hl-card-val hl-dim">blind this run</div>';
+    else if (!arr.length) val = `<div class="hl-card-val hl-dim">${p.rate ? 'measuring...' : '-'}</div>`;
+    else val = `<div class="hl-card-val">${fmtNum(arr[arr.length - 1])}`
+             + `<span class="hl-card-unit">${esc(p.unit)}</span></div>`;
+    const tag = p.go ? 'button' : 'div';
+    const go = p.go ? ` data-hl-go="${esc(p.go)}" title="Open the ${esc(p.go)}"` : '';
+    return `<${tag} class="hl-card"${go}><div class="hl-card-lbl">${esc(p.label)}</div>`
+         + val + hlSpark(blind ? [] : arr) + `</${tag}>`;
+  }).join('');
+
+  // Lanes. A sensor the watch does not list is left out, not guessed at.
+  const listed = new Set(sensors.map(s => s.sensor));
+  const lanes = HL_LANES.map(([title, names]) => [title, names.filter(x => listed.has(x))]);
+  const placed = new Set(lanes.flatMap(l => l[1]));
+  const rest = sensors.map(s => s.sensor).filter(x => !placed.has(x));
+  if (rest.length) lanes.push(['Other', rest]);
+  document.getElementById('hl-lanes').innerHTML = lanes.filter(l => l[1].length).map(([title, names]) => {
+    const states = names.map(hlStateOf);
+    const on = states.filter(st => st !== 'off').length;
+    const good = states.filter(st => st === 'ok').length;
+    const pct = on ? Math.round((good / on) * 100) : 0;
+    return `<div class="hl-lane"><div class="hl-lane-h"><span class="hl-lane-name">${esc(title)}</span>`
+         + `<span class="hl-lane-score">${good} of ${on} collecting</span></div>`
+         + `<div class="hl-lane-bar"><span style="width:${pct}%;${good < on ? 'background:var(--red)' : ''}"></span></div>`
+         + `<div class="hl-chips">` + names.map(x => {
+             const st = hlStateOf(x) || 'off';
+             const fact = hlFact(x);
+             return `<button class="hl-chip hl-${esc(st)}${HL.sel === x ? ' hl-sel' : ''}" data-hl-sensor="${esc(x)}">`
+                  + `<span class="hl-chip-dot"></span>${esc(hlName(x))}`
+                  + (fact ? `<span class="hl-chip-fact">${esc(fact)}</span>` : '') + `</button>`;
+           }).join('') + `</div></div>`;
+  }).join('') || '<div class="hl-hint">The first sensor check runs a minute after start.</div>';
+
+  hlDrawer();
+}
+
+function hlDrawer() {
+  const box = document.getElementById('hl-drawer');
+  if (!box) return;
+  const name = HL.sel;
+  const s = name && hlSensors().find(x => x.sensor === name);
+  if (!s) { box.hidden = true; box.innerHTML = ''; return; }
+  const mod = ((HL.status && HL.status.modules) || {})[name];
+  const facts = [];
+  if (mod && typeof mod === 'object') {
+    for (const [k, v] of Object.entries(mod)) {
+      if (['role', 'note', 'headline', 'scope_note'].includes(k)) continue;
+      if (typeof v === 'number' || typeof v === 'boolean'
+          || (typeof v === 'string' && v.length <= 40)) {
+        facts.push(`<span class="hl-fact">${esc(k.replace(/_/g, ' '))} <b>${esc(String(v))}</b></span>`);
+      }
+      if (facts.length >= 12) break;
+    }
+  }
+  const own = mod && typeof mod === 'object' && (mod.headline || mod.note);
+  box.className = 'hl-drawer hl-' + s.state;
+  box.innerHTML = `<div class="hl-drawer-h"><span class="hl-drawer-name">${esc(hlName(name))}</span>`
+    + `<span class="hl-state hl-${esc(s.state)}">${esc(s.state === 'ok' ? 'collecting' : s.state)}</span>`
+    + `<button class="hl-drawer-x" data-hl-close="1" title="Close">&#x2715;</button></div>`
+    + (s.reason && s.reason !== 'collecting' ? `<p>${esc(s.reason)}</p>` : '')
+    + (own && own !== s.reason ? `<p>${esc(own)}</p>` : '')
+    + (mod ? moduleExtra(name, mod) : '')
+    + (facts.length ? `<div class="hl-facts">${facts.join('')}</div>` : '');
+  box.hidden = false;
+}
+
+function hlBind(page) {
+  if (HL.bound) return;
+  HL.bound = true;
+  page.addEventListener('click', ev => {
+    const t = ev.target.closest('[data-hl-sensor],[data-hl-go],[data-hl-close]');
+    if (!t || !page.contains(t)) return;
+    if (t.hasAttribute('data-hl-close')) { HL.sel = null; hlRender(); return; }
+    if (t.hasAttribute('data-hl-go')) { showPage(t.getAttribute('data-hl-go')); return; }
+    const name = t.getAttribute('data-hl-sensor');
+    HL.sel = HL.sel === name ? null : name;
+    hlRender();
+    if (HL.sel && t.classList.contains('hl-blip')) {
+      document.getElementById('hl-drawer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+}
+
 // The Alerts tab counter, kept by the poll on every tab. It used to be set
 // only by the dashboard, so it stayed hidden until the dashboard was opened
 // and then kept that visit's number. /api/findings returns 50 rows at most,
@@ -4550,38 +5171,17 @@ async function refreshFindingsBadge() {
 
 async function loadDashboard() {
   try {
-    const [f, p, e, d, r, s] = await Promise.all([
+    const [f, r] = await Promise.all([
       fetch('/api/findings',    { headers: authHeaders() }).then(r=>r.json()),
-      fetch('/api/packets?limit=1', { headers: authHeaders() }).then(r=>r.json()),
-      fetch('/api/events?limit=1',  { headers: authHeaders() }).then(r=>r.json()),
-      fetch('/api/devices',     { headers: authHeaders() }).then(r=>r.json()),
       fetch('/api/rollup/last', { headers: authHeaders() }).then(r=>r.json()),
-      fetch('/api/status',      { headers: authHeaders() }).then(r=>r.json())
-                                                           .catch(()=>({})),
     ]);
-    document.getElementById('stat-findings').textContent = f.length || 0;
-    // THIS RUN, NOT THE DATABASE. 2026-09-07.
-    //
-    // These two used to tick whenever the table had a recent row, so on a run
-    // that captured nothing they showed the previous run's work and read as
-    // capture working. A dash means the sensor is blind and the number is not
-    // a claim about the network.
-    document.getElementById('stat-packets').textContent =
-      statTile(s.modules && s.modules.packet_sniffer, 'packets_this_run',
-               p.length >= 1);
-    document.getElementById('stat-events').textContent =
-      statTile(s.modules && s.modules.event_monitor, 'events_this_run',
-               e.length >= 1);
-    document.getElementById('stat-devices').textContent  =
-      (Array.isArray(d) ? d.filter(x => !x.merged_into).length : 0);
-
     setFindingsBadge(f);
-
     if (r && r.rolled_at) {
       document.getElementById('rollup-info').textContent =
-        `Last: ${r.trigger_reason}, ${r.rolled_at}, ${r.entities_processed} entities, ${r.baselines_updated} updated, ${r.baselines_created} created, ${r.duration_ms}ms`;
+        `${r.trigger_reason}, ${r.rolled_at}, ${r.entities_processed} entities, ${r.baselines_updated} updated, ${r.baselines_created} created, ${r.duration_ms}ms`;
     }
   } catch(e) {}
+  hlRender();
 }
 
 // FINDINGS / ALERTS

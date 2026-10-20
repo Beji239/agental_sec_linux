@@ -46,8 +46,11 @@ a sensor that cannot see must say so, because a quiet dashboard and a blind
 one should never look the same.
 
 <p align="center">
-  <img src="assets/screenshots/dashboard.png" alt="The dashboard, with every sensor and its state" width="800">
+  <img src="assets/screenshots/health.png" alt="The Health tab, with every sensor and its state" width="800">
 </p>
+
+*The Health tab, which replaces the Dashboard tab: every sensor, live, and
+what it is doing. Sample data.*
 
 ## Best setup
 

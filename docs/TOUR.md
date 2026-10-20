@@ -51,31 +51,49 @@ card appears in the conversation and in the Inbox. Nothing happens until you
 press approve. When it has a question for you while you are in the chat, it
 asks there, once. See [ANALYST.md](ANALYST.md).
 
-## Dashboard
+## Health
+
+Health replaces the Dashboard tab. It answers one question at a glance: is
+every sensor still watching?
 
 <p align="center">
-  <img src="../assets/screenshots/dashboard.png" alt="Dashboard" width="800">
+  <img src="../assets/screenshots/health.png" alt="Health" width="800">
 </p>
 
-*Every module running or loaded, and the six running sensors all collecting.
-Sample data.*
+*Fourteen sensors collecting, two switched off, and live traffic on the
+cards. Sample data.*
 
-- **System overview.** Findings this session, packets captured, events
-  logged, known devices.
-- **Module status.** Every sensor and worker. A green dot is running or
-  loaded, red is supposed to work and does not, with the reason underneath.
-  A module that cannot see reads "blind" with the reason, instead of showing
-  zero events. The line above the tiles says when the sensors were last
-  checked. A tile with a setting links to its entry on the Settings tab, and
-  says when a value saved there waits for a restart.
-- **What the tool knows, and how it knows it.** The key to the three colours,
-  and which public sources are switched on (blue boxes) or off (grey).
+- **The radar.** One dot per sensor. Green is collecting, a hollow dot is
+  switched off, red is supposed to work and has gone quiet. The number in the
+  middle counts the sensors that collect, and the headline names any that
+  stopped. When one goes quiet, the whole panel turns red.
+- **Live cards.** Packets and kernel events per second, running processes,
+  devices the router sees, and open incidents. Each card draws a line of its
+  last few minutes, starting when you open the page. Click Open incidents to
+  go to the Inbox. A sensor that cannot see reads "blind this run" instead of
+  a zero.
+- **Sensors, by what they watch.** Network, this computer and expectations,
+  each with a bar for how many collect. Click any sensor, here or on the
+  radar, to see why it is in that state and its own numbers.
+
+<p align="center">
+  <img src="../assets/screenshots/health_sensor.png" alt="Health, one sensor opened" width="800">
+</p>
+
+*The virus scan opened: its own sentence and its numbers. Sample data.*
+
+- **How it knows what it tells you.** The key to the three colours, measured,
+  looked up and worked out, and which public sources are switched on (blue
+  boxes) or off (grey).
 - **Which hosts get contacted, and why each one.** Every address the app
   talks to, grouped by purpose: lookups, the malware and vulnerability lists,
   the model provider, web search, the threat map, your router and network,
   and downloads you start yourself. Each row says what is sent, what comes
   back and why. A row that needs a key links straight to its field in
   Settings.
+- **Every module in detail.** Folded away at the bottom. Every sensor and
+  worker, with the reason under one that does not work, a link to its entry
+  on the Settings tab, and the last time the baselines were rolled up.
 
 ## Alerts
 

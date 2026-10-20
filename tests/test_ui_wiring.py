@@ -598,8 +598,11 @@ print("\n[20] the Alerts screen says what it is actually showing")
 check("the card names the scope", "Active Findings, this session" in UI, True)
 check("and says the row cap out loud",
       "limited to this run, newest 50" in UI, True)
-check("the dashboard tile is scoped too, since it reads the same route",
-      'class="stat-lbl">Active Findings, this session<' in UI, True)
+# The dashboard's findings tile was removed with the Health tab, 2026-10-19:
+# the Alerts tab already counts them, so no unscoped count may come back.
+_health = UI[UI.index('id="page-dashboard"'):UI.index('id="page-alerts"')]
+check("the Health tab shows no findings count of its own",
+      "Active Findings" in _health, False)
 # The route is what makes the label true. If session_id ever comes off it, the
 # label becomes the lie instead.
 findings_route = ROUTES.split('@app.route("/api/findings")')[1][:400]
