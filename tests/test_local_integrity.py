@@ -1004,5 +1004,49 @@ check("the dpkg status block reports the measured cost rather than a guess",
 check_true("and states that a bare run ABORTS", "ABORTS" in _ds["cost_note"])
 
 
+print("\n[sweep] A FILE THAT VANISHES MID-WALK IS NOT A SETUID FILE")
+_sw = pathlib.Path(tempfile.mkdtemp(prefix="li_sweep_"))
+(_sw / "gone").write_text("x")
+(_sw / "locked").write_text("x")
+(_sw / "hidden").write_text("x")
+os.chmod(_sw / "locked", 0o4755)
+_real_walk, _real_lstat, _real_read = li.os.walk, li.os.lstat, li._read_bytes
+
+
+def _fake_lstat(path, *a, **k):
+    if path.endswith("/gone"):
+        raise FileNotFoundError(2, "No such file or directory", path)
+    if path.endswith("/hidden"):
+        raise PermissionError(13, "Permission denied", path)
+    return _real_lstat(path, *a, **k)
+
+
+li.os.walk = lambda top, **k: _real_walk(str(_sw), **k)
+li.os.lstat = _fake_lstat
+li._read_bytes = lambda p, limit=0: ((None, "permission denied")
+                                     if p.endswith("/locked") else
+                                     _real_read(p))
+try:
+    _r = li.sweep_filesystem()
+finally:
+    li.os.walk, li.os.lstat, li._read_bytes = _real_walk, _real_lstat, _real_read
+    # A setuid file left behind would be a real finding for the live sweep.
+    import shutil
+    shutil.rmtree(_sw, ignore_errors=True)
+check("a file gone before it was looked at is only counted as vanished",
+      (_r["vanished"], _r["unhashable"]), (1, 1))
+check("the unreadable setuid file is named", _r["unhashable_paths"],
+      [str(_sw / "locked")])
+check("a file whose mode cannot be read is listed apart",
+      _r["unexamined"], [str(_sw / "hidden")])
+_cov = {f["entity_value"]: f for f in li.sweep_coverage_findings(_r)}
+check_true("the setuid alert names its file",
+           str(_sw / "locked") in _cov["filesystem-sweep-hashes"]["description"])
+check_true("and the unexamined file gets its own alert",
+           "filesystem-sweep-unexamined" in _cov)
+check("vanished files raise nothing",
+      sorted(_cov), ["filesystem-sweep-hashes", "filesystem-sweep-unexamined"])
+
+
 print("\n" + ("ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}"))
 sys.exit(1 if fails else 0)

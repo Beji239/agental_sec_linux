@@ -89,7 +89,7 @@ check("the firewall verb runs fixed commands by full path, no caller input",
           rh.FIREWALL_COMMANDS)
       and "def verb_firewall_rules():" in SRC, True)
 
-# ,,,, the source-level assertions. These read the file, because the property
+# the source-level assertions. These read the file, because the property
 # is about what the CODE can do rather than about what one call returns.
 check("no verb is a function of a caller-supplied path",
       "def verb_(" in SRC, False)
@@ -414,7 +414,7 @@ check_true("and says a file nobody read is not a file that did not change",
            "A file nobody read is not a file that did not change"
            in _note["note"])
 
-# ,,,, and the shadow refusal is in the list in EVERY state, including a
+# and the shadow refusal is in the list in EVERY state, including a
 # working one. It is a decision, not a gap, and it must not disappear when
 # the helper starts working.
 _verbs_state = dict(_absent_state, available=True, reason=None,

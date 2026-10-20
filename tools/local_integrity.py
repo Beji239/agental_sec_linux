@@ -2467,7 +2467,16 @@ def sweep_filesystem() -> dict:
     Returns {"suid": {path: hash16}, "sgid": {path: hash16},
              "caps": {path: "capabilities"}, "files_seen": int,
              "unreadable_dirs": [str], "unhashable": int,
+             "unhashable_paths": [str], "unexamined": [str], "vanished": int,
              "xattr_unreadable": int, "seconds": float}
+
+    A FILE THAT VANISHES MID-WALK IS NOT A BLIND SPOT. It was listed and then
+    gone before it could be looked at, which is what temporary files do; it
+    cannot carry setuid if it no longer exists. Those are counted as vanished
+    and nothing else. Until 2026-10-19 they were added to `unhashable`, and
+    the finding called them setuid files that could not be read: a test run
+    creating and deleting files in /tmp produced "2 setuid files could not be
+    hashed" on a machine that had none.
 
     HASHES ARE TAKEN NOW, WHICH THE REMOTE MODULE DOES NOT DO, and it is the
     difference between "a new setuid binary appeared" and "the binary at this
@@ -2485,7 +2494,8 @@ def sweep_filesystem() -> dict:
     started = time.monotonic()
     prune = set(SUID_PRUNE)
     result = {"suid": {}, "sgid": {}, "caps": {}, "files_seen": 0,
-              "unreadable_dirs": [], "unhashable": 0, "xattr_unreadable": 0}
+              "unreadable_dirs": [], "unhashable": 0, "unhashable_paths": [],
+              "unexamined": [], "vanished": 0, "xattr_unreadable": 0}
 
     def on_error(err):
         result["unreadable_dirs"].append(
@@ -2503,8 +2513,14 @@ def sweep_filesystem() -> dict:
             result["files_seen"] += 1
             try:
                 st = os.lstat(path)
+            except FileNotFoundError:
+                result["vanished"] += 1
+                continue
             except OSError:
-                result["unhashable"] += 1
+                # Still there, but not even its mode could be read, so
+                # whether it carries setuid is unknown.
+                if len(result["unexamined"]) < 50:
+                    result["unexamined"].append(path)
                 continue
             if not stat.S_ISREG(st.st_mode):
                 continue
@@ -2547,6 +2563,8 @@ def sweep_filesystem() -> dict:
                 data, reason = _read_bytes(path)
                 if data is None:
                     result["unhashable"] += 1
+                    if len(result["unhashable_paths"]) < 50:
+                        result["unhashable_paths"].append(path)
                     digest = f"unreadable:{reason}"
                 else:
                     digest = _hash16(data)
@@ -3470,6 +3488,7 @@ def sweep_coverage_findings(sweep: dict, typical=None) -> list:
              "seconds": sweep.get("seconds"),
              "read_by": "tools/local_integrity.py"}))
     if sweep.get("unhashable"):
+        paths = sweep.get("unhashable_paths") or []
         out.append(_finding(
             "LNX-2010", "medium", "file", "filesystem-sweep-hashes",
             "Some setuid or setgid files could not be hashed",
@@ -3477,9 +3496,21 @@ def sweep_coverage_findings(sweep: dict, typical=None) -> list:
              f"not be read, so they are recorded as unreadable rather than as "
              f"a hash. A file recorded that way cannot be told apart from "
              f"itself by content; only its path and mode are watched until "
-             f"this process can read it."),
-            {"unhashable": sweep["unhashable"],
+             f"this process can read it."
+             + (" The files: " + "; ".join(paths[:12])
+                + (" (and more)" if len(paths) > 12 else "") if paths else "")),
+            {"unhashable": sweep["unhashable"], "paths": paths,
              "read_by": "tools/local_integrity.py"}))
+    if sweep.get("unexamined"):
+        paths = sweep["unexamined"]
+        out.append(_finding(
+            "LNX-2010", "medium", "file", "filesystem-sweep-unexamined",
+            "Some files could not be examined",
+            (f"{len(paths)} file(s) are there but even their mode could not "
+             f"be read, so whether they carry setuid or setgid is unknown. "
+             f"The files: " + "; ".join(paths[:12])
+             + (" (and more)" if len(paths) > 12 else "")),
+            {"paths": paths, "read_by": "tools/local_integrity.py"}))
     # THE XATTR COUNTER MEANS 'REFUSED', NOT 'ABSENT'.
     #
     # MEASURED 2026-09-23, and it is why this finding is raised only on a REAL
