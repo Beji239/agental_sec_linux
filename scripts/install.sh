@@ -20,7 +20,7 @@ set -uo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT" || { echo "install: cannot open $PROJECT_ROOT" >&2; exit 1; }
 
-ASK=1 CLAMAV=ask EBPF=ask SYSTEM=1 TESTTOOLS=ask
+ASK=1 CLAMAV=ask EBPF=ask SYSTEM=1 TESTTOOLS=ask UPDATES=ask
 for arg in "$@"; do
     case "$arg" in
         --yes|-y) ASK=0 ;;
@@ -75,6 +75,8 @@ if [[ "$ASK" == 1 ]]; then
     if [[ "$SYSTEM" == 1 && "$EBPF" == ask ]]; then
         yes_no "Install the build tools for the optional eBPF kernel camera?" n && EBPF=yes || EBPF=no
     fi
+    yes_no "Check GitHub once a day for updates? Only the latest version number is asked, nothing is sent." y \
+        && UPDATES=yes || UPDATES=no
     if [[ "$TESTTOOLS" == ask ]]; then
         echo "      The security test tools are only for running the security"
         echo "      tests; the app does not need them."
@@ -188,6 +190,18 @@ for pair in "config.linux.example.json:config.json" ".env.example:.env"; do
 done
 python3 -c 'import json; json.load(open("config.json"))' \
     || die "config.json is not valid JSON. Fix it, or move it aside and run this again."
+# The daily update check is on unless the answer was no.
+if [[ "$UPDATES" != ask ]]; then
+    python3 - "$UPDATES" <<'PY'
+import json, sys
+cfg = json.load(open("config.json"))
+cfg.setdefault("updates", {})["check_daily"] = sys.argv[1] == "yes"
+with open("config.json", "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PY
+    ok "daily update check $([[ "$UPDATES" == yes ]] && echo on || echo off)"
+fi
 
 # Writes one KEY=value line in .env.
 env_set() {          # env_set KEY VALUE; the value travels in the environment
@@ -357,4 +371,4 @@ echo "  - kernel camera:       ./ebpf/build.sh && sudo ./scripts/install_ebpf_ca
 echo "  - your router:         ./scripts/install_gateway_agent.sh --enroll ROUTER_ADDRESS"
 echo "  - start on boot:       SETUP.md step 12"
 echo "  - security test tools: ./scripts/install_test_tools.sh (developers only)"
-echo "To update later: ./scripts/update.sh"
+echo "To update later: the Update button on the Settings tab, or ./scripts/update.sh"

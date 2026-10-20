@@ -83,6 +83,23 @@
 
   #logo span { color: var(--text-dim); font-weight: 400; font-size: 11px; }
 
+  /* A newer release on GitHub: amber, red for a security fix. */
+  #logo #update-dot { display: none; width: 8px; height: 8px; border-radius: 50%;
+                      background: var(--amber); cursor: pointer; }
+  #logo #update-dot.sec { background: var(--red); }
+  #logo #app-version { cursor: pointer; }
+  #update-notice { position: fixed; right: 22px; top: 60px; z-index: 900;
+                   width: 340px; background: var(--bg2);
+                   border: 1px solid var(--amber); border-radius: 8px;
+                   padding: 16px; box-shadow: 0 8px 28px rgba(0,0,0,.45);
+                   display: none; }
+  #update-notice.sec { border-color: var(--red); }
+  #update-notice .un-title { font-weight: 600; margin-bottom: 6px; }
+  #update-notice .un-body { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; }
+  .upd-log { white-space: pre-wrap; max-height: 260px; overflow: auto;
+             font-family: var(--mono); font-size: 11px; background: var(--bg3);
+             padding: 10px; border-radius: var(--radius); margin: 6px 0; }
+
   /* The mark, at the size the topbar can actually carry next to 15px text.
      block + flex-shrink:0 so it cannot be squashed by a long status-pill
      row; the topbar is 48px tall so 20px has room without moving the bar. */
@@ -2102,7 +2119,8 @@
   <div id="logo">
     <img id="logo-mark" src="/ui/img/agentalsec-mark.svg" alt="" width="20" height="20">
     AgentalSec
-    <span id="app-version"></span>
+    <span id="app-version" data-onclick="openUpdates()"></span>
+    <span id="update-dot" data-onclick="openUpdates()"></span>
   </div>
   <div id="status-pills">
     <div class="pill" id="pill-ai"><span class="dot"></span> AI</div>
@@ -2119,6 +2137,17 @@
 <!-- THE QUESTION DOORBELL. Deliberately carries no detail: it says how many
      and takes the owner to the chat. A popup that tried to hold the question would
      be asking the owner to answer in a box the owner cannot think in. -->
+<!-- A newer release: shown once per version for a minor, major or
+     security update. A patch only lights the dot. -->
+<div id="update-notice">
+  <div class="un-title" id="un-title"></div>
+  <div class="un-body" id="un-body"></div>
+  <div class="row">
+    <button class="btn" data-onclick="openUpdates();dismissUpdateNotice()">See what's new</button>
+    <button class="btn" data-onclick="dismissUpdateNotice()">Later</button>
+  </div>
+</div>
+
 <div id="question-popup">
   <div class="qp-title" id="qp-title">It has something to ask you</div>
   <div class="qp-body" id="qp-body"></div>
@@ -3731,6 +3760,44 @@
        most need it is never the moment it is showing. -->
   <div class="page" id="page-settings">
 
+    <!-- Updates from GitHub, core/updater.py. -->
+    <div class="card" id="updates-card">
+      <div class="card-title">Updates</div>
+      <div class="card-note">
+        Once a day AgentalSec asks GitHub for the number of its latest
+        release. Nothing else is sent: no data, no device list, no ID. GitHub
+        sees this machine's address (the VPN's, with the VPN on) and that
+        AgentalSec runs here.
+        <br><br>
+        <b>Update now</b> gets the new code and Python packages, installs the
+        root helpers and sensors again where they fell behind (a dialog asks
+        for your password once), then restarts AgentalSec on the new code.
+        Your config.json, .env and database are kept.
+      </div>
+      <div id="upd-summary" style="font-size:13px;margin-bottom:10px;line-height:1.5;"></div>
+      <div id="upd-release" style="display:none;margin-bottom:10px;">
+        <div id="upd-title" style="font-weight:600;"></div>
+        <pre id="upd-notes" class="upd-log"></pre>
+        <a id="upd-link" href="#" target="_blank" rel="noopener noreferrer"
+           style="font-size:12px;color:var(--blue);">Release page on GitHub</a>
+      </div>
+      <div class="row" style="margin-bottom:6px;">
+        <button class="btn" id="upd-run" data-onclick="runUpdate('update')">Update now</button>
+        <button class="btn" id="upd-helpers" data-onclick="runUpdate('helpers')" style="display:none;">Reinstall helpers</button>
+        <button class="btn" data-onclick="checkUpdatesNow()">Check now</button>
+        <label style="font-size:12px;color:var(--text-dim);">
+          <input type="checkbox" id="upd-daily" data-onchange="setUpdateCheck(this.checked)">
+          Check GitHub once a day
+        </label>
+      </div>
+      <div id="upd-why" style="font-size:12px;color:var(--text-dim);margin-bottom:6px;"></div>
+      <div id="upd-job" style="display:none;">
+        <div id="upd-step" style="font-size:13px;margin-top:8px;"></div>
+        <pre id="upd-log" class="upd-log"></pre>
+        <div id="upd-todo" style="font-size:12px;line-height:1.6;"></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title">Stop the app</div>
       <div class="card-note">
@@ -3903,6 +3970,267 @@ async function loadVersion() {
         : `Release ${d.version}`;
     }
   } catch (e) {}
+  loadUpdateStatus();
+}
+
+// UPDATES. The daily GitHub check and the Update button, core/updater.py.
+// The status is read again every half hour, so a page left open for days
+// still shows a release that came out meanwhile.
+let _updLast = null;
+let _updPoll = null;
+let _updRestart = null;
+setInterval(() => { if (!_updPoll && !_updRestart) loadUpdateStatus(); }, 30 * 60 * 1000);
+
+const UPD_KIND = { patch: 'a patch', minor: 'a minor update', major: 'a major update' };
+
+function updAgo(ts) {
+  if (!ts) return '';
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 90) return 'just now';
+  if (s < 5400) return Math.round(s / 60) + ' min ago';
+  if (s < 172800) return Math.round(s / 3600) + ' h ago';
+  return Math.round(s / 86400) + ' days ago';
+}
+
+async function loadUpdateStatus() {
+  let d;
+  try {
+    const r = await fetch('/api/update', { headers: authHeaders(), cache: 'no-store' });
+    if (!r.ok) return null;
+    d = await r.json();
+  } catch (e) { return null; }
+  _updLast = d;
+  renderUpdateDot(d);
+  renderUpdates(d);
+  maybeUpdateNotice(d);
+  if (d.job && d.job.running && !_updPoll) _updPoll = setInterval(pollUpdate, 2000);
+  // Back from an update's restart: show how it went.
+  let after = null;
+  try { after = sessionStorage.getItem('agental_after_update'); sessionStorage.removeItem('agental_after_update'); } catch (e) {}
+  if (after) openUpdates();
+  return d;
+}
+
+function updHeadline(d) {
+  const rel = d.release || {};
+  return `AgentalSec ${rel.version} is out, ${UPD_KIND[d.kind] || 'an update'}`
+       + (d.security ? ', with a security fix' : '');
+}
+
+function renderUpdateDot(d) {
+  const dot = document.getElementById('update-dot');
+  if (!dot) return;
+  dot.style.display = d.available ? 'inline-block' : 'none';
+  dot.classList.toggle('sec', !!d.security);
+  dot.title = d.available ? updHeadline(d) + '. Click for what changed.' : '';
+}
+
+function maybeUpdateNotice(d) {
+  const box = document.getElementById('update-notice');
+  if (!box || !d.available) return;
+  if (d.kind === 'patch' && !d.security) return;
+  const ver = d.release.version;
+  let seen = null;
+  try { seen = localStorage.getItem('agental_update_noticed'); } catch (e) {}
+  if (seen === ver) return;
+  document.getElementById('un-title').textContent = updHeadline(d) + '.';
+  document.getElementById('un-body').textContent =
+    d.kind === 'major'
+      ? 'A major version changes more than usual. Read the notes before updating.'
+      : (d.security ? 'It fixes a security problem. Updating soon is wise.'
+                    : 'See what is new, and update with one button in Settings.');
+  box.classList.toggle('sec', !!d.security);
+  box.style.display = 'block';
+}
+
+function dismissUpdateNotice() {
+  const box = document.getElementById('update-notice');
+  if (box) box.style.display = 'none';
+  try {
+    if (_updLast && _updLast.release)
+      localStorage.setItem('agental_update_noticed', _updLast.release.version);
+  } catch (e) {}
+}
+
+async function openUpdates() {
+  try { await showPage('settings'); } catch (e) {}
+  const card = document.getElementById('updates-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderUpdates(d) {
+  const sum = document.getElementById('upd-summary');
+  if (!sum) return;
+  const rel = d.release;
+  const parts = [`Running AgentalSec ${esc((d.current || {}).label || 'unknown')}.`];
+  if (rel && d.available) {
+    parts.push(`<b>${esc(updHeadline(d))}</b>`
+      + (rel.published_at ? `, released ${esc(rel.published_at.slice(0, 10))}.` : '.'));
+  } else if (rel && d.kind) {
+    parts.push(`That is the latest release (${esc(rel.version)}).`);
+  }
+  if (d.check_ok === false) {
+    parts.push(`<span style="color:var(--amber);">Couldn't check for updates `
+      + `${esc(updAgo(d.checked_at))}: ${esc(d.check_error)}.</span>`);
+  } else if (d.checked_at) {
+    parts.push(`Last checked ${esc(updAgo(d.checked_at))}.`);
+  } else {
+    parts.push('Not checked yet.');
+  }
+  if (!d.enabled) parts.push('The daily check is off.');
+  sum.innerHTML = parts.join(' ');
+
+  const relBox = document.getElementById('upd-release');
+  relBox.style.display = rel && d.available ? 'block' : 'none';
+  if (rel && d.available) {
+    document.getElementById('upd-title').textContent = rel.title || rel.version;
+    document.getElementById('upd-notes').textContent = rel.notes || '(no release notes)';
+    document.getElementById('upd-link').href = rel.url || d.releases_page;
+  }
+
+  const job = d.job || {};
+  const can = d.can_update || {};
+  const run = document.getElementById('upd-run');
+  run.disabled = !can.ok || !!job.running || !!_updRestart;
+  run.textContent = d.available ? `Update to ${rel.version}` : 'Update now';
+  const helpers = document.getElementById('upd-helpers');
+  const behind = d.helpers_behind || [];
+  helpers.style.display = behind.length ? '' : 'none';
+  helpers.disabled = !!job.running || !!_updRestart;
+  helpers.title = behind.length ? 'Behind: ' + behind.join(', ') : '';
+  document.getElementById('upd-daily').checked = !!d.enabled;
+  const why = [];
+  if (!can.ok && can.reason) why.push(esc(can.reason));
+  if (behind.length) why.push('The root helpers or sensors differ from this folder: '
+    + esc(behind.join(', ')) + '. Reinstall helpers brings them level with one password.');
+  document.getElementById('upd-why').innerHTML = why.join('<br>');
+  renderUpdateJob(job);
+}
+
+function renderUpdateJob(job) {
+  const box = document.getElementById('upd-job');
+  if (!box) return;
+  if (_updRestart) job = _updRestart.job || {};
+  if (!job.running && !job.finished_at && !_updRestart) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const step = document.getElementById('upd-step');
+  if (_updRestart) step.textContent = _updRestart.text;
+  else if (job.running) step.textContent = 'Working: ' + (job.step || 'starting') + '...';
+  else step.innerHTML = `<b style="color:var(${job.ok ? '--green' : '--amber'});">`
+    + esc(job.result) + '</b>'
+    + (job.finished_at ? ` <span style="color:var(--text-dim);">(${esc(updAgo(job.finished_at))})</span>` : '');
+  const log = document.getElementById('upd-log');
+  const atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+  log.textContent = (job.log || []).join('\n');
+  if (atEnd) log.scrollTop = log.scrollHeight;
+  const todo = job.todo || [];
+  document.getElementById('upd-todo').innerHTML = todo.length
+    ? '<b>Still to do by hand:</b><br>' + todo.map(t => '&bull; ' + esc(t)).join('<br>') : '';
+}
+
+async function runUpdate(what) {
+  const d = _updLast || {};
+  let ask;
+  if (what === 'helpers') {
+    ask = 'Install the root helpers and sensors again?\n\nA dialog asks for your password once.';
+  } else {
+    ask = (d.available ? `Update AgentalSec to ${d.release.version}?` : 'Update AgentalSec to the latest code?')
+        + '\n\nIt gets the new code and Python packages, installs the root helpers again '
+        + 'where needed (a dialog asks for your password), then restarts AgentalSec. '
+        + 'The page reloads by itself when it is back.';
+    if (d.kind === 'major') ask = 'This is a MAJOR update, read its notes first.\n\n' + ask;
+  }
+  if (!confirm(ask)) return;
+  const why = document.getElementById('upd-why');
+  try {
+    const r = await fetch('/api/update/run', {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ what }) });
+    const res = await r.json();
+    if (!res.started) { why.textContent = res.reason || ('refused, HTTP ' + r.status); return; }
+  } catch (e) { why.textContent = 'could not reach the app: ' + e; return; }
+  if (!_updPoll) _updPoll = setInterval(pollUpdate, 2000);
+  pollUpdate();
+}
+
+async function pollUpdate() {
+  let d = null;
+  try {
+    const r = await fetch('/api/update', { headers: authHeaders(), cache: 'no-store' });
+    if (r.ok) d = await r.json();
+  } catch (e) {}
+  if (!d) return;
+  _updLast = d;
+  renderUpdates(d);
+  const job = d.job || {};
+  if (job.running) return;
+  clearInterval(_updPoll);
+  _updPoll = null;
+  if (job.restarting) waitForRestart(d.current && d.current.label);
+}
+
+// The app stops cleanly and starts again on the new code. The page waits
+// for it to go away and come back, then reloads.
+function waitForRestart(oldLabel) {
+  if (_updRestart) return;
+  _updRestart = { text: 'Restarting AgentalSec on the new code...', gone: false, waited: 0,
+                  job: _updLast ? _updLast.job : {} };
+  renderUpdateJob({});
+  const tick = setInterval(async () => {
+    _updRestart.waited += 2;
+    let label = null;
+    try {
+      const r = await fetch('/api/version', { headers: authHeaders(), cache: 'no-store' });
+      if (r.ok) label = (await r.json()).label;
+    } catch (e) { _updRestart.gone = true; }
+    if (label && (_updRestart.gone || label !== oldLabel)) {
+      clearInterval(tick);
+      _updRestart.text = 'Back, reloading the page...';
+      renderUpdateJob({});
+      try { sessionStorage.setItem('agental_after_update', '1'); } catch (e) {}
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
+    _updRestart.text = (_updRestart.gone ? 'Starting again' : 'Stopping cleanly')
+      + `, ${_updRestart.waited}s...`;
+    if (_updRestart.waited >= 900) {
+      clearInterval(tick);
+      _updRestart.text = 'AgentalSec did not come back within 15 minutes. '
+        + 'Look at its terminal window, or start it again from its icon.';
+    }
+    renderUpdateJob({});
+  }, 2000);
+}
+
+async function checkUpdatesNow() {
+  const sum = document.getElementById('upd-summary');
+  if (sum) sum.textContent = 'asking GitHub...';
+  try {
+    const r = await fetch('/api/update/check', { method: 'POST', headers: authHeaders() });
+    const res = await r.json();
+    if (res.status) { _updLast = res.status; renderUpdates(res.status); renderUpdateDot(res.status); maybeUpdateNotice(res.status); }
+    else if (sum) sum.textContent = res.error || ('refused, HTTP ' + r.status);
+  } catch (e) { if (sum) sum.textContent = 'could not reach the app: ' + e; }
+}
+
+async function setUpdateCheck(on) {
+  const why = document.getElementById('upd-why');
+  try {
+    const r = await fetch('/api/update/setting', {
+      method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ check_daily: !!on }) });
+    const res = await r.json();
+    if (!res.ok) {
+      why.textContent = res.reason || ('not saved, HTTP ' + r.status);
+      document.getElementById('upd-daily').checked = !on;
+      return;
+    }
+  } catch (e) {
+    why.textContent = 'could not reach the app: ' + e;
+    document.getElementById('upd-daily').checked = !on;
+    return;
+  }
+  loadUpdateStatus();
 }
 
 // The page holds no key. The app's one-time link stores a session token
@@ -3986,6 +4314,7 @@ const UI_ACTIONS = new Set([
   'bgUndo',
   'checkExpectationsNow',
   'checkPredictionsNow',
+  'checkUpdatesNow',
   'clearKey',
   'closeMapPanel',
   'collectRouterNow',
@@ -4001,6 +4330,7 @@ const UI_ACTIONS = new Set([
   'dismissQuestionPopup',
   'dismissSelectedReports',
   'dismissTickedRuns',
+  'dismissUpdateNotice',
   'generateAppKey',
   'goToInbox',
   'handleKey',
@@ -4042,6 +4372,7 @@ const UI_ACTIONS = new Set([
   'openSensorWatch',
   'openSettingsAt',
   'openTrial',
+  'openUpdates',
   'printDailyReport',
   'promoteFinding',
   'rejectFinding',
@@ -4056,6 +4387,7 @@ const UI_ACTIONS = new Set([
   'runAgentNow',
   'runApprovedNow',
   'runFilterChanged',
+  'runUpdate',
   'saveApiKey',
   'saveConfigField',
   'saveDisplayName',
@@ -4070,6 +4402,7 @@ const UI_ACTIONS = new Set([
   'setRetentionOff',
   'setRouterEnabled',
   'setTimeFilter',
+  'setUpdateCheck',
   'showDetection',
   'showMapEndpoint',
   'showPage',
@@ -4302,7 +4635,7 @@ function loadPage(name) {
   if (name === 'agents')      { loadAgents(); loadDailyReports(); }
   if (name === 'review')     { loadBlindingBudget(); loadDismissed(); loadSuppressions();
                                loadIntegrity(); loadExpectedPorts(); }
-  if (name === 'settings')   { loadRetention(); return loadSettings(); }
+  if (name === 'settings')   { loadRetention(); loadUpdateStatus(); return loadSettings(); }
 }
 
 // POLLING

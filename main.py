@@ -8,6 +8,7 @@
 # init_registry, start(), sweepers, shutdown handler, then the web server.
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -2687,6 +2688,9 @@ def main(argv=None):
     host         = flask_cfg.get("host", "127.0.0.1")
     port         = int(flask_cfg.get("port", 5000))
     auto_browser = flask_cfg.get("auto_open_browser", True)
+    # A restart from the Update button reuses the tab already open.
+    if os.environ.pop("AGENTALSEC_NO_BROWSER", ""):
+        auto_browser = False
 
     if host != "127.0.0.1":
         logger.warning(f"WARNING: Flask bound to {host}, not localhost only. "
@@ -2695,6 +2699,43 @@ def main(argv=None):
 
     app = create_app(config, modules, session_id, api_key=resolved["app_api_key"])
     app.config["AGENTAL_SHUTDOWN"] = _shutdown_from_dashboard
+
+    # The Update button's restart: the same clean stop, then this process
+    # becomes a fresh start of the same command on the new code. The PID
+    # stays, so the launcher's window and a systemd unit both keep it.
+    restart_argv = [sys.executable, os.path.abspath(sys.argv[0])] + sys.argv[1:]
+
+    def _restart_from_dashboard(reason):
+        def run():
+            time.sleep(0.4)
+            try:
+                if not _clean_shutdown(reason):
+                    return
+            except Exception as e:
+                logger.error(f"Clean stop before the restart failed: {e}")
+            logger.info("Starting again on the new code.")
+            for h in logging.getLogger().handlers:
+                with contextlib.suppress(Exception):
+                    h.flush()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.environ["AGENTALSEC_NO_BROWSER"] = "1"
+            try:
+                os.execv(restart_argv[0], restart_argv)
+            except OSError as e:
+                logger.error(f"Restart failed, the app stops instead: {e}")
+            os._exit(1)
+
+        threading.Thread(target=run, name="dashboard-restart",
+                         daemon=True).start()
+
+    try:
+        from core import updater
+        updater.LIVE = True
+        updater.RESTART = _restart_from_dashboard
+        updater.start()
+    except Exception as e:
+        logger.warning(f"Update check did not start: {e}")
 
     if auto_browser:
         threading.Thread(target=_open_browser_when_ready,

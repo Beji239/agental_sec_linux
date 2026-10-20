@@ -996,6 +996,20 @@
  {
   "tool": "bandit",
   "rule": "B404",
+  "path": "core/updater.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/updater.py",
+  "text": "proc = subprocess.Popen(cmd, cwd=str(ROOT), stdin=subprocess.DEVNULL,",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
   "path": "core/version.py",
   "text": "import subprocess",
   "reason": "runs git describe only, with an argument list and no shell"
@@ -1097,6 +1111,13 @@
   "path": "main.py",
   "text": "res = subprocess.run([\"ss\", \"-H\", \"-ltnp\", f\"sport = :{port}\"],",
   "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B606",
+  "path": "main.py",
+  "text": "os.execv(restart_argv[0], restart_argv)",
+  "reason": "the restart runs this same interpreter and script with the arguments it started with, no shell"
  },
  {
   "tool": "bandit",

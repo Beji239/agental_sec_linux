@@ -251,6 +251,8 @@ to reach my own install without steps I could forget. That is why there is an
 installer that does the whole setup, launchers, an update script that brings
 in a new version and reinstalls whatever it changed, and services that start
 again on their own when their code changes. The same path updates your copy.
+The app tells you when a new version is out, and one button on the Settings
+tab installs it, helpers and sensors included, and restarts it.
 
 **Light on memory.** My own computer has always been short of memory. So the
 This Computer tab lists the ordinary background programs that nothing depends
@@ -398,8 +400,8 @@ dashboard key the installer printed (it is also in `.env` as
 desktop icon says "untrusted", right-click it and choose "Allow launching".
 
 The optional parts (the kernel camera, your router, start on boot) and every
-step done by hand are in [SETUP.md](SETUP.md). To update later:
-`./scripts/update.sh`.
+step done by hand are in [SETUP.md](SETUP.md). To update later: the
+Update button on the Settings tab, or `./scripts/update.sh`.
 
 ## Running without root
 

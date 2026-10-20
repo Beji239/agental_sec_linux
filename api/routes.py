@@ -526,6 +526,51 @@ def register_routes(app):
         from core import version
         return jsonify(version.current())
 
+    # Updates from GitHub: the daily check's answer, the Update button and
+    # its progress. core/updater.py does the work.
+    @app.route("/api/update")
+    @require_api_key
+    def update_status():
+        from core import updater
+        return jsonify(updater.status())
+
+    @app.route("/api/update/check", methods=["POST"])
+    @require_api_key
+    def update_check_now():
+        from core import updater
+        res = updater.check_now()
+        return jsonify({**res, "status": updater.status()}), \
+            (200 if res.get("ok") or updater.LIVE else 409)
+
+    @app.route("/api/update/run", methods=["POST"])
+    @require_api_key
+    def update_run():
+        from core import updater
+        body = request.get_json(silent=True) or {}
+        what = body.get("what")
+        if what not in ("update", "helpers"):
+            return jsonify({"started": False,
+                            "reason": "what must be update or helpers"}), 400
+        res = updater.start_job(what)
+        if res.get("started"):
+            logger.info(f"The dashboard started the {what} job of the "
+                        f"Updates card, asked by {request.remote_addr or 'unknown'}.")
+        return jsonify(res), (200 if res.get("started") else 409)
+
+    @app.route("/api/update/setting", methods=["POST"])
+    @require_api_key
+    def update_setting():
+        from core import updater
+        body = request.get_json(silent=True) or {}
+        on = body.get("check_daily")
+        if not isinstance(on, bool):
+            return jsonify({"ok": False,
+                            "reason": "check_daily must be true or false"}), 400
+        err = updater.set_enabled(on)
+        if err:
+            return jsonify({"ok": False, "reason": err}), 409
+        return jsonify({"ok": True, "check_daily": on})
+
     @app.route("/api/status")
     @require_api_key
     def status():

@@ -308,6 +308,21 @@ When a scan test fails on something new, fix it, or check it and run
 
 ## Updating
 
+Once a day AgentalSec asks GitHub for the number of its latest release. Only
+that number is asked, nothing is sent: no data, no device list, no ID.
+GitHub sees your address (the VPN's, with the VPN on) and that AgentalSec
+runs there. A newer release puts a dot next to the version in the top bar,
+red when the release fixes a security problem. Turn the check off on the
+Settings tab, under Updates.
+
+**Update now** on the same card does the whole update: the new code and
+Python packages, the root helpers and sensors again where they fell behind
+(a dialog asks for your password once), then AgentalSec restarts on the new
+code and the page reloads. **Reinstall helpers** does only the helpers. The
+button needs a folder cloned with git; a ZIP download cannot update itself.
+
+From a terminal it is:
+
 ```bash
 ./scripts/update.sh
 ```
