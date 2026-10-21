@@ -437,7 +437,7 @@ _untrusted_seen: set[str] = set()
 #
 # TODO 67, 2026-09-08. While clearing out a tree pid by pid, the model wrote
 # "PID 31612 killed" twice about a process that was still running, and had it
-# labelled a crashpad handler when it was the GPU process. The owner caught it.
+# labelled a crashpad handler when it was the GPU process. I caught it.
 # The app did not.
 #
 # This is worse than the described-card problem. A card that never appears is
@@ -478,7 +478,7 @@ def init_agent(config: dict, api_key: str = ""):
 
     # Both are bounded rather than taken as given. A config that asks for a
     # 2048 answer budget would put the 88 bug straight back, and one that asks
-    # for a million would make a runaway expensive instead of merely annoying.
+    # for a million would let a runaway answer go on and on.
     _max_output_tokens = max(4096, min(64000, int(
         ds.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS))))
     _api_context = max(32_000, min(1_000_000, int(
@@ -1535,7 +1535,7 @@ def set_permission_decision(call_id: str, approved: bool):
     _permission_decisions[call_id] = approved
 
 
-# No clock on a card (the owner's call, 2026-09-08): the wait ends on
+# No clock on a card (2026-09-08): the wait ends on
 # Approve, Deny or shutdown. A keepalive write notices a closed tab.
 CARD_KEEPALIVE_SECONDS = 5
 
@@ -1924,7 +1924,7 @@ def _build_permission_card(tool_name: str, params: dict, call_id: str) -> dict:
 
     # Suppression is silent and permanent, a missed detection leaves no
     # trace. Say so on the card, because "stop monitoring X" reads as
-    # harmless next to "kill process X" and is often the more costly choice.
+    # harmless next to "kill process X" and is often the riskier choice.
     if is_suppression:
         card["warning"] = (
             "This stops AgentalSec from reporting this entity. Suppression is "

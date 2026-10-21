@@ -125,8 +125,8 @@ REQUIREMENTS: dict[str, Requirement] = {
     # has recorded a dozen times: a claim about a part of the tool written as a
     # claim about the tool.
     #
-    # THE OWNER WAS GIVEN THREE DESIGNS AND TOOK THE THIRD, in the owner's own words:
-    # "do option C and when done report back". So the raw SYN scan was BUILT
+    # THREE DESIGNS WERE ON THE TABLE AND THE THIRD WAS CHOSEN.
+    # So the raw SYN scan was BUILT
     # (tools/port_scanner.py, SynScanEngine), and this row now says what the
     # module loses unelevated -- BOTH losses, because there are two:
     #
@@ -276,7 +276,7 @@ def check_port_owner_readability(sample_limit: int = 40) -> tuple:
     for capture and for the logs. The probe looks for pids owned by a
     different account and tries to LIST their fd directory, which is exactly
     what the sweep does, and it is bounded (sample_limit) because this runs on
-    every boot and the sweep's own walk is the expensive one.
+    every boot and the sweep's own walk is the slow one.
 
     THE DETAIL CARRIES THE NUMBERS rather than a boolean alone: how many
     foreign-account processes this host has, how many were tried and how many

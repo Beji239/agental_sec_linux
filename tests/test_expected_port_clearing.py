@@ -13,7 +13,7 @@ somebody should have seen. So most of what is fenced here is what must SURVIVE
 a declaration, not what must go.
 
 Runs against a real schema built by Schema.SQL plus migrations, on a temp
-database. Touches nothing of the owner's.
+database. Touches nothing live.
 """
 import json
 import pathlib
@@ -156,7 +156,7 @@ except me.BadInput:
 
 
 print("\n[7] clearing never takes the declaration down with it")
-# A clear that fails must not lose the thing the owner actually asked for.
+# A clear that fails must not lose the thing that was actually asked for.
 broken = me.clear_port_findings("192.0.2.23", 8888, "x")
 check("a clear with nothing to do is not an error", broken["count"], 0)
 

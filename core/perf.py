@@ -131,7 +131,7 @@ NOT_MEASURED = [
 #
 # THE BUG THIS FIXES. build_hour groups packets by src_ip and again by dst_ip
 # with no filter, so every address that ever appeared on either side of a
-# packet got a row and a baseline. The page listed the owner's TV and the owner's Linux
+# packet got a row and a baseline. The page listed my TV and my Linux
 # box next to 77.111.246.43, 11.22.36.63, 11.22.33.53, 224.0.0.251 and
 # 239.255.255.250. Those are destinations and multicast groups, not devices.
 #
@@ -628,7 +628,7 @@ def backfill(hours: int = 48, skip_existing: bool = True,
     for six hours' work, which is fine for six. Holding one for forty eight
     while the sniffer is trying to write would park the capture behind this.
 
-    skip_existing means the second boot is cheap: an hour that already has rows
+    skip_existing means the second boot is quick: an hour that already has rows
     was built from the same packets and does not improve by being rebuilt.
     """
     now = now or _now()
@@ -1051,7 +1051,7 @@ def summary_for_model(hours: int = 24, now: datetime = None) -> dict:
     ONE LINE PER DEVICE. The full bucket list is thousands of numbers and
     would eat the answer budget without telling the model anything it could
     not get from the summary. It can ask for one device's detail if a line
-    looks interesting, which is the same trim rule the owner asked for
+    looks interesting, which is the same trim rule used
     everywhere else.
     """
     view = device_view(hours=hours, now=now)

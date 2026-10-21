@@ -7,8 +7,8 @@ starts explaining its deficiencies in the MIDDLE of the conversation, what it
 cannot do and what it does not have. "Kinda gives this feeling that why are we
 using this tool to begin with."
 
-2026-09-18, after being told the fix was about relocating rule two, the owner pushed
-back harder and the owner was right: the explanation itself is VOID. The app has a
+2026-09-18, after the fix was first framed as relocating rule two, it went
+further: the explanation itself is VOID. The app has a
 UDP scanner now, it hashes and checks signatures, it looks up reputation, and
 the router work is coming. A paragraph about its own blindness is not honesty
 any more, it is out of date.

@@ -11,7 +11,7 @@ host, and told the owner the device was "actively probing THIS host's ports
 
 Those rows are the scanned device answering with RST because the port was
 closed. It read the reply leg of its own scan as unsolicited hostile
-activity, and did it while the owner was telling it the device was the owner's.
+activity, and did it while I was telling it the device was mine.
 
 That is worse than the wrong device label the same session produced. A wrong
 label is a wrong answer. This is a FALSE ALARM ABOUT AN ATTACK, aimed at the

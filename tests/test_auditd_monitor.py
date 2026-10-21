@@ -45,7 +45,7 @@ So the order is:
 
 WHAT THIS FILE CANNOT TEST HERE, said out loud rather than skipped quietly:
 a REAL auditd writing a real log. That needs `sudo apt install auditd` on the
-owner's machine, which is the owner's command and not this test's. Everything below
+your machine, which is your command and not this test's. Everything below
 runs against fixture logs built in both of audit's own formats, and the
 live half belongs to scripts/verify_auditd.sh, whose skips name themselves.
 
@@ -217,7 +217,7 @@ check("the module never reports `blind` for a machine with no auditd",
       # being a different state rather than by being tolerated here.
       am.status({}).get("state") == "CANNOT READ LOG")
 
-# THE ONE COMMAND IS PRINTED, NOT DESCRIBED. This is the owner's Q7 wording
+# THE ONE COMMAND IS PRINTED, NOT DESCRIBED. This is the wording
 # for the whole tier and it is asserted as a literal because it is the string
 # a person is meant to copy.
 check("the install command is the one the operator would run",

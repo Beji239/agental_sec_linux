@@ -2,7 +2,7 @@
 tests/test_important_findings.py, the list is only worth having if it is
 believable.
 
-WHERE THIS CAME FROM, 2026-09-09. The owner wanted a table of findings that
+WHERE THIS CAME FROM, 2026-09-09. I wanted a table of findings that
 matter, and named the failure mode in the same breath as the idea: a model
 asked to promote what matters would have promoted all seventeen of the false
 masquerading findings from the day before, confidently, and one wrong row

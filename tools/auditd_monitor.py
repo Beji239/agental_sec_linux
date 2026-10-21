@@ -12,7 +12,7 @@
 #
 # THE PART THAT MATTERS MOST ON THIS MACHINE: IT IS NOT INSTALLED.
 #
-# MEASURED on the owner's box, 2026-09-22, and the finding is the whole reason
+# MEASURED on this box, 2026-09-22, and the finding is the whole reason
 # this module has a shape rather than a feature:
 #
 #   auditctl, auditd, ausearch, aureport, augenrules   NONE PRESENT
@@ -27,9 +27,8 @@
 # bill of health. It is: THE KERNEL FEED IS ABSENT, NOTHING IS BEING
 # RECORDED, and here is the one command that changes that.
 #
-# The owner's approved wording for this task, Q7 on 2026-09-17: "The module
-# must report 'not installed, blind, here is the one command' rather than
-# pretending." That is what status() and the coverage block do, and it is why
+# The wording for this task, 2026-09-17: the module must report "not
+# installed, blind, here is the one command" rather than pretending. That is what status() and the coverage block do, and it is why
 # this file spends more lines on the absence than on the parsing.
 #
 # THE ONE COMMAND, and it is printed rather than described:
@@ -76,7 +75,7 @@
 #     machine is the worst thing this project could ship. The command is
 #     PRINTED. The operator runs it.
 #   * It does not run ausearch or aureport. Those are a subprocess per pass
-#     against a root-owned file, and reading the log directly is both cheaper
+#     against a root-owned file, and reading the log directly is both lighter
 #     and testable against a fixture.
 #   * It does not raise on the SEED pass. A log file that already holds weeks
 #     of records is somebody else's history, and a first look that shouts is a
@@ -1214,7 +1213,7 @@ def analyze(config: dict = None, db_path: str = None) -> dict:
     # the coverage block, and returns the same empty findings list an
     # uneventful pass would -- which is exactly why the coverage block has to
     # carry the sentence. See this module's header for why this is the state
-    # the owner's machine is actually in.
+    # this machine is actually in.
     #
     # THE DECISION IS status()'s, NOT THIS FUNCTION'S. `state` is a value in
     # the dict above rather than a cascade repeated here, because the boot log,
@@ -1856,7 +1855,7 @@ def recent_records(config: dict = None, record_type: str = None,
 
     # THE ABSENCE, BEFORE ANYTHING IS READ.
     #
-    # This is the branch the owner's machine takes, so it is the branch that
+    # This is the branch this machine takes, so it is the branch that
     # has to be most carefully worded. It says the feed is absent and prints
     # the command. It does NOT return an empty record list and stop there,
     # which is the shape a reader takes as "nothing happened".

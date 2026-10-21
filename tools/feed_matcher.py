@@ -47,7 +47,7 @@
 #
 # MISP AND OTX, ADDED 2026-09-23, AND WHY ONE OF THEM IS NOT THE OTHER
 #
-# The owner's item was "two big community threat feeds", filed beside abuse.ch
+# The item was "two big community threat feeds", filed beside abuse.ch
 # as "more of the same". Measured on this host before a line was written, and
 # the two halves are NOT the same shape:
 #
@@ -196,7 +196,7 @@ _CURSOR_TABLE = "feed_cursor"
 _LAST_RESULT = "feed_last_result"
 
 # Addresses we never raise on, whatever a feed says. A feed listing an RFC1918
-# address is a feed bug, not a finding about the owner's LAN, and 0.0.0.0 shows up in
+# address is a feed bug, not a finding about your LAN, and 0.0.0.0 shows up in
 # hostfile-format feeds as the sinkhole target rather than as an indicator.
 #
 # THIS SET IS NOW THE FALLBACK AND _is_matchable_ip IS THE RULE, added
@@ -547,7 +547,7 @@ def _key_for_feed(meta: dict) -> tuple:
 # `_fetch` sent every key as `Auth-Key`. That is abuse.ch's header and it was
 # the only provider for a year, so it was correct. OTX is not abuse.ch: it
 # wants `X-OTX-API-KEY`, and MEASURED against the live service on 2026-09-23
-# with the owner's own working key:
+# with a real working key:
 #
 #     X-OTX-API-KEY: <key>   ->  HTTP 200, 9114 pulses
 #     OTX-API-Key:   <key>   ->  HTTP 403

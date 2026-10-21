@@ -159,7 +159,7 @@ print("\n[3] RT-1c: the card paints no Windows capability, at any elevation, "
 # WHAT THIS SECTION USED TO ASSERT, and why it changed hands. The previous
 # round's fix was to keep the two rows and paint them AMBER with no fix line,
 # so "a platform absence stays reported rather than hidden". That argument was
-# overruled by measurement and by the owner: the rows named a WORKING sensor
+# overruled by measurement: the rows named a WORKING sensor
 # (event_monitor) in their own explanation, they were on the card in 40 of 40
 # samples, and they were Windows capabilities in a Linux build. So the fix is
 # no longer a colour, it is the absence of the row -- and this section asserts

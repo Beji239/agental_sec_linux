@@ -3,7 +3,7 @@ tests/test_questions_actions_map.py, the 2026-10-11 round on the Questions,
 Actions and Threat Map tabs.
 
 The duty loop can ask the owner and is told when to, the question badge
-counts every open question, a question filed while he is in the chat is said
+counts every open question, a question filed while you are in the chat is said
 there, an incident leaves action_pending once its request is settled, a
 second request for one incident is added rather than replacing the first,
 and the map tool can look at one address. Runs on a scratch database with
@@ -45,7 +45,7 @@ from core import actions, agent_loop, duty, questions, tool_registry  # noqa: E4
 print("the duty loop may ask")
 allow = duty._tool_allowlist()
 check("ask_operator is allowed", "ask_operator" in allow, True)
-check("and so is reading his answers", "query_operator_answers" in allow, True)
+check("and so is reading the answers", "query_operator_answers" in allow, True)
 check("no allowed tool needs approval",
       [n for n in allow if agent_loop.requires_permission(n, {})], [])
 blocks = dict(incident_block="i", coverage_block="c", case_block="k",

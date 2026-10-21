@@ -29,7 +29,7 @@ WHAT EACH SECTION HOLDS, and the negative control for each is in
       returns the findings from the other end of it.
 
 Runs against a throwaway database built from Schema.SQL, then migrated. It
-never opens the owner's store: tests/_isolate_db.py's rule, applied by hand
+never opens the live store: tests/_isolate_db.py's rule, applied by hand
 here because this file builds its own fixture rows.
 """
 import datetime
@@ -309,7 +309,7 @@ check_true("while the packets are capped, because 202 of them do not fit",
            kinds.get("packet", 0) < 202, kinds)
 
 # THE OLD ROUTE'S OWN BEHAVIOUR, REPRODUCED, and it is computed from the
-# numbers MEASURED ON THE OWNER'S LIVE STORE rather than from this fixture.
+# numbers MEASURED ON THE LIVE STORE rather than from this fixture.
 #
 # The fixture is deliberately small (191 packets), and at that size the old
 # merge happens to fit everything in 200 rows -- so a fixture-sized

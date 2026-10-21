@@ -405,7 +405,7 @@ def list_processes(pid=None, name=None, limit=500):
     # exe, and the page said, about nine of them, "this process has no
     # executable path on disk, so there was no file to compare against any
     # package record" — while every one of those files is on disk and readable
-    # by root. The note told the owner a fact about the MACHINE (nothing there)
+    # by root. The note told you a fact about the MACHINE (nothing there)
     # when the fact is about RIGHTS (not readable by me), and it contradicted
     # the page's own legend two inches above it.
     #
@@ -559,18 +559,18 @@ def _fill_details(rows):
 
 # LOOKING AT A PROCESS PROPERLY
 #
-# Added 2026-09-08, TODO 68, the owner's call.
+# Added 2026-09-08, TODO 68.
 #
 # list_processes reads the LABEL on a process: name, path, owner, parent,
 # command line. That is the Task Manager view and it is genuinely useful, but
-# it is not examining anything. Two cheap things turn "this exe is in a temp
+# it is not examining anything. Two quick things turn "this exe is in a temp
 # folder, that is odd" into something a person can act on:
 #
 #   1. THE HASH, and whether anyone has ever seen this exact binary before.
 #      The monitor already hashes and enrichment already asks MalwareBazaar
 #      about hashes. Neither was reachable per process, on demand.
 #   2. THE SIGNATURE. Signed by Microsoft, versus unsigned and sitting in
-#      AppData, is one of the strongest cheap signals there is, and it needs
+#      AppData, is one of the strongest easy signals there is, and it needs
 #      no administrator rights.
 #
 # DELIBERATELY NOT HERE:
@@ -579,11 +579,11 @@ def _fill_details(rows):
 #      answer.
 #   * Reading process memory. Different class of tool, and it means parsing
 #     hostile bytes inside our own process, which is the exact thing the
-#     privilege split is trying to shrink. The owner's call too, and the owner is right.
+#     privilege split is trying to shrink. Left out on purpose.
 #
 # ON DEMAND, PER PROCESS. Hashing three hundred executables is minutes of
 # disk, and it would go in front of an answer nobody asked for. The listing
-# stays cheap, this is the follow up on the two or three that look odd.
+# stays quick, this is the follow up on the two or three that look odd.
 
 import subprocess as _sp
 # tempfile was imported here for the PowerShell signature sweep, which is gone.
@@ -672,8 +672,8 @@ def _linux_odd_reason(path_lower: str):
 # HOW A FILE IS CHECKED HERE: WHAT THE PACKAGE MANAGER RECORDED
 #
 # 2026-09-23. THE DEFECT THIS SECTION EXISTS FOR. Every row on the Processes
-# page was grey, which this app uses for "could not be read". Measured on the
-# owner's machine: 214 of 214 rows, and the page's own summary line said, in
+# page was grey, which this app uses for "could not be read". Measured on
+# my machine: 214 of 214 rows, and the page's own summary line said, in
 # words, that signature checking only works on Windows.
 #
 # Linux has no Authenticode, and the honest thing is not to keep asking for
@@ -699,10 +699,10 @@ def _linux_odd_reason(path_lower: str):
 # file at all and no command line. Saying that is a fact about it, not a
 # failure to read it. See _is_kernel_thread.
 #
-# COST, MEASURED ON THE OWNER'S MACHINE 2026-09-23 before any of this was
+# TIME, MEASURED ON MY MACHINE 2026-09-23 before any of this was
 # written: 90 running executables, 201 MB between them, md5 over all of them
-# 0.98 s, and 54 package records read in 1.97 s. The listing stays cheap, like
-# every other listing here, and the expensive half is cached on
+# 0.98 s, and 54 package records read in 1.97 s. The listing stays quick, like
+# every other listing here, and the slow half is cached on
 # (path, size, mtime).
 #
 # THE CAP IS 256 MB AND THAT NUMBER IS MEASURED TOO. The first version used
@@ -1008,7 +1008,7 @@ def _is_kernel_thread(row):
     EVERY OTHER PART OF THE RULE IS LOAD BEARING. A process with a command
     line but no readable path is a process we were REFUSED, which is not the
     same thing at all — every other account's daemon looks like that.
-    (sd-pam) on this machine is the owner's own process with a command line
+    (sd-pam) on this machine is my own process with a command line
     and a denied exe, and calling it a kernel thread would be a lie told to
     make a page look tidier. See the control checks in
     tests/test_process_color_linux.py.

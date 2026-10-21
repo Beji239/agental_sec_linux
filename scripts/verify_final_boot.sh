@@ -6,7 +6,7 @@
 # its own part; this one proves the ASSEMBLY, which is the thing a per-folder
 # pass structurally cannot see. It runs the REAL app (main.py, the real role
 # table, the real routes, real sensors, real waitress) on a COPY of both the
-# tree and the database, on port 5133, so the owner's running copy on 5000 and
+# tree and the database, on port 5133, so the running live copy on 5000 and
 # the live 316 MB evidence store are not touched.
 #
 # What it measures, in the order it measures it:
@@ -50,7 +50,7 @@ no() { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 chk() { if [[ "$2" == "1" ]]; then ok "$1"; else no "$1"; fi; }
 note() { echo "    $1"; }
 
-echo "port under test : $PORT (the owner's copy is on 5000)"
+echo "port under test : $PORT (the live copy is on 5000)"
 echo "scratch         : $TMP"
 echo "tree under test : $TREE"
 echo "database        : $TREE/agental_sec.db  (a snapshot; the live one is not read)"
@@ -71,7 +71,7 @@ trap cleanup EXIT
 # A. THE COPY IS THE COPY
 echo "A. the isolation holds (nothing here can reach the live tree)"
 LIVE_PORT=$(python3 -c "import json;print(json.load(open('$ROOT/config.json'))['flask']['port'])")
-chk "the live config.json still points at the owner's port ($LIVE_PORT)" \
+chk "the live config.json still points at the live port ($LIVE_PORT)" \
     "$([[ "$LIVE_PORT" == "5000" ]] && echo 1 || echo 0)"
 chk "the copy has its own config.json, on $PORT" \
     "$(python3 -c "import json;print(1 if json.load(open('$TREE/config.json'))['flask']['port'] == $PORT else 0)")"
@@ -86,7 +86,7 @@ LIVE_MTIME_BEFORE=$(stat -c %Y "$ROOT/agental_sec.db")
 note "live database mtime recorded: $LIVE_MTIME_BEFORE"
 # NOTE ON WHAT IS *NOT* CHECKED HERE. An earlier draft compared the live
 # database's mtime before and after, on the idea that an untouched mtime proves
-# isolation. It does not: the owner's own copy is running on port 5000 and its
+# isolation. It does not: the live copy is running on port 5000 and its
 # sensors write to that file continuously, so the mtime moves whether or not
 # anything in this script misbehaves. The isolation is proven instead by the
 # open-file check in section E, which asks the boot's own process tree which
@@ -149,7 +149,7 @@ note "roles [SKIP]    : $SKIPS"
 note "roles [FAIL]    : $FAILED_ROLES"
 # WHY THE ROLE COUNT IS A RANGE AND NOT A NUMBER. The role table's size is a
 # property of the deployment, not a constant here: this boot's copy ships the
-# owner's config.json, in which linux_monitor has no hosts enabled and is
+# live config.json, in which linux_monitor has no hosts enabled and is
 # therefore SKIPped by its own design. What is asserted is that no role in the
 # table went MISSING — a role that never reached a verdict is the failure mode
 # worth catching, and it is the one FOLDER 3's readiness page was built around.
@@ -294,7 +294,7 @@ except Exception: print(0)")
     # recording because it is the same shape both times:
     #
     #   Draft 1 compared the LIVE database's mtime before and after. It moves
-    #   either way, because the owner's own copy is running on 5000.
+    #   either way, because the live copy is running on 5000.
     #
     #   Draft 2 globbed /proc/<pid>/fd for every PID matching "main.py" and
     #   treated "the live database was never seen" as a pass. The live app runs
@@ -305,7 +305,7 @@ except Exception: print(0)")
     #
     # So: the PIDs are scoped to this run by their WORKING DIRECTORY, and every
     # PID that could not be inspected is counted and named. The scoping matters
-    # because the owner's copy is also `python3 main.py`; the accounting matters
+    # because the live copy is also `python3 main.py`; the accounting matters
     # because "0 violations observed" and "0 observables" are different answers.
     #
     # The proof that does NOT depend on permissions is the app's own boot line,
@@ -329,7 +329,7 @@ except Exception: print(0)")
         if [[ "$cwd" == "$TREE" ]]; then MINE="$MINE $p"; else FOREIGN=$((FOREIGN+1)); fi
     done
     note "pids in the copy's tree:${MINE:- none}"
-    note "pids matching main.py but NOT in the copy (the owner's own copy,"
+    note "pids matching main.py but NOT in the copy (the live copy,"
     note "running as root, is one of these and its /proc is unreadable here): $FOREIGN"
 
     INSPECTED=0; UNREADABLE=0; HELD_LIVE=0; HELD_COPY=0
@@ -375,7 +375,7 @@ chk "no traceback in the durable log either" \
 
 # THE LIVE DATABASE'S MTIME, RECORDED RATHER THAN ASSERTED. An earlier draft
 # checked this before and after and called an unchanged mtime proof of
-# isolation. It is not proof: the owner's own copy is running on 5000 and its
+# isolation. It is not proof: the live copy is running on 5000 and its
 # sensors write to that file continuously, so the number moves whether or not
 # anything in this script misbehaves. The isolation is proven instead by the
 # open-file-descriptor check in section D, which asks the boot's own processes

@@ -3,7 +3,7 @@
 #
 # Boots the REAL app (main.py, the real daemon, the real routes) against a
 # COPY of the database with the dashboard port moved to 5199 so it cannot
-# collide with the owner's running copy, then reads the duty loop's own state
+# collide with the running live copy, then reads the duty loop's own state
 # back over HTTP and checks the schedule gate is LIVE in the running process:
 #
 #   * the loop is running and POLLING (looked at the clock, no wake-up due)
@@ -47,7 +47,7 @@ cleanup() {
     [[ -n "$BOOT_PID" ]] && kill -TERM -"$BOOT_PID" 2>/dev/null
     sleep 2
     pkill -f "agental_duty_live" 2>/dev/null
-    # THE OWNER'S CONFIG IS PUT BACK EVEN ON AN ABNORMAL EXIT, WHICH IT WAS NOT
+    # THE LIVE CONFIG IS PUT BACK EVEN ON AN ABNORMAL EXIT, WHICH IT WAS NOT
     # BEFORE. Found 2026-09-25: this script swapped the real config.json for its
     # scratch copy and restored it only on the normal path at the end. A run
     # that is interrupted (Ctrl+C, a timeout, a killed shell) leaves the
@@ -63,11 +63,11 @@ cleanup() {
     rm -rf "$TMP"
 }
 
-# LA-4: the owner's file must have exactly ONE name before anything writes to it. A
+# LA-4: the live file must have exactly ONE name before anything writes to it. A
 # second name anywhere -- a hardlinked scratch tree, an old harness -- turns
-# the cp below into a write through that name into the owner's file (measured
+# the cp below into a write through that name into the live file (measured
 # 2026-09-25: nlink=4 on config.json and .env). This script never needs to
-# swap the owner's config, but it refuses to boot a tree while anything else holds a
+# swap the live config, but it refuses to boot a tree while anything else holds a
 # name for it.
 LIVE_LINKS=$(stat -c %h "$ROOT/config.json" 2>/dev/null || echo 1)
 if [[ "$LIVE_LINKS" != "1" ]]; then
@@ -84,7 +84,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
-echo "port under test : $PORT (the owner's copy is on 5000 and is untouched)"
+echo "port under test : $PORT (the live copy is on 5000 and is untouched)"
 echo "scratch         : $TMP"
 echo "database        : $TMP/test.db  (a copy; the real one is not touched)"
 echo
@@ -156,7 +156,7 @@ print(1 if isinstance(d.get('polls'), int) and d['polls'] >= 1 else 0)")"
         "$(python3 -c "
 import json; d=json.load(open('$TMP/state.json'))
 print(1 if d.get('last_poll') else 0)")"
-    chk "the API carries the owner's wake hours" \
+    chk "the API carries the configured wake hours" \
         "$(python3 -c "
 import json; d=json.load(open('$TMP/state.json'))
 print(1 if d.get('hours') == [9,13,17,21] else 0)")"
@@ -171,7 +171,7 @@ c = sqlite3.connect("file:%s?mode=ro" % sys.argv[1], uri=True)
 c.row_factory = sqlite3.Row
 n = c.execute("SELECT COUNT(*) FROM duty_run WHERE ran_at >= datetime('now','-10 minutes')").fetchone()[0]
 print(f"duty_run rows in the last 10 minutes: {n}")
-print("(0 is correct for a poll-only stretch: the owner's build wrote ~10 here)")
+print("(0 is correct for a poll-only stretch: the old build wrote ~10 here)")
 PY
     ROWS10=$(python3 -c "
 import sqlite3
@@ -195,10 +195,10 @@ chk "the duty loop reports stopping" \
 chk "the port is released" \
     "$(! ss -ltn | grep -q "127.0.0.1:$PORT" && echo 1 || echo 0)"
 
-# RESTORE THE OWNER'S CONFIG, AND PROVE IT IS BACK. This is the residue rule:
+# RESTORE THE LIVE CONFIG, AND PROVE IT IS BACK. This is the residue rule:
 # a test that changes shared runtime state puts it back, verified.
 echo
-echo "E. the owner's config.json is restored, byte for byte"
+echo "E. the live config.json is restored, byte for byte"
 cp "$TMP/config.orig.json" "$ROOT/config.json"
 chk "config.json is byte-identical to before this script ran" \
     "$(cmp -s "$TMP/config.orig.json" "$ROOT/config.json" && echo 1 || echo 0)"

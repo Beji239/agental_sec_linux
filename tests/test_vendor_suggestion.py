@@ -11,7 +11,7 @@ three places the answer was not being used:
   and the registry never overwriting a vendor a person or a scan supplied
 
 The rule the suggestion has to keep is 4A's: the human is the enrollment
-authority, because there is no MDM here. A suggestion makes that cheaper. A
+authority, because there is no MDM here. A suggestion makes that easier. A
 suggestion that fills itself in would be the tool naming devices, which is
 the thing 4A refused.
 """

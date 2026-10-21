@@ -2,10 +2,9 @@
 tests/test_windows_leftovers_fixes.py, the Windows surface is GONE from the
 Linux build, and the Linux tooling it was tangled up with still works.
 
-THE ROUND THIS FILE CLOSES. The owner's instruction, quoted: "those areas of
-the app that have code specifically for windows are unnecessary in Linux
-version ... Please locate those windows related parts of the code that are
-showing in the setting app and uninstall them."
+THE ROUND THIS FILE CLOSES. Code written only for Windows has no place in
+the Linux version, so the Windows parts that showed on the Settings tab
+were taken out.
 
 WHAT IT WAS ABOUT. The Settings card painted TWO RED ROWS, in every sample,
 forever: "Defender detections" and "Windows Security channel". Neither could

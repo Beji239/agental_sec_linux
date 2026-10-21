@@ -7,7 +7,7 @@ tools/process_monitor_linux.py and the pages that read it. This file asserts
 the fixes, BOTH DIRECTIONS wherever a detector is involved: a detector that
 stops firing is as broken as one that fires on everything.
 
-WHAT IT DOES NOT DO: it does not touch the owner's database to write, it does
+WHAT IT DOES NOT DO: it does not touch the live database to write, it does
 not need root, and it does not plant anything outside a throwaway directory it
 creates and removes itself. The processes it starts to prove the argv[0] and
 masquerade cases are copies of /bin/sleep in a temp folder, killed in a finally block.
@@ -522,7 +522,7 @@ print("\n[11] PM-7: a dismissal is scoped to the evidence it closed")
 
 from core import memory_engine as me               # noqa: E402
 
-# The four dismissals live in the OWNER's database and are read, never
+# The four dismissals live in the LIVE database and are read, never
 # written, here. What is asserted is the RULE: same file quiet, different file
 # loud. The isolated test database has no dismissals, so the rule is exercised
 # against one created in the ISOLATED store this file runs against.

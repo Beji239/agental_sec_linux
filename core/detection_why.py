@@ -72,7 +72,7 @@ WHY = {
 
     # Processes
     "PRC-1001": ("Some hacking and mining tools keep their usual names, and "
-                 "catching those is cheap. A renamed copy slips past, which "
+                 "catching those is easy. A renamed copy slips past, which "
                  "is why it counts as weak.",
                  "Check where the program runs from and who started it. A "
                  "tool you installed yourself is fine, say False alarm or "
@@ -102,7 +102,7 @@ WHY = {
                  "often needs the adm group, and that the server still writes "
                  "one."),
     "LNX-1005": ("Some hacking and mining tools keep their usual names, and "
-                 "catching those on the server is cheap.",
+                 "catching those on the server is easy.",
                  "Check where the program runs from and who started it. A "
                  "tool you installed is fine, say False alarm."),
     "LNX-1006": ("Scheduled jobs are a favourite way to come back after a "

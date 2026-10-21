@@ -30,7 +30,7 @@ So the order below is deliberate:
   [9]  Every id the module can raise IS registered, and every severity it
        raises is one the register declares. Proven by calling the writers, not
        by reading the register.
- [10]  The two cadences stay apart: tier A is cheap, the sweep is not, and the
+ [10]  The two cadences stay apart: tier A is light, the sweep is not, and the
        sweep must not run on the poll loop.
  [11]  The status contract: blind only for the three real cases, never for the
        permanent unelevated limit, and the limit STATED in words.
@@ -743,7 +743,7 @@ check("and it is COUNTED rather than dropped silently",
 
 
 print("\n[19] TIER C: ONE FINDING PER PACKAGE, AND THE CAP ANNOUNCES ITSELF")
-# The owner's rule. 55 measured lines about 24 packages is the shape this has
+# The rule. 55 measured lines about 24 packages is the shape this has
 # to compress, and the compression must not lose the count.
 
 _pkg_now = {"by_package": {
@@ -796,7 +796,7 @@ check("a conffile difference is MEDIUM, not high", _cf[0]["severity"], "medium")
 check_true("and its description names the innocent cause before the guilty one",
            "EXPECTED to edit" in _cf[0]["description"])
 
-# [19b] the seed pass. The owner's requirement, in code.
+# [19b] the seed pass. The requirement, in code.
 _seed_pic = {"at": "x", "by_package": _pkg_now["by_package"], "refused": {}}
 check("a diff against an EMPTY baseline raises nothing for a new package",
       li.diff_dpkg({}, _pkg_now), [])

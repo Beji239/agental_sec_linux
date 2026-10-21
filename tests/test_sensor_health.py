@@ -3,7 +3,7 @@ tests/test_sensor_health.py, the model has to be told when a sensor is blind.
 
 WHERE THIS CAME FROM. 2026-09-07. Three dashboard surfaces were corrected that
 afternoon for the same fault, a sensor that could not see reported as fine.
-All three fixes were on SCREENS. Then the owner asked the question that mattered:
+All three fixes were on SCREENS. Then the question that mattered:
 the model does not look at screens.
 
 On a run where capture is blind, query_packets returns []. Nothing in that
@@ -447,7 +447,7 @@ for key, good in [("active_hours", "22"), ("active_hours", "9-17"),
 
 
 print("\n[16] a card has no clock on it")
-# 2026-09-08, the owner's call. A card is the moment somebody goes and LOOKS: Task
+# 2026-09-08. A card is the moment somebody goes and LOOKS: Task
 # Manager, Defender, the address in another window. A stopwatch on that turns
 # care into a cancelled action. So the wait ends on approve or deny and at no
 # other time, with two things carried in behind it: a keepalive so a dead tab

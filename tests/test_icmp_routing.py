@@ -211,7 +211,7 @@ check("local to multicast", classify_scope("192.0.2.1", "224.0.0.1"), "local_mul
 check("public to multicast", classify_scope("1.2.0.192", "224.0.0.1"), "foreign_multicast")
 
 print("\n[9] the octet reverse is proof about the HEADER, not about the address")
-# TODO 91, 2026-09-13. Off the owner's own screen, three LOW rows on the Alerts tab:
+# TODO 91, 2026-09-13. Off my own screen, three LOW rows on the Alerts tab:
 #
 #   src=<public A>     advertises=<private A, reversed>  "malformed, not foreign"
 #   src=<public B>     advertises=<link-local, reversed> "malformed, not foreign"

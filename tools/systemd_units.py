@@ -4,7 +4,7 @@
 #
 # WHY THIS MODULE EXISTS
 #
-# The owner's word for it is "kill theatre", and it is exact. On a systemd host
+# The word for it is "kill theatre", and it is exact. On a systemd host
 # a service unit with Restart=always owns its process: SIGTERM it, the unit
 # goes active (auto-restart), systemd starts it again a second later, and
 # anything this app reported as "contained" is still running. The kill

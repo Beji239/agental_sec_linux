@@ -147,7 +147,7 @@ print("\n[7b] THE DRAIN IS REAL NOW: the sensor the page reads publishes both ke
 # This section used to assert the OPPOSITE, and the reason it changed is worth
 # keeping. When this file was first converted, core/settings._module_row read
 # 'stalled' and nothing on this side published it, so the stall branch was
-# unreachable and the check said so out loud. The owner's instruction was to
+# unreachable and the check said so out loud. The fix was to
 # build the missing half rather than document the hole, so tools/
 # event_monitor_linux.py now measures a drain and publishes both keys, and this
 # check guards THAT instead.

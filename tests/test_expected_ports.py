@@ -4,10 +4,10 @@ believed, without silencing anything else.
 
 WHY THIS EXISTS, 2026-09-02.
 
-The owner identified a device, said it was the owner's, and the open-port finding on
+I identified a device, said it was mine, and the open-port finding on
 it stayed at high anyway. Naming a device says nothing about which of its
-ports are normal, so the tool asked the owner about the same port three sessions
-running, and by the third the owner was, fairly, annoyed.
+ports are normal, so the tool asked me about the same port three sessions
+running, and by the third I was, fairly, annoyed.
 
 The risk in fixing that is obvious: a mechanism for silencing alarms is a
 mechanism for silencing alarms. So most of this file is about how NARROW it

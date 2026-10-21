@@ -195,7 +195,7 @@ def matches_critical(ident: dict) -> str:
     placed at `.../systemd-journald-copy` was ALREADY MATCHED on /proc/comm —
     because the kernel had truncated its file name to the same 15 characters
     the real journald's comm has. The extra field added nothing except a new
-    way to be wrong, and a FALSE REFUSAL on this path is not cheap: it takes
+    way to be wrong, and a FALSE REFUSAL on this path is not harmless: it takes
     the operator's decision away on the one call in the app that changes the
     machine. The three fields that remain are facts the process does not
     choose; argv[0] is not, and it is not needed, because a re-exec'd binary
@@ -446,7 +446,7 @@ def kill_process(pid: int, force: bool = False,
              while is_running() is True, so the shipped code called SIGTERM
              then SIGKILL on a process that was ALREADY DEAD and returned
              success with a signal number. `psutil.pid_exists()` is True for a
-             zombie on Linux, which is why the cheap check is a STATE read.
+             zombie on Linux, which is why the quick check is a STATE read.
 
     The wait is now bounded by a confirmation of STATE rather than of
     reaping: the question a kill has to answer is "is this pid running
@@ -1099,7 +1099,7 @@ def _read_manifest(manifest_path: Path) -> tuple:
     whose manifest is unreadable disappeared from every answer with nothing
     anywhere saying so. Measured: two vault folders, one with a damaged
     manifest, list_quarantined returned 1 entry and named the damaged one
-    nowhere. A quarantined file the operator cannot see is one the owner cannot
+    nowhere. A quarantined file you cannot see is one you cannot
     restore, and the app cannot be asked why.
     """
     try:

@@ -387,7 +387,7 @@ def _dpkg_pair(changed, conffiles, was_changed=()):
 old, new = _dpkg_pair(["/etc/pkg/thing.conf", "/usr/bin/thing"],
                       ["/etc/pkg/thing.conf"])
 out = li.diff_dpkg(old, new)
-check("one row for the package, as the owner's rule requires", len(out), 1)
+check("one row for the package, as the rule requires", len(out), 1)
 check("and it is HIGH, because one of the files is not a conffile",
       out[0]["severity"], "high")
 check("with the non-conffile path named in the data",

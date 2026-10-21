@@ -422,14 +422,14 @@ c.commit()
 c.close()
 
 # A v32 database is a fresh one with the new bits taken back out, which is
-# the closest thing to the owner's real file that a test can build.
+# the closest thing to a real live file that a test can build.
 migrated = tmp / "migrated.db"
 c = sqlite3.connect(migrated)
 c.executescript((ROOT / "Schema.SQL").read_text(encoding="utf-8"))
 c.execute("DROP TABLE detection_suppression")
 c.execute("DROP INDEX IF EXISTS idx_findings_detection")
 # SQLite cannot drop a column on older versions, so rebuild findings without
-# the two new ones, which is exactly what the owner's v32 file looks like.
+# the two new ones, which is exactly what a v32 live file looks like.
 cols = [r[1] for r in c.execute("PRAGMA table_info(findings)")
         if r[1] not in ("detection_id", "detection_rev")]
 c.execute("CREATE TABLE findings_old AS SELECT "
@@ -460,13 +460,13 @@ check("every entry says what makes it fire", no_summary, [])
 bad_sev = [d.did for d in det._REGISTER
            if not d.severities or d.severities - me.VALID_SEVERITY]
 check("every declared severity is a real severity", bad_sev, [])
-# No em dashes or pipes anywhere in what we wrote. The owner's standing rule, and the
+# No em dashes or pipes anywhere in what we wrote. A standing rule, and the
 # register text goes on screen.
 text = (ROOT / "core" / "detections.py").read_text(encoding="utf-8")
 check("no em dashes in the register", "—" in text, False)
 check("no pipe characters in the register text",
       any("|" in (d.summary or "") for d in det._REGISTER), False)
-# Every rule has a plain-English line for the page, in the owner's style.
+# Every rule has a plain-English line for the page, in plain style.
 from core.detection_plain import PLAIN
 check("every entry has a plain line",
       [d.did for d in det._REGISTER if not PLAIN.get(d.did, "").strip()], [])
@@ -544,7 +544,7 @@ check_true("and real detections are still there", "LNX-1002" in real)
 
 
 print("\n[17] The model can read the register, and cannot silence anything")
-# CAUGHT BY THE OWNER'S OWN GUARDRAIL BEFORE, on the prediction tools: a new tool with
+# CAUGHT BY THIS APP'S OWN GUARDRAIL BEFORE, on the prediction tools: a new tool with
 # no core/sensor_health.DEPENDS entry raises UnregisteredTool inside
 # execute_tool, so every call would have been a 500 in the running app. That
 # was found by a smoke test and not by reading, so it is a check now.

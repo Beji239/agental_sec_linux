@@ -191,8 +191,8 @@ BANNED_IN_PROSE = [
 
 # THE DASH RULE, ENFORCED RATHER THAN REMEMBERED
 #
-# Added 2026-09-14. The owner's rule is no em dashes and no double hyphens
-# anywhere, including code comments, docstrings, UI text and docs. The owner has had
+# Added 2026-09-14. The rule is no em dashes and no double hyphens
+# anywhere, including code comments, docstrings, UI text and docs. I have had
 # to repeat it many times, which is the tell: it was living in a preference
 # and nowhere in the tree. The tree was swept by hand on 2026-09-13 and four
 # double hyphens were still sitting in config.example.json the next day, plus

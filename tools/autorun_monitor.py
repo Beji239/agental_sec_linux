@@ -43,7 +43,7 @@
 # this module does not persist a baseline and it does not write findings into
 # the evidence store. Both are recorded as OPEN in bugfinder.md with their
 # measurements and a design, because the first one starts writing rows into the
-# owner's store and that is the owner's call rather than a port's.
+# evidence store and that is a separate decision rather than a port's.
 
 import hashlib
 import json

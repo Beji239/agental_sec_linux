@@ -217,7 +217,7 @@ def main():
         print("finding, severity or colour depends on it. A wrong anchor puts")
         print("the arcs' origin in the wrong city and changes NOTHING else.")
         print("Nothing has been written by this script. Setting the two")
-        print("numbers to a real location is the owner's call.")
+        print("numbers to a real location is your call.")
         return 1
     print("The anchor is consistent with every piece of local evidence.")
     return 0

@@ -418,7 +418,7 @@ def read_adguard(path: Path, after_offset: int = 0,
     Read new lines from an AdGuard Home querylog.json.
 
     RETURNS (rows, end_offset, notes) since 2026-09-26. The third value is new
-    and it is the point: two of this reader's most expensive failure modes are
+    and it is the point: two of this reader's worst failure modes are
     SILENT, and a caller that only receives rows cannot tell either of them
     from a quiet resolver. `notes` carries:
 

@@ -18,7 +18,7 @@ where the cursor's own behaviour is tested.
 
 RUNS WITH NO DATABASE, NO NETWORK AND NO ROOT. Every filesystem case is built
 in a temp directory; every process case uses the real host's own logs read
-only, or a synthetic line. Nothing here writes to the owner's evidence store.
+only, or a synthetic line. Nothing here writes to the live evidence store.
 """
 import json
 import os

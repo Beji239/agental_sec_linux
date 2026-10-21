@@ -7,10 +7,8 @@
 #
 # THIS FILE IS THE LINUX SURFACE. THE WINDOWS ONE IS OUT OF IT. 2026-09-25.
 #
-# Owner's instruction, quoted: "those areas of the app that have code
-# specifically for windows are unnecessary in Linux version ... Please locate
-# those windows related parts of the code that are showing in the setting app
-# and uninstall them."
+# Code written only for Windows has no place in the Linux version, so the
+# Windows parts that showed on the Settings tab were taken out.
 #
 # WHAT WAS REMOVED HERE, and why each one was not a feature this platform was
 # missing:

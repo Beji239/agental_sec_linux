@@ -3,7 +3,7 @@
 #
 # WHAT THIS IS, AND WHAT IT DELIBERATELY IS NOT.
 #
-# This is the expensive half of a two-cadence design. The other half is the
+# This is the heavy half of a two-cadence design. The other half is the
 # presence sweep in network_scanner, which runs every fifteen minutes, sends a
 # ping and reads the ARP cache, and answers ONE question: is it there.
 #

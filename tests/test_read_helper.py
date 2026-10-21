@@ -20,8 +20,8 @@ WHAT IS TESTED HERE, AND WHAT CANNOT BE:
   * that no caller string reaches a command  -- asserted against the source
   * that /etc/shadow is not in the table     -- asserted against the source
   * the ACTUAL ELEVATED READ                 -- NOT HERE. That needs the
-    sudoers drop-in installed, and installing it is an operational change the
-    owner must run. scripts/install_read_helper.sh --verify does that half,
+    sudoers drop-in installed, and installing it is an operational change you
+    must run. scripts/install_read_helper.sh --verify does that half,
     and T5_LOCAL_INTEGRITY.md says which half is which.
 
 Run it directly: python tests/test_read_helper.py
@@ -434,7 +434,7 @@ li.helper_forget()
 
 
 print("\n[11] AND THE THING THIS HELPER DOES NOT FIX IS STATED, NOT IMPLIED")
-# The owner's question was whether to run the app as root so that dpkg -V
+# The question was whether to run the app as root so that dpkg -V
 # works. The measured answer is that dpkg -V already works unelevated, and
 # the helper's dpkg verb buys 27 /boot files. That is a fact a future reader
 # needs, so it lives in the source.

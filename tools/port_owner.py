@@ -3,9 +3,8 @@
 #
 # WHY THIS EXISTS
 #
-# The owner's instruction, 2026-09-25: "agent now has to have access to ports
-# and processes finding in this machine to be able to report which port relates
-# to which process ... python should execute the scan on set intervals".
+# 2026-09-25: the agent has to be able to report which port relates to which
+# process on this machine, and Python runs that scan on a set interval.
 #
 # Both halves of that sentence already existed separately and NEITHER answered
 # the question:
@@ -95,7 +94,7 @@
 # written from: what is listening, what owns it, what changed since the last
 # look, and what could not be read from here. The duty loop puts that in the
 # report (see core/duty.build_host_survey_block) and the model writes about it.
-# The owner asked for it in the REPORT PAGE and that is where it goes.
+# It belongs in the REPORT PAGE and that is where it goes.
 #
 # STORAGE SHAPE: BOUNDED BY CONSTRUCTION
 #
@@ -863,7 +862,7 @@ def record_sweep(session_id: str, correlated: dict = None) -> dict:
             # closed before anybody read it -- the packets-table problem in a
             # second table. A LISTENER is the durable fact: it is what a port
             # BEING OPEN means, it is what "which process owns this port"
-            # asks about, and it is what the owner's report needs.
+            # asks about, and it is what the report needs.
             #
             # The established sockets are still COUNTED (port_owner_sweep
             # carries that number) because "this host has 400 connections and
@@ -1390,9 +1389,8 @@ def sweep_now(session_id: str, reason: str = "on demand") -> dict:
     """
     ONE PASS, NOW, for a caller that cannot wait for the timer.
 
-    THIS IS THE HALF OF THE OWNER'S INSTRUCTION THE TIMER CANNOT DO: "whenever
-    the agent wakes up to do a full check and report back in the report page,
-    it should be able to deploy python". A duty tick runs at an hour the
+    THIS IS THE HALF THE TIMER CANNOT DO: whenever the agent wakes up for a
+    full check and a report, it runs Python to look first. A duty tick runs at an hour the
     schedule picked and the sweep runs every five minutes; between them there
     is a window where the report is written from a picture up to five minutes
     old. Five minutes is nothing for a machine that has been listening on 631

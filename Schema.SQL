@@ -89,7 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_dns_client_dom ON dns_queries(client_ip, domain);
 -- one row each. What anybody actually asks is "which domains does this
 -- machine talk to" and "has this process ever used a different client
 -- fingerprint", both of which are questions about DISTINCT combinations. So
--- the key is the combination and times_seen counts the rest. On the owner's
+-- the key is the combination and times_seen counts the rest. On the live
 -- database, one row per connection would have been another table the size of
 -- packets; this stays in the low thousands.
 --
@@ -577,7 +577,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_events_source_record
 --     count of the same window, no index            0.333 s
 --     count WITH this index                         0.001 s
 --
--- The build cost 3.3 s on the 1.1 GB copy, so on the owner's real store it is
+-- The build cost 3.3 s on the 1.1 GB copy, so on the real store it is
 -- a few seconds once, during a migration, and never again.
 CREATE INDEX IF NOT EXISTS idx_events_time
     ON events(occurred_at);
@@ -635,7 +635,7 @@ CREATE TABLE IF NOT EXISTS port_scan_results (
 -- One row per port scan RUN, as opposed to one row per open port found.
 --
 -- WHY THIS EXISTS, 2026-09-02. The model scanned a device, then queried the
--- packet table, saw the scan's own return traffic, and reported to the owner
+-- packet table, saw the scan's own return traffic, and reported to me
 -- that the device was "actively probing THIS host's ports 27017 and 32400".
 -- Source port 27017 to an ephemeral port is the scanned device answering with
 -- RST because the port is closed. It read the reply leg of its own scan as
@@ -682,7 +682,7 @@ CREATE INDEX IF NOT EXISTS idx_ports_host         ON port_scan_results(target_ho
 -- read it as "this device should always be answering", and raised a medium
 -- finding whenever a permanent device went quiet.
 --
--- The owner corrected that: permanent means it is part of the inventory, not
+-- That was wrong: permanent means it is part of the inventory, not
 -- that it is powered on. A TV, a console or a VM sits dark for days because
 -- nobody is using it, and that is the ordinary case rather than an event.
 --
@@ -818,14 +818,14 @@ CREATE TABLE IF NOT EXISTS known_devices (
     unretired_at     TIMESTAMP,
     unretired_reason TEXT,
 
-    -- PORTS THE OWNER HAS SAID ARE NORMAL FOR THIS DEVICE (schema v24).
+    -- PORTS DECLARED NORMAL FOR THIS DEVICE (schema v24).
     --
     -- JSON, keyed by port number:
     --   {"8888": {"declared_at": "...", "declared_by": "user",
     --             "reason": "Echo devices listen here"}}
     --
-    -- WHY THIS EXISTS. The owner identified a device, told the tool it was
-    -- his, and the open-port finding stayed high anyway, because naming a
+    -- WHY THIS EXISTS. I identified a device, told the tool it was
+    -- mine, and the open-port finding stayed high anyway, because naming a
     -- device says nothing about which of its ports are normal. So the tool
     -- asked about the same port three times in a row. A tool that keeps
     -- asking a question you already answered is one you stop reading, which
@@ -837,8 +837,8 @@ CREATE TABLE IF NOT EXISTS known_devices (
     --
     -- IT SILENCES THE FINDING, NOT THE OBSERVATION. The port still appears in
     -- port_scan_results and in this row. A different port on the same device
-    -- still raises. The port closing is still visible. Same rule the owner
-    -- set for the safe list on 2026-08-31: it silences one specific alert and
+    -- still raises. The port closing is still visible. Same rule as
+    -- the safe list on 2026-08-31: it silences one specific alert and
     -- everything else about the device still applies.
     --
     -- THE MODEL CANNOT WRITE THIS. There is no tool for it, deliberately.
@@ -859,8 +859,8 @@ CREATE TABLE IF NOT EXISTS known_devices (
 -- indistinguishable from a stretch where nothing changed.
 --
 -- Separate from presence_sweep because they are separate cadences doing
--- separate jobs. Presence is cheap and frequent and answers "is it there".
--- This is expensive and rare and answers "is it still the same thing".
+-- separate jobs. Presence is light and frequent and answers "is it there".
+-- This is heavy and rare and answers "is it still the same thing".
 -- Collapsing them was the first design error caught in review; keeping the
 -- records apart is what stops them being collapsed again by accident.
 CREATE TABLE IF NOT EXISTS probe_run (
@@ -1074,8 +1074,8 @@ CREATE TABLE IF NOT EXISTS behavioral_session (
     --   external_intel    somebody else's database said so. Dated, expires.
     --   model_conclusion  a model reasoned to it. Nothing else backs it.
     --
-    -- The argument that produced it, both halves. The owner is right that
-    -- enrichment facts BELONG here: a model that re-looks-up the same address
+    -- The argument that produced it, both halves. Enrichment facts BELONG
+    -- here: a model that re-looks-up the same address
     -- every session is the waste the enrichment engine exists to stop, and not
     -- logging is worse than logging. What survives from the other side is only
     -- about which column: an enrichment fact written bare loses the TTL, the
@@ -1600,8 +1600,8 @@ CREATE INDEX IF NOT EXISTS idx_prediction_made
 -- the only path in the app where the tool starts the conversation.
 --
 -- WHEN IT IS ALLOWED TO ASK. Only after the automated path has run and come
--- back short. Asking the owner what RDAP could have told us is the fastest
--- way to make him stop reading these, and once he stops, the mechanism is
+-- back short. Asking you what RDAP could have told us is the fastest
+-- way to make you stop reading these, and once you stop, the mechanism is
 -- worth nothing no matter how well it is built.
 --
 -- TOPICS ARE A FIXED LIST, same reasoning as the prediction claim kinds. A
@@ -1610,15 +1610,15 @@ CREATE INDEX IF NOT EXISTS idx_prediction_made
 -- to. One question per topic per entity, ever, enforced by the unique index.
 --
 -- THREE OUTCOMES, NEVER SUMMED, the same discipline as everything else here:
---   answered       he told us
---   do_not_know    he does not know either. This is INFORMATION, not a
+--   answered       you told us
+--   do_not_know    you do not know either. This is INFORMATION, not a
 --                  failure. It means nobody knows, stop asking, and this is a
 --                  genuine unknown rather than a gap waiting to be filled.
---   expired        ten days passed from when he was actually SHOWN it
+--   expired        ten days passed from when you were actually SHOWN it
 --
 -- THE EXPIRY CLOCK STARTS AT first_shown_at, NOT asked_at. A question sitting
 -- behind the popup budget for nine days would otherwise expire the day after
--- he first sees it. Not being asked and choosing not to answer are different
+-- you first see it. Not being asked and choosing not to answer are different
 -- things and only the second one means it did not matter.
 CREATE TABLE IF NOT EXISTS operator_question (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1638,14 +1638,14 @@ CREATE TABLE IF NOT EXISTS operator_question (
     -- DERIVED from the enrichment row at asking time, not written by hand, so
     -- the owner is never asked something the app could have answered.
     tried_json    TEXT NOT NULL DEFAULT '[]',
-    -- Where HE can look, that the app could not. Derived from the source
+    -- Where YOU can look, that the app could not. Derived from the source
     -- catalog plus the keyed sources with no key. Says where to look and what
-    -- to type, NEVER what he will find: a hint carrying the model's guess is
-    -- that guess smuggled in wearing a helpful hat, and he would then go and
+    -- to type, NEVER what you will find: a hint carrying the model's guess is
+    -- that guess smuggled in wearing a helpful hat, and you would then go and
     -- find confirmation for something nobody established.
     hints_json    TEXT NOT NULL DEFAULT '[]',
 
-    -- NULL until he has actually been shown it. Starts the expiry clock.
+    -- NULL until you have actually been shown it. Starts the expiry clock.
     first_shown_at TIMESTAMP,
     state         TEXT NOT NULL DEFAULT 'open'
                   CHECK(state IN ('open','answered','do_not_know','expired')),
@@ -1662,7 +1662,7 @@ CREATE TABLE IF NOT EXISTS operator_question (
 CREATE INDEX IF NOT EXISTS idx_question_state ON operator_question(state, asked_at);
 CREATE INDEX IF NOT EXISTS idx_question_shown ON operator_question(first_shown_at);
 
--- One row per popup actually put on his screen. Not per question: a popup can
+-- One row per popup actually put on your screen. Not per question: a popup can
 -- carry several. This is what the budget is counted from, and it is a table
 -- rather than a counter so "when was I last interrupted" has an answer that
 -- survives a restart.
@@ -1727,8 +1727,8 @@ CREATE INDEX IF NOT EXISTS idx_perf_entity ON perf_hourly(entity_value, hour_sta
 
 
 -- THE AGENT DRIVER (v37, 2026-09-17, TODO 116)
--- PORTED TO LINUX 2026-09-21, AND DORMANT ON THIS TREE. The owner asked for
--- everything in this file that is possible to port, so these three are here.
+-- PORTED TO LINUX 2026-09-21, AND DORMANT ON THIS TREE. Everything in this
+-- file that is possible to port came across, so these three are here.
 -- NOTHING IN THIS TREE WRITES TO THEM: this tree's agentic record is T2/T3/T4,
 -- which is `incident`, `watcher_run`, `action_request`, `duty_run` and
 -- `duty_report`, and that is the design wired into main.py, the routes, the UI
@@ -1739,20 +1739,20 @@ CREATE INDEX IF NOT EXISTS idx_perf_entity ON perf_hourly(entity_value, hour_sta
 -- different tables rather than one under two names.
 
 --
--- Until this, nothing in this app ever took a turn unless the owner typed.
--- The model lived inside a chat request, which made him the trigger for
--- everything. His words, and they are fair: why do we call it an agent then.
+-- Until this, nothing in this app ever took a turn unless I typed.
+-- The model lived inside a chat request, which made me the trigger for
+-- everything. Fair question: why do we call it an agent then.
 --
 -- These three tables are the record of the app acting on its own. One row per
 -- wake up, one row per step inside it, and one row per action that stopped
--- and asked him first.
+-- and asked first.
 --
--- WHERE THE HUMAN SITS, and this is his rule from the beginning that the
+-- WHERE THE HUMAN SITS, and this is the rule from the beginning that the
 -- earlier design got wrong: the human is consulted at the LAST step, before
--- something indefinite or destructive. He is not the trigger for the reading,
+-- something indefinite or destructive. The human is not the trigger for the reading,
 -- the querying, the correlating or the writing of an observation. Those run
 -- on the agent's own initiative. Killing a process or changing the firewall
--- stops and shows him a card with the reasoning on it.
+-- stops and shows you a card with the reasoning on it.
 --
 -- WHY A RUN IS A ROW EVEN WHEN IT ACHIEVED NOTHING. A wake up that picked no
 -- job, or ran out of rounds, or errored, is still a wake up that spent money.
@@ -1836,14 +1836,14 @@ CREATE INDEX IF NOT EXISTS idx_agent_step_run ON agent_step(run_id, step_no);
 
 -- THE APPROVAL CARD. The one place the human is still required.
 --
--- REASONING IS NOT NULL, and that is the owner's requirement in his own
--- words: after good explanation as to why it thinks those things have to go.
--- A card that arrives saying only "kill pid 4120" asks him to rubber stamp
--- something he has no way to judge, and he will either approve everything or
+-- REASONING IS NOT NULL: every card carries a good explanation of why the
+-- agent thinks those things have to go.
+-- A card that arrives saying only "kill pid 4120" asks you to rubber stamp
+-- something you have no way to judge, and you will either approve everything or
 -- stop reading them. Both outcomes are worse than no card.
 --
 -- THE DECISION REASON IS KEPT ON A REJECTION TOO. That record is the only
--- material the agent has for learning what he says no to, and it is read back
+-- material the agent has for learning what you say no to, and it is read back
 -- into later runs. Rejections that vanish teach nothing and the same card
 -- comes back next week.
 --
@@ -2070,7 +2070,7 @@ CREATE INDEX IF NOT EXISTS idx_action_incident ON action_request(incident_id);
 -- is the part that spends tokens: it wakes on two triggers, investigates what
 -- the ledger raised, and leaves a readable report. See core/duty.py.
 --
--- TWO TRIGGERS, NOT ONE, on the owner's instruction (AGENTIC_PROGRAMME §T4):
+-- TWO TRIGGERS, NOT ONE (AGENTIC_PROGRAMME §T4):
 --   * emergency  an incident of a kind that cannot wait: a UDP flood, a high
 --                volume of packets inbound AND outbound. Runs as soon as the
 --                conditions are seen, not at the next scheduled moment.
@@ -2145,7 +2145,7 @@ CREATE INDEX IF NOT EXISTS idx_duty_run_outcome ON duty_run(outcome, ran_at);
 
 
 -- What the Agents tab renders. One row per report, carrying the three parts
--- the owner asked to be able to read (hypothesis, evidence, verdict) plus, for
+-- a report has to show (hypothesis, evidence, verdict) plus, for
 -- a "no action" conclusion, WHAT IT SAW -- because "no action" with nothing
 -- behind it is an absence and "I looked at these four things and here is why
 -- none of them needed doing" is a claim a person can disagree with.
@@ -2190,9 +2190,9 @@ CREATE TABLE IF NOT EXISTS duty_report (
 
     -- ,,,, v51, 2026-09-25. THE DISMISSAL FLAG, WHICH IS NOT A DELETE.
     --
-    -- The owner's instruction: a dismiss button and a checkbox on the agent
-    -- reports, plus a dismiss-all, and "those however won't delete the agent
-    -- entries from the database". That is the correct instinct and this is how
+    -- A dismiss button and a checkbox on the agent reports, plus a
+    -- dismiss-all, and dismissing never deletes what the agent wrote into
+    -- the database. That is the correct instinct and this is how
     -- it is implemented: the report stays, the row stays, the verdict and the
     -- evidence and the coverage note stay, and the page simply stops showing
     -- it. A report written while something was blind is the coverage record of
@@ -2220,7 +2220,7 @@ CREATE INDEX IF NOT EXISTS idx_duty_report_kind ON duty_report(kind, created_at)
 -- PORT OWNERSHIP, v51, 2026-09-25. WHICH PROCESS OWNS WHICH PORT.
 -- ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 --
--- The owner's instruction: the agent has to be able to say which port relates
+-- What it is for: the agent has to be able to say which port relates
 -- to which process on this machine, Python has to sweep it on a set interval,
 -- and the agent has to be able to drive a pass itself when it wakes to write a
 -- report. tools/port_owner.py carries the full design; the schema half is here.
@@ -2441,9 +2441,9 @@ CREATE TABLE IF NOT EXISTS lan_baseline (
 -- CASE MEMORY, v43, 2026-09-22.
 -- ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 --
--- The patient file. The owner's words: "the agent writes an assessment for
--- every incident and never reads the old ones. Every alert is investigated
--- from a blank page." This is the store that makes a past incident readable
+-- The patient file. The problem: the agent wrote an assessment for every
+-- incident and never read the old ones, so every alert was investigated
+-- from a blank page. This is the store that makes a past incident readable
 -- while a new one is being worked.
 --
 -- TWO OBJECTS. case_index is the AUTHORITY: one row per indexed incident,

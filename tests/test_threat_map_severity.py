@@ -63,7 +63,7 @@ def add_finding(ip, severity, title, session="s1", dismissed=0,
             (session, severity, entity_type, ip, title, dismissed, when))
 
 
-# THE SHAPE THAT MAKES THE BUG VISIBLE, and it is the owner's own database in
+# THE SHAPE THAT MAKES THE BUG VISIBLE, and it is the live database in
 # miniature: one noisy detection repeated hundreds of times, and the thing
 # that actually matters sitting behind it.
 #

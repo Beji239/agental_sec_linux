@@ -8,7 +8,7 @@ platform references checked rather than rewritten.
 
 WHY THIS EXISTS. Version one of the TLS capture read a ClientHello out of a
 single packet. That misses every hello that spans two TCP segments, which was
-123 of the first 124 handshakes on the owner's machine, because a browser
+123 of the first 124 handshakes on my machine, because a browser
 offering post-quantum key exchange sends a hello bigger than one segment.
 
 Those rows are not wrong. Each one records a TLS connection to a real address

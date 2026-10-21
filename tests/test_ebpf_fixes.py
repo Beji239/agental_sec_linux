@@ -277,7 +277,7 @@ check("  and raises the SHELL rule on it, which the old code never saw",
 ee.EXEC_SCAN_LIMIT = saved
 
 # The OTHER direction, on the same code path: a pass with nothing new still
-# moves the cursor to the newest row, so a quiet file stays cheap.
+# moves the cursor to the newest row, so a quiet file stays quick.
 C2 = make(fresh("e3-quiet.db"))
 add(C2, "exec", filename="/usr/bin/ls", comm="ls")
 ee.analyze(cfg_for(C2))

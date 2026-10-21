@@ -13,7 +13,7 @@ its own text since the detection was written -- "if you did replace the
 router, accept the new address so this stops: scripts/accept_gateway_mac.py,
 or call lan_watch.accept_gateway_mac" -- and the file did not exist in either
 tree. A finding that tells an operator to run a script that is not there
-sends the owner looking for a thing that was never built, which is worse than
+sends you looking for a thing that was never built, which is worse than
 saying "call the function". The Windows tree carries the same promise in its
 twin's text; that tree is reference-only and is not fixed.
 

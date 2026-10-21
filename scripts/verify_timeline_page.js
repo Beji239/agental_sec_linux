@@ -222,7 +222,7 @@ let LAST_URL = '';
 // payloads
 //
 // The shapes below are the REAL route's. They were taken from a live call
-// against the owner's store and then trimmed, so a change to the route's shape
+// against the live store and then trimmed, so a change to the route's shape
 // shows up here as a failing check rather than as a renderer that quietly
 // stops filling a line.
 

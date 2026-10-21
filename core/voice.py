@@ -8,7 +8,7 @@
 """
 WHY THIS EXISTS, 2026-09-18.
 
-The owner's complaint, in the owner's words: the model keeps explaining its
+The problem: the model keeps explaining its
 deficiencies in the MIDDLE of a conversation, what it cannot do and what it
 does not have, and it reads as "why are we using this tool to begin with".
 

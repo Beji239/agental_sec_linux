@@ -11,7 +11,7 @@ do that lookup, so it reasoned from broadcast ports instead, got a plausible
 answer, and then went further and invented a supporting fact to back it up.
 See TODO 36 and 37.
 
-The lesson is not that the model was careless. It is that the CHEAPEST piece
+The lesson is not that the model was careless. It is that the EASIEST piece
 of identifying evidence on a local network was not available to it, so it
 spent its effort somewhere weaker. This module makes that evidence free.
 

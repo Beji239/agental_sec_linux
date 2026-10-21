@@ -18,7 +18,7 @@ row and runs three mechanical tests whose answers narrow the question:
   2. Is the source address the byte-reverse of an address this network
      actually uses? A public source whose octet-reverse is sitting in
      known_devices is not proof of a swap on its own, but it is the single
-     cheapest thing to look at, and if it holds for several unrelated
+     easiest thing to look at, and if it holds for several unrelated
      addresses it stops being a coincidence.
 
   3. Does the ICMP payload contain an address, and does it agree with the

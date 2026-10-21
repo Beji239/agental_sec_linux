@@ -2,8 +2,8 @@
 tests/test_systemd_units.py, L2. Which unit owns a process, and whether a kill
 on it would be theatre.
 
-WHY THIS FILE'S SUBJECT MATTER IS A REFUSAL AND NOT A FEATURE. The owner's
-phrase for the failure is "kill theatre": a service unit with Restart=always
+WHY THIS FILE'S SUBJECT MATTER IS A REFUSAL AND NOT A FEATURE. The
+name for the failure is "kill theatre": a service unit with Restart=always
 owns its process, so SIGTERM kills nothing that stays dead. systemd starts it
 again a second later, and every reader downstream of the kill - the finding,
 the incident, the model's own summary - is told the thing was contained. The
@@ -35,7 +35,7 @@ reading out of a question that was never really answered:
 
 WHAT THIS FILE CANNOT TEST HERE, said out loud rather than skipped quietly:
 stopping a SYSTEM unit. Verifying that path for real would mean stopping a
-service on the owner's running machine. The user-manager equivalent is
+service on a running live machine. The user-manager equivalent is
 exercised end to end (a transient unit is created, stopped and read back), and
 the system-manager path differs only in the manager flag, which is asserted
 separately by reading a real system unit's properties without touching it.

@@ -75,7 +75,7 @@ r, o, _n = read_adguard(small)
 check("an under-limit file still works", (len(r), o), (100, small.stat().st_size))
 
 
-print("\n[2] S27: a hostile SNMP identifier is refused cheaply")
+print("\n[2] S27: a hostile SNMP identifier is refused quickly")
 from tools.router_monitor import _decode_oid, SnmpError, MAX_OID_ARCS
 
 start = time.perf_counter()
@@ -357,8 +357,8 @@ check("and says so, with the number of characters missing",
 # cap is below the longest real command line then the pid lookup truncates
 # too, and the instruction points somewhere that cannot answer either.
 #
-# 6351 is the longest command line measured on a real machine, a claude.exe
-# renderer. It has to survive a lookup untouched.
+# 6351 is the longest command line measured on a real machine, an Electron
+# app renderer. It has to survive a lookup untouched.
 LONGEST_SEEN = 6351
 _head = "C:\\Program Files\\app.exe --type=renderer "
 real_long = _head + ("a" * (LONGEST_SEEN - len(_head)))

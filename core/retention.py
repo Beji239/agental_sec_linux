@@ -92,7 +92,7 @@ PRUNABLE = [
 #   known_devices, sensors, user_preferences, runbook, rollup_log, probe_run,
 #   presence_sweep, presence_observation, router_clients, router_config,
 #   dns_queries, pcap_results
-#       Inventory, configuration, and series that are cheap per row. The
+#       Inventory, configuration, and series that are small per row. The
 #       presence series in particular is what answers "was this device here
 #       last week", which is a question about the past by definition.
 #
@@ -148,7 +148,7 @@ DEFAULT_FLOOR_BYTES   = 1_500_000_000    # 1.5 GB
 # with room to spare and means one prune buys back about a quarter of the
 # budget rather than firing again next week.
 #
-# 2026-09-01. THE SMALLEST OPTION IS 2 GB, NOT 1. Owner's call, and the reason
+# 2026-09-01. THE SMALLEST OPTION IS 2 GB, NOT 1, and the reason
 # is worth keeping. The database is already about 1.6 GB on a machine that is
 # used part time, so a 1 GB budget would have been over the line the moment
 # somebody chose it, and the very first thing that option ever did would be to
@@ -1305,8 +1305,8 @@ def first_run_prompt(db_path, stream=None, input_fn=None) -> dict:
     THE HISTORY, BECAUSE THIS WENT WRONG TWICE IN ONE DAY.
 
     v1 had a 90 second timeout, on the reasoning that a scheduled start with a
-    console but nobody watching would otherwise hang forever. The owner's
-    answer: a question that expires is worse than no question. It gives up on
+    console but nobody watching would otherwise hang forever. But a
+    question that expires is worse than no question. It gives up on
     you, and it teaches you that ignoring it is fine.
 
     v2 removed the prompt from boot altogether. That was an overcorrection and

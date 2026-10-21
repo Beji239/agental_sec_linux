@@ -116,7 +116,7 @@ SLICE_COUNT = 24
 DEFAULT_HOURS = 24
 
 # The order a slice spends its budget in. Findings first: they are the rarest,
-# the most expensive to produce, and the reason most readers opened the page.
+# the hardest to produce, and the reason most readers opened the page.
 # Then events, then packets. A slice where a record type has nothing simply
 # passes to the next, so an empty stretch of findings does not reserve budget
 # it cannot use.
@@ -491,7 +491,7 @@ def timeline_rows(since: str = None, until: str = None, limit: int = 200,
     # A per-slice budget over rows selected newest-first only helps when more
     # than one slice has rows to spend it on. So each slice is asked for its
     # OWN rows, with a bound it computes from its own bounds: a time range
-    # small enough to be cheap (measured, 0.004 s with idx_events_time), and
+    # small enough to be quick (measured, 0.004 s with idx_events_time), and
     # the row count the slice could contribute at most, which is 3 times its
     # round-robin budget because every record type passes through it.
     #

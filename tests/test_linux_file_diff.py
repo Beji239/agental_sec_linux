@@ -1,9 +1,9 @@
 """
 tests/test_linux_file_diff.py, a passwd or crontab alert shows WHAT changed.
 
-WHERE THIS CAME FROM, 2026-09-21, a real run. The owner changed /etc/passwd and the
-crontab on the Linux box themselves and the Windows side caught both. Right call.
-But the alert only said the hash moved, so the owner's change and an attacker adding
+WHERE THIS CAME FROM, 2026-09-21, a real run. I changed /etc/passwd and the
+crontab on the Linux box myself and the Windows side caught both. Right call.
+But the alert only said the hash moved, so my change and an attacker adding
 a user in the same minute looked exactly the same.
 
 Now the monitor keeps the last copy and puts the added and removed lines in

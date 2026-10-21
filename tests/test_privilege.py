@@ -207,8 +207,7 @@ check("the others are still measured as degrading, which is what they were "
 #      listeners. The audit had measured `_check_port` and generalised it to
 #      the whole module -- a claim about a part written as a claim about the
 #      tool.
-#   3. The owner took the third design, in the owner's own words: "do option C and
-#      when done report back". So the SYN scan was BUILT, and the row is
+#   3. The third design was chosen. So the SYN scan was BUILT, and the row is
 #      DEGRADES again -- this time with a consequence sentence that names the
 #      two things actually lost (the SYN scan; the owner lookup) and with the
 #      level backed by two PROBES in posture() rather than a constant.
@@ -358,7 +357,7 @@ check("and there is a launcher that asks for it",
 # check it before believing it.
 #
 # On this platform the unproven part is the ELEVATED firewall path -- the
-# unelevated refusals were all run, and the real-rule run needs the owner's
+# unelevated refusals were all run, and the real-rule run needs your
 # password. T1_FIREWALL_TRUTH.md is where that is written down, and it says it
 # in those words rather than leaving the reader to infer it from a missing
 # result.
@@ -368,7 +367,7 @@ else:
     t1 = (ROOT / "T1_FIREWALL_TRUTH.md").read_text(encoding="utf-8")
     check("the handoff says which part is not yet proven",
           "not yet proven against the real firewall" in t1, True)
-    check("and names it as needing the owner's password, not as done",
+    check("and names it as needing your password, not as done",
           "needs your password" in t1, True)
 check("and there is a way to look before trusting it",
       (ROOT / "scripts" / "verify_firewall.py").exists(), True)

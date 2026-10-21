@@ -2,11 +2,10 @@
 """
 scripts/verify_duty_schedule.py — the live proof for the schedule gate.
 
-WHY THIS EXISTS. The owner's report, 2026-09-18: *"the agent was supposed to
-run only 4 to max 5 times a day, its constantly running now."* The owner was right,
-and the cause was that `_next_regular_moment()` answered "is a wake-up due"
+WHY THIS EXISTS. 2026-09-18: the agent was supposed to run 4 to 5 times a day
+at most, and it was running constantly. The cause was that `_next_regular_moment()` answered "is a wake-up due"
 correctly and NOTHING EVER ASKED IT — the daemon called `run_once` every sixty
-seconds and every minute was a regular moment. On the owner's live database that
+seconds and every minute was a regular moment. On the live database that
 looked like 62 run rows in 2h10m, eight runs that called the model for
 2,216,938 tokens, and a `budget` row EVERY SIXTY SECONDS once the ceiling was
 crossed.
@@ -199,7 +198,7 @@ def main():
     total_polls = duty.status().get("polls", 0)
     print(f"  {total_polls} polls produced {len(rows3)} run row(s) and "
           f"{calls['n']} model call(s).")
-    print("  The owner's requirement was four moments a day; this is what "
+    print("  It should be four moments a day; this is what "
           "four moments a day looks like from inside the loop.")
 
     print()

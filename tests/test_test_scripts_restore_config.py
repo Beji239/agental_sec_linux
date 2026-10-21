@@ -6,7 +6,7 @@ WHAT THIS IS ABOUT. On 2026-09-25 the operator's config.json was found on a
 test harness's scratch port (5298, auto_open_browser false), left there by a
 run that was interrupted before its restore line. Two defects' worth of
 history later (LA-1, LA-3 in toolaudit.md), the six verifier scripts that swap
-the owner's config in and out now restore it IN THE TRAP and PROVE the restore, on
+the live config in and out now restore it IN THE TRAP and PROVE the restore, on
 every exit path. This file holds that property so it cannot quietly rot.
 
 IT IS NOT A GREP TEST, and the difference matters here. A text search for
@@ -30,9 +30,9 @@ file:
   * asserts the FAILED-PROOF branch: with the trap's put-back simulated as
     failing, the exit must be 1, the message loud, and the copy KEPT.
 
-WHY THE SANDBOX. The operator's app runs as root on this host and the owner's config
+WHY THE SANDBOX. The live app runs as root on this host and its config
 is live. A test that exercises restore logic must be able to swap something;
-the only safe something is a copy of the owner's file at a path this test owns.
+the only safe something is a copy of the live file at a path this test owns.
 
 DO NOT RUN THIS BESIDE ANOTHER HARNESS THAT GLOBS /tmp/agental_*. The six
 verifiers create their scratch dirs as /tmp/agental_<name>_live.XXXX, and a
@@ -56,7 +56,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIVE = ROOT / "config.json"
 SCRIPTS = ROOT / "scripts"
 
-# the six that swap the owner's config, plus the two this round fixed earlier
+# the six that swap the live config, plus the two this round fixed earlier
 SWAPPERS = ["verify_auditd", "verify_case_memory", "verify_ebpf_events",
             "verify_feeds", "verify_local_integrity", "verify_t9_live",
             "verify_duty_live", "verify_launchers_live"]
@@ -168,7 +168,7 @@ def _finish(live_before):
     print("\nE. this file's own residue")
     check("the operator's config.json is byte-identical to entry",
           LIVE.read_bytes() == live_before, True)
-    check("the owner's file still has exactly one name",
+    check("the live file still has exactly one name",
           os.stat(LIVE).st_nlink, 1)
 
     print()
@@ -183,7 +183,7 @@ def _finish(live_before):
 
 def main():
     print("test_test_scripts_restore_config.py -- LA-4 held by a test")
-    print("the owner's config.json sha256 (never written by this file):")
+    print("the live config.json sha256 (never written by this file):")
     if not LIVE.exists():
         _skip.skip("needs a config.json, the scripts it checks swap that file")
     live_before = LIVE.read_bytes()
@@ -194,7 +194,7 @@ def main():
     for name in SWAPPERS:
         text = (SCRIPTS / (name + ".sh")).read_text()
         if name in ("verify_duty_live", "verify_launchers_live"):
-            check("%s: refuses while the owner's file has more than one name" % name,
+            check("%s: refuses while the live file has more than one name" % name,
                   "has $LIVE_LINKS links" in text
                   and "-xdev -samefile" in text, True)
             check("%s: traps the signals a verifier meets" % name,

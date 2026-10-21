@@ -8,7 +8,7 @@ honestly call read only, and local mode was removed.
 WHY REPLACE IT RATHER THAN JUST DELETE IT. A removal like this one is easy to
 half undo. Somebody adds an Ollama branch back for a good reason, or a config
 loader starts filling in a local_model block again, and the second code path
-returns one function at a time with nothing failing. These checks are cheap
+returns one function at a time with nothing failing. These checks are quick
 and they fail the moment that starts.
 
 Runs anywhere. Reads source, imports nothing that needs a network or a device.

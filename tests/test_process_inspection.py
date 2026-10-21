@@ -1,11 +1,10 @@
 """
 tests/test_process_inspection.py, looking at a process rather than listing it.
 
-TODO 68, 2026-09-08. The owner's call, after we agreed what was worth adding and
-what was not.
+TODO 68, 2026-09-08. What was worth adding and what was not.
 
   IN   the sha256, and whether anyone has ever seen that exact binary
-  IN   the code signature, which needs no admin and is the strongest cheap
+  IN   the code signature, which needs no admin and is the strongest easy
        signal there is
   OUT  asking Defender to scan the file. It scanned it when it landed and
        when it ran, and we already read its detections
@@ -164,7 +163,7 @@ check("and says plainly that unknown is not fine",
       "not the same as it being fine" in unknown[1], True)
 
 
-print("\n[4] the page does not do the expensive thing on load")
+print("\n[4] the page does not do the slow thing on load")
 # Hashing three hundred files on a tab click is minutes of disk for something
 # nobody asked for. The listing colours from signature, path and findings.
 table = pm.process_table(limit=5)
@@ -588,7 +587,7 @@ check("and warns that a green row may have a finding",
 # NOW THE WORKING PATH. The colour has to come from the finding, or the field
 # is decoration.
 #
-# MY BUG, CAUGHT ON THE OWNER'S MACHINE 2026-09-14. The first version of this called
+# MY BUG, CAUGHT ON MY MACHINE 2026-09-14. The first version of this called
 # process_table twice and assumed the same five processes came back both
 # times. On a sandbox with a handful of processes that held. On a real machine
 # with three hundred, the two calls returned different rows and the lookup

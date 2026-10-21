@@ -29,7 +29,7 @@ through the wiring rather than through the logic:
        and query_services is reachable from the duty loop (it was not, so the
        loop could file stop_service but not look up what units exist).
 
-NOTHING OF THE OWNER'S IS STOPPED BY THIS FILE. The only real stop is of a
+NOTHING LIVE IS STOPPED BY THIS FILE. The only real stop is of a
 transient unit this file creates and removes, in the user manager. Every system
 unit named is read, never touched.
 

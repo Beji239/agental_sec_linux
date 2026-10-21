@@ -557,8 +557,8 @@ def for_display(value, _depth: int = 0):
     marker is also served by routes.py, and the pages render it verbatim:
     ui/index.html prints predictions.score's how_to_read_this under the
     prediction tiles and settings' note under each collector row. Without this
-    the operator reads a shouty sentence telling the owner not to read the thing the owner
-    is looking at.
+    you would read a shouty sentence telling you not to read the thing you
+    are looking at.
 
     THE MARKER IS STRIPPED AND NOTHING ELSE IS, deliberately. The sentence
     after it is the honest one and belongs on the page: what the answer rests

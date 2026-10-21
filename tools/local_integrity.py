@@ -44,7 +44,7 @@
 #
 # TIER A, every poll (60s default). Files and directory sets, all opens on
 # paths that are known in advance. Measured: the whole of tier A is about one
-# second on this host, which is cheap enough to run on the sensor's own loop.
+# second on this host, which is light enough to run on the sensor's own loop.
 #
 # TIER B, hourly. The setuid, setgid and file-capability sweep has to walk the
 # filesystem. MEASURED, and this is the number that sets the cadence:
@@ -188,7 +188,7 @@ DIR_WATCH_PRESENCE = (
 )
 
 # Per-user directories, expanded for each real home. A unit file appearing in
-# here is the cheapest persistence there is.
+# here is the easiest persistence there is.
 USER_DIR_WATCH = (
     "~/.config/systemd/user",
     "~/.config/autostart",
@@ -275,7 +275,7 @@ def helper_status(force: bool = False) -> dict:
     """
     Can the read-only helper be used, and if not, exactly why.
 
-    ONE CHEAP CALL decides it: `sudo -n <helper> --verbs`. That verb lists the
+    ONE QUICK CALL decides it: `sudo -n <helper> --verbs`. That verb lists the
     table and reads nothing, so probing costs nothing and cannot itself leak
     anything. `-n` is the point: a helper that PROMPTS is not usable by a
     sensor -- there is nobody at the keyboard -- and a prompt that hung the
@@ -680,7 +680,7 @@ def helper_coverage_note() -> dict:
 # "reports two files and stops" and that reinstalling repairs it. All three
 # were wrong about the file. Measured: the installed control file is COMPLETE
 # (846 lines, newline-terminated, every line a valid digest) and
-# BYTE-IDENTICAL to the copy inside the owner's own downloaded .deb. The
+# BYTE-IDENTICAL to the copy inside the downloaded .deb. The
 # defect is the separator character, it arrived that way from the build, and
 # a reinstall cannot remove it. dpkg's rule, measured variant by variant
 # against a rebuilt control archive: TWO OR MORE SPACES accepted, ONE space
@@ -727,7 +727,7 @@ def helper_coverage_note() -> dict:
 #
 # ONE FINDING PER PACKAGE, NOT PER FILE LINE. Measured above: 18 `?????????`
 # on /boot, 22 `??5??????` across icons and .desktop files, 15 `missing` lines
-# -- 55 rows about seven packages. The owner's rule is one finding per claim,
+# -- 55 rows about seven packages. The rule is one finding per claim,
 # and the claim is the package: "the package manager disagrees about files
 # this package shipped". The individual paths travel in raw_data, capped, so
 # the row stays readable and the evidence stays attached.
@@ -744,14 +744,14 @@ DPKG_MIN_INTERVAL = 300      # a floor, not a default. Below this you are
                              # re-asking dpkg the same question about a machine
                              # that has not had time to change.
 
-# /boot IS EXCLUDED BY DEFAULT. THIS IS THE OWNER'S CALL AND HERE IS WHY IT IS
-# THE RIGHT ONE: kernel images and System.map files legitimately churn, they
+# /boot IS EXCLUDED BY DEFAULT, AND HERE IS WHY THAT IS
+# THE RIGHT CALL: kernel images and System.map files legitimately churn, they
 # are unreadable anyway on an ordinary run, and they produced 18 of the 55
 # measured lines. A knob rather than a hard exclusion, because on a host where
 # /boot is readable and stable the check is worth having.
 DPKG_EXCLUDE_BOOT = True
 
-# The cap. The owner's requirement is that a real corruption sweep must not
+# The cap. A real corruption sweep must not
 # bury the dashboard: if 200 packages go bad, the dashboard gets the twenty
 # that say the most and one row that says how many were not listed.
 DPKG_MAX_FINDINGS_PER_RUN = 40
@@ -801,7 +801,7 @@ def _md5sums_line_problem(line: str) -> str:
     question card. MEASURED, 2026-09-26: the previous reason cut the line at
     60 characters with NO marker, so `'87ccd9ca... usr/share/example-app/.eclip'`
     read as a file that STOPS MID-PATH -- truncated, damaged in packaging --
-    and that reading was written into the question the owner was asked and
+    and that reading was written into the question I was asked and
     into an operator_stated observation. The file was never truncated: it has
     846 complete lines and its last line ends in a newline. A sliced string
     with no ellipsis is a claim about the file that the file's own bytes
@@ -1140,7 +1140,7 @@ def group_dpkg_by_package(paths: dict) -> dict:
     """
     Path-keyed verdicts into package-keyed claims, one entry per package.
 
-    ONE FINDING PER PACKAGE, which is the owner's rule and the reason 55 lines
+    ONE FINDING PER PACKAGE, which is the rule and the reason 55 lines
     become a handful of rows. A package's entry keeps its own counts and a
     capped list of paths, so "one finding" does not mean "one path's worth of
     evidence".
@@ -1420,7 +1420,7 @@ def diff_dpkg(old: dict, new: dict) -> list:
     The package-manager diff, one finding per package, seeded like everything
     else.
 
-    THIS IS WHERE THE OWNER'S "KNOWN-NORMAL ON DAY ONE" REQUIREMENT IS MET.
+    THIS IS WHERE THE "KNOWN-NORMAL ON DAY ONE" REQUIREMENT IS MET.
     The first run stores what dpkg says and raises nothing, so firefox's
     distribution.ini, the six HighContrast start-here icons and the kernel
     images are the recorded state of the machine rather than eleven findings
@@ -1635,7 +1635,7 @@ def _dpkg_refused_text(pkg, reason, total) -> str:
     that read as damage, and it ended with "Reinstalling the package rewrites
     its control file and restores coverage." Measured on this host against the
     vendor's own artifact: the installed control file is BYTE-IDENTICAL to the
-    copy inside the owner's downloaded example-app .deb (cmp and md5sum, same
+    copy inside the downloaded example-app .deb (cmp and md5sum, same
     digest), 846 complete lines, newline-terminated. Nothing was damaged on
     this machine and nothing was truncated. The build ships a separator dpkg
     does not accept, so a reinstall writes the SAME file back and the state is
@@ -1653,9 +1653,9 @@ def _dpkg_refused_text(pkg, reason, total) -> str:
     permits.
 
     IT DOES NOT DO THE EDIT ITSELF. The file is root-owned and lives in
-    dpkg's own database directory, so changing it is the owner's call under
+    dpkg's own database directory, so changing it is your call under
     this register's rule 6 (a root-owned file). The finding reports the
-    measurement; the owner decides.
+    measurement; you decide.
     """
     return (
         f"dpkg will not load this package's control file, so `dpkg -V` cannot "
@@ -1725,7 +1725,7 @@ def dpkg_coverage_findings(result: dict) -> list:
 
 def cap_dpkg_findings(findings: list, cap: int = DPKG_MAX_FINDINGS_PER_RUN) -> list:
     """
-    Cap a run, and SAY what was cut. The owner's requirement, kept.
+    Cap a run, and SAY what was cut.
 
     A corruption sweep that goes wrong produces one row per package, and two
     hundred rows is how the one that mattered goes under the fold. The order
@@ -1789,7 +1789,7 @@ def tier_c_pass(exclude_boot: bool = DPKG_EXCLUDE_BOOT) -> dict:
     """
     One dpkg verification, compared against the stored set and reseeded.
 
-    THE FIRST RUN SEEDS. This is the owner's requirement in the owner's own words: the
+    THE FIRST RUN SEEDS. The
     baseline is seeded from the first run so the firefox icons and the kernel
     images are known-normal rather than a page of findings on day one. It is
     the same rule tier A and tier B already follow, and it is the reason this
@@ -1828,7 +1828,7 @@ def tier_c_pass(exclude_boot: bool = DPKG_EXCLUDE_BOOT) -> dict:
         # THE ONE THING THAT RAISES ON A SEED PASS, and it is not really an
         # exception: a package dpkg CANNOT CHECK is a hole in coverage that
         # exists right now, and seeding it would mean the operator is never
-        # told that 2755 of the owner's 2756 packages are covered. It is raised once
+        # told that 2755 of the 2756 packages are covered. It is raised once
         # and the baseline records it, so it does not repeat.
         out["findings"].extend(dpkg_refused_seed_findings(result))
         out["findings"].extend(dpkg_coverage_findings(result))
@@ -1862,7 +1862,7 @@ def dpkg_refused_seed_findings(result: dict) -> list:
     it". For a package dpkg cannot load, remembering it quietly means the
     dashboard shows a green package verification over a machine where one
     package was never checked and a BARE dpkg run would have aborted at it.
-    The operator cannot dismiss what the owner is never told. Capped, and the count
+    You cannot dismiss what you are never told. Capped, and the count
     travels, so 200 of them is one page rather than 200.
     """
     refused = (result.get("refused") or {})
@@ -2133,7 +2133,7 @@ def dir_record(path, hashed: bool = True) -> dict:
 
     base = Path(path)
     # A DIRECTORY WHOSE CONTENTS CANNOT BE LISTED IS 'blocked', NOT ABSENT.
-    # os.access is the cheap test for "could I read this directory", and it
+    # os.access is the quick test for "could I read this directory", and it
     # answers the question this needs answered: is the empty entry list below
     # a statement about the directory or about our privilege.
     try:
@@ -3844,7 +3844,7 @@ def tier_b_pass() -> dict:
     One sweep, compared against the stored setuid, setgid and capability sets.
 
     The FIRST sweep seeds for the same reason tier A does, and it is the reason
-    the owner's dpkg note gives for tier C: a machine that has never been looked
+    the dpkg note gives for tier C: a machine that has never been looked
     at produces a page of pre-existing noise on day one, and that page is how
     the module gets switched off.
     """
@@ -3882,7 +3882,7 @@ def tier_b_pass() -> dict:
 
 def mac_pass() -> dict:
     """
-    The MAC posture, once per sweep. Cheap, and it is a checked claim rather
+    The MAC posture, once per sweep. Quick, and it is a checked claim rather
     than an assumed one. Seeded on the first pass like everything else.
     """
     posture = collect_mac_posture()

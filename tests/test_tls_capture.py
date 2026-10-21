@@ -150,7 +150,7 @@ check("an unknown fingerprint matches nothing and says so",
 print("\n[6] the model can actually reach it, through the real dispatcher")
 # The guardrail that caught the three prediction tools in 109: a tool in the
 # manifest with no sensor_health.DEPENDS entry raises UnregisteredTool at
-# execute_tool, so every call would have been a 500 in the owner's app.
+# execute_tool, so every call would have been a 500 in the live app.
 names = [t["name"] for t in tr.TOOL_MANIFEST]
 check("query_tls is in the manifest", "query_tls" in names, True)
 check("it is registered in DEPENDS", "query_tls" in sh.DEPENDS, True)
@@ -329,7 +329,7 @@ check("but it does count as read", snif_b.status()["tls_hellos_this_run"], 1)
 
 
 print("\n[10] THE ONE THAT MATTERED: a hello that arrives in two packets")
-# MEASURED, NOT IMAGINED. Ten minutes of capture on the owner's machine on
+# MEASURED, NOT IMAGINED. Ten minutes of capture on my machine on
 # 2026-09-19, the first run with this feature live: 124 hellos, ONE parsed,
 # 123 truncated. Post-quantum key exchange is why. A browser offering
 # X25519MLKEM768 sends a key share over a kilobyte long, so its ClientHello
@@ -343,7 +343,7 @@ import time                                            # noqa: E402
 wire = hello_wire("postquantum.example", pad_bytes=2000)
 check("the hello really is bigger than one segment", len(wire) > 1460, True)
 
-# First, the proof that ONE packet is not enough. This is what the owner's machine
+# First, the proof that ONE packet is not enough. This is what my machine
 # was doing 123 times out of 124.
 one_packet = th.parse_client_hello(wire[:1460])
 check("one segment alone cannot be parsed", one_packet["ok"], False)

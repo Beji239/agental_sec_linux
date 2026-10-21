@@ -5,7 +5,7 @@
 # The unit test proves the functions. ONLY A REAL BOOT PROVES THE DAEMON CALLS
 # THEM, and that is what this script exists for. It boots main.py with the real
 # adapters, the real routes and the real duty loop against a COPY of the
-# database, on port 5299 so it cannot collide with the owner's running copy on
+# database, on port 5299 so it cannot collide with the running live copy on
 # 5000, and then:
 #
 #   A. the app boots and the PORT OWNER SWEEPER THREAD STARTED, with a first
@@ -22,9 +22,9 @@
 #      something anyway would pass a status-code check and fail this one)
 #   F. a real dismissal over HTTP, then a real restore: the count is named, the
 #      row survives, and the dismissal is journalled
-#   G. shutting down cleanly, and the owner's config restored byte for byte
+#   G. shutting down cleanly, and the live config restored byte for byte
 #
-# The owner's store is COPIED, never opened: agental_sec.db is read to make the
+# The live store is COPIED, never opened: agental_sec.db is read to make the
 # copy and is never written. config.json is swapped for the boot and restored,
 # and the restoration is VERIFIED with cmp rather than assumed.
 set -uo pipefail
@@ -45,7 +45,7 @@ python3 "$ROOT/scripts/snapshot_db.py" "$ROOT/agental_sec.db" "$TMP/test.db"
 # Same defect class the L3 and case-memory verifiers each found in their first
 # run, and this script had it in the two seed assertions: the operator's LIVE
 # store already holds port_owner_change rows (57 of them, measured 2026-09-25),
-# written by the owner's own running app. So "the seed wrote no arrival" was asserted
+# written by the running live app. So "the seed wrote no arrival" was asserted
 # against a table that already had arrivals in it and could never pass --
 # a check that cannot pass is as useless as one that cannot fail, and it was
 # reported as a defect in the sensor both times this script was run whole.
@@ -101,11 +101,11 @@ BOOT_PID=""
 # The residue rule, carried the way verify_launchers_live.sh carries it, so
 # every script that swaps the operator's config.json does it the same way:
 #
-#   1. THE OWNER'S FILE IS THE REFERENCE, taken BEFORE anything is written. A
+#   1. THE LIVE FILE IS THE REFERENCE, taken BEFORE anything is written. A
 #      reference taken after the swap would be the swap.
 #   2. A COPY THAT IS SECRETLY A LINK IS REFUSED. A scratch tree that hard-
 #      links the project and then `cp`s a modified config over one of those
-#      links writes THROUGH the link into the owner's real file (measured 2026-09-25:
+#      links writes THROUGH the link into the real file (measured 2026-09-25:
 #      nlink=4 on config.json and .env). `-ef` is the inode test.
 #   3. THE RESTORE LIVES IN THE TRAP, so it runs on every exit path. MEASURED
 #      on this host's bash 5.2.21, 2026-09-25: the trap runs on a plain exit,
@@ -116,13 +116,13 @@ BOOT_PID=""
 #      to its end and exit 0, so an interrupted run would print its normal
 #      summary and read green.
 #   4. THE RESTORE IS PROVEN, and a failed proof KEEPS the copy and forces a
-#      non-zero status. A script that cannot prove it put the owner's file back must
+#      non-zero status. A script that cannot prove it put the live file back must
 #      leave the material for putting it back by hand.
 #   5. NOBODY CAN CLOSE THE kill -9 DOOR FROM INSIDE, and this file does not
 #      pretend to. A run killed with no moment to run a trap leaves the
 #      operator's file on that run's scratch port, and a later run cannot
-#      tell THE OWNER'S bytes from a scratch copy's without risking an overwrite of
-#      a setting the owner changed on purpose. The door is NAMED, not papered over.
+#      tell the live bytes from a scratch copy's without risking an overwrite of
+#      a setting you changed on purpose. The door is NAMED, not papered over.
 
 # THE REFERENCE, taken before anything is written. This is the only place the
 # operator's config.json is READ for restoration, and it happens before the
@@ -175,12 +175,12 @@ trap 'exit 129' HUP
 #
 # BOTH TESTS ARE ABOUT LINKS, NOT BYTES, and both come from one measured
 # condition (2026-09-25: nlink=4 on the operator's config.json and .env, four
-# scratch trees each holding a second name for the owner's file):
+# scratch trees each holding a second name for the live file):
 #
-#   1. THE SCRATCH COPY MUST NOT *BE* THE OWNER'S FILE. One inode with two names is
+#   1. THE SCRATCH COPY MUST NOT *BE* THE LIVE FILE. One inode with two names is
 #      how a `cp` writes through a link: it opens the path and truncates the
 #      inode, so the "copy" lands in the operator's file.
-#   2. THE OWNER'S FILE MUST HAVE EXACTLY ONE NAME. If anything -- a scratch tree, an
+#   2. THE LIVE FILE MUST HAVE EXACTLY ONE NAME. If anything -- a scratch tree, an
 #      old harness, a hand-made link -- holds another name for it, the swap
 #      below writes the scratch config through THAT name too.
 # A refusal names what it found and how to find the other name.
@@ -191,7 +191,7 @@ if [[ -e "$TMP/config.orig.json" && "$ROOT/config.json" -ef "$TMP/config.orig.js
     # DROP THE SPARE NAME, NOT THE FILE: removing the scratch path removes one
     # link and leaves the operator's own file exactly where it was.
     rm -f "$TMP/config.orig.json"
-    echo "  (the spare name has been dropped; the owner's file's own link count is the owner's)"
+    echo "  (the spare name has been dropped; the live file keeps its own link count)"
     exit 2
 fi
 
@@ -205,7 +205,7 @@ if [[ "$LIVE_LINKS" != "1" ]]; then
     exit 2
 fi
 
-echo "port under test : $PORT (the owner's copy is on 5000 and is untouched)"
+echo "port under test : $PORT (the live copy is on 5000 and is untouched)"
 echo "scratch         : $TMP"
 echo "database        : $TMP/test.db  (a COPY; the real one is not written)"
 echo
@@ -496,7 +496,7 @@ chk "the port is released" \
     "$(! ss -ltn | grep -q "127.0.0.1:$PORT" && echo 1 || echo 0)"
 
 echo
-echo "H. the owner's config.json is restored, byte for byte"
+echo "H. the live config.json is restored, byte for byte"
 # THE RESTORE HAPPENS HERE AND IN THE TRAP, AND BOTH PROVE IT. Here, so the
 # summary can show it; in the trap, so Ctrl+C, a closed window and a killed
 # shell have it too.

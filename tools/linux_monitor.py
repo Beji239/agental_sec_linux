@@ -28,7 +28,7 @@
 #    while the monitor was down silently became the baseline. Now stored via
 #    memory_engine preferences.
 #
-# 6. Expensive checks moved to a slow interval.
+# 6. Heavy checks moved to a slow interval.
 #    `find / -perm -4000` walked the entire remote filesystem every 2 minutes.
 #    Now hourly, configurable via SLOW_CHECK_INTERVAL.
 #
@@ -212,9 +212,9 @@ def _sha_full(text: str) -> str:
 
 # WHAT ACTUALLY CHANGED. Added 2026-09-21 after a real run.
 #
-# The owner changed /etc/passwd and the crontab on the Linux box themselves, and the
+# I changed /etc/passwd and the crontab on the Linux box myself, and the
 # Windows side caught both. Good. But the alert only said "the hash moved",
-# so nobody, the owner or the model, could tell the owner's change from an attacker adding
+# so nobody, me or the model, could tell my change from an attacker adding
 # a user in the same minute. The two look identical when all you keep is
 # a hash.
 #
@@ -533,7 +533,7 @@ class LinuxMonitor:
                         self._check_sessions(client)
                         self._check_processes(client)
 
-                        # Slow checks, hourly. These are expensive on the
+                        # Slow checks, hourly. These are heavy on the
                         # remote host and their signals change infrequently.
                         now = time.time()
                         if now - self._last_slow_check >= SLOW_CHECK_INTERVAL:
@@ -665,7 +665,7 @@ class LinuxMonitor:
     # backwards would be worse than not having the feature: "not in the
     # inventory" would start reading as "not installed".
     #
-    # Runs on the SLOW timer, hourly, with the other expensive checks. A
+    # Runs on the SLOW timer, hourly, with the other heavy checks. A
     # package list does not change between two-minute polls.
     SOFTWARE_MAX_PACKAGES = 5000
 
@@ -1720,7 +1720,7 @@ class LinuxMonitor:
     # of that is privilege escalation, and eight highs about a backup is
     # exactly the noise that gets a real high scrolled past.
     #
-    # Pruned at the FIND, not filtered afterwards, so the walk is cheaper too:
+    # Pruned at the FIND, not filtered afterwards, so the walk is lighter too:
     # a snapshot directory is a second copy of the whole filesystem and it was
     # being walked in full every slow check.
     #

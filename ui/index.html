@@ -2141,8 +2141,8 @@
 </div>
 
 <!-- THE QUESTION DOORBELL. Deliberately carries no detail: it says how many
-     and takes the owner to the chat. A popup that tried to hold the question would
-     be asking the owner to answer in a box the owner cannot think in. -->
+     and takes you to the chat. A popup that tried to hold the question would
+     be asking you to answer in a box you cannot think in. -->
 <!-- A newer release: shown once per version for a minor, major or
      security update. A patch only lights the dot. -->
 <div id="update-notice">
@@ -2339,9 +2339,9 @@
   <div class="page" id="page-timeline">
     <div class="card">
       <div class="card-title">Activity Timeline</div>
-      <!-- WHAT THIS PAGE IS FOR, 2026-09-17. The owner's words: it is immensely
-           unclear to the user what the timeline is for and what information
-           it provides. The owner was right, and it had no explanation at all. A tab
+      <!-- WHAT THIS PAGE IS FOR, 2026-09-17. It was completely unclear what
+           the timeline is for and what it shows, and it had no explanation
+           at all. A tab
            that cannot say which question it answers is not finished. -->
       <div class="card-note">
         <b>One list, in time order, of everything this app recorded.</b> Findings,
@@ -2711,7 +2711,7 @@
          Deliberately a card on this page rather than a twentieth tab. The
          question it answers, "what is this machine actually talking to", is
          the same question the two cards above answer from different vantage
-         points, and the owner has already said there are too many tabs whose
+         points, and there are already too many tabs whose
          purpose is not obvious.
 
          PORTED TO LINUX 2026-09-21, with the /api/tls route it reads. The
@@ -3486,8 +3486,7 @@
   <!--
        THE AGENTS TAB, v37, T4.
 
-       This is the page the owner asked for: "a tab in the app for every
-       action the agent takes", where each incident's path through the duty
+       This is the page for every action the agent takes, where each incident's path through the duty
        loop appears so the agent's work is readable in the app and not only in
        the database.
 
@@ -8294,7 +8293,7 @@ async function loadBaselines() {
   }
 }
 
-// Each deviation as a short story, with the owner's two answers. The story
+// Each deviation as a short story, with its two answers. The story
 // is kept here by id so "Ask the agent" never reads text back out of the page.
 let deviationStories = {};
 
@@ -8589,7 +8588,7 @@ async function checkQuestionPopup() {
     if (typeof d.open === 'number') setQuestionBadge(d.open);
     else if (typeof d.waiting === 'number') setQuestionBadge(d.waiting);
     if (typeof d.actions_waiting === 'number') setActionBadge(d.actions_waiting);
-    // He is in the chat: say it there, once, and start the expiry clock.
+    // You are in the chat: say it there, once, and start the expiry clock.
     if (d.ask_in_chat && (d.questions || []).length) {
       const qs = d.questions;
       appendSystemNote((qs.length === 1 ? 'It has a question for you: '
@@ -9109,8 +9108,7 @@ async function printDailyReport(id) {
 
 // THE AGENTS TAB, v37, T4
 //
-// THE PAGE THE OWNER ASKED FOR: "a tab in the app for every action the agent
-// takes", where the agent's path through an incident, hypothesis, evidence,
+// A TAB FOR EVERY ACTION THE AGENT TAKES, where the agent's path through an incident, hypothesis, evidence,
 // verdict, is readable in the app and not only in the database.
 //
 // THE ONE THING THIS RENDERS THAT IS EASY TO GET WRONG. Most ticks do
@@ -9159,9 +9157,8 @@ async function loadAgents() {
 
 // DISMISSING REPORTS, 2026-09-25
 //
-// The owner asked for a dismiss button, a checkbox, and a dismiss-all, all on
-// this tab, and said the dismissals must NOT delete the agent's rows or touch
-// a baseline. Every string below says so, because a button labelled "dismiss
+// A dismiss button, a checkbox, and a dismiss-all, all on this tab, and the
+// dismissals must NOT delete the agent's rows or touch a baseline. Every string below says so, because a button labelled "dismiss
 // all" with no explanation is a button a person has to guess about, and the
 // guess a careful reader makes is the destructive one.
 //
@@ -9523,7 +9520,7 @@ function renderDutyState(st) {
   }
   if (st.last_tick) lines.push('last wake-up: ' + esc(fmtTime(st.last_tick)));
   // POLLS vs WAKE-UPS. The loop looks at the clock every minute and only
-  // WAKES at the owner's scheduled hours, so `ticks` alone would show a
+  // WAKES at the scheduled hours, so `ticks` alone would show a
   // healthy loop as idle-looking between moments. `polls` is the evidence
   // that the schedule is being watched; without it on the page, a correct
   // four-a-day schedule reads exactly like a loop that stopped.
@@ -12198,7 +12195,7 @@ function scrollChat() {
 
 // PROCESSES
 //
-// TODO 68. The list is cheap and comes with a colour already worked out on
+// TODO 68. The list is quick and comes with a colour already worked out on
 // the server, in one function, so this page and the model cannot disagree
 // about what red means.
 
@@ -12523,8 +12520,8 @@ async function inspectProcess(pid, btn) {
 
 // PERMISSION CARDS
 
-// TODO 81, 2026-09-09. The owner's line, and it belongs at the click and not
-// in a document nobody opens.
+// TODO 81, 2026-09-09. This belongs at the click and not in a document
+// nobody opens.
 //
 // The whole design of this app puts a human in front of the decisions that
 // matter. That only works while the human knows what the decision IS. Waving

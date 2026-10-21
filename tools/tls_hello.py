@@ -28,7 +28,7 @@ no scapy import, which is also what makes it testable with a handful of
 hand-built byte strings.
 
 MOST MODERN HELLOS DO NOT FIT IN ONE PACKET, and this was measured rather
-than assumed. On the owner's machine, 2026-09-19, the first ten minutes of
+than assumed. On my machine, 2026-09-19, the first ten minutes of
 capture produced 124 hellos: ONE parsed and 123 were truncated. The reason is
 post-quantum key exchange. A browser offering X25519MLKEM768 sends a key share
 of over a kilobyte, so its ClientHello runs past a normal 1460 byte segment
@@ -147,7 +147,7 @@ class _Reader:
 
 def looks_like_client_hello(payload: bytes) -> bool:
     """
-    Cheap gate, run on every packet with a payload before anything else.
+    Quick gate, run on every packet with a payload before anything else.
 
     Three bytes: a handshake record, a plausible TLS version. This is called
     on every single captured packet, so it does no allocation and no parsing.

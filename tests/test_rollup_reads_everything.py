@@ -1,10 +1,10 @@
 """
 tests/test_rollup_reads_everything.py, the baseline was built from a sample.
 
-FOUND 2026-09-13, and the owner found the shape of it before I did.
+FOUND 2026-09-13.
 
-The owner said the model is the analyst, so a model that reasons from fifty rows out
-of fourteen thousand has no real information about the network. The owner was talking
+The model is the analyst, so a model that reasons from fifty rows out
+of fourteen thousand has no real information about the network. That was
 about the model's view. Checking that led somewhere worse, in Python, nowhere
 near the model:
 

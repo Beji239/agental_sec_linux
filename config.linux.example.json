@@ -114,8 +114,7 @@
         "Read from port_scan.tcp_method, in the block below, next to",
         "default_set.",
         "",
-        "PS-14, 2026-09-25, AND THE CLOCK IS BUILT: on the owner's instruction",
-        "(\"I want you to create that back ground clock\") a background clock",
+        "PS-14, 2026-09-25, AND THE CLOCK IS BUILT: a background clock",
         "runs a self-scan of 127.0.0.1 every poll_interval seconds and stores",
         "it in port_scan_results like any other scan, so the port record keeps",
         "moving when nobody asks. It costs 0.54 s per pass and writes 3 rows",
@@ -180,7 +179,7 @@
         "dpkg_interval_seconds: tier C, `dpkg -V`. MEASURED 209s for a full",
         "run over 2755 packages on the reference host, on its own thread,",
         "default three hours. A floor of 300s is enforced in code. The",
-        "owner's instruction was 'expensive, hourly at most'; three hours",
+        "run is slow, so hourly at most; three hours",
         "is slower than that on purpose, and the reason is that the thing",
         "this detects -- a file a package shipped being replaced -- is not",
         "a race with a three-hour window.",
@@ -224,7 +223,7 @@
         "",
         "poll_interval: how often the app reads the file. MEASURED: a pass is",
         "a handful of indexed SQLite reads over new rows only, so this is",
-        "cheap. It is NOT the camera's own cadence -- the camera writes",
+        "quick. It is NOT the camera's own cadence -- the camera writes",
         "continuously and this only decides how often somebody looks.",
         "",
         "stale_after_seconds: how old the newest event has to be before the",
@@ -453,7 +452,7 @@
 
   "presence_sweep": {
     "_comment": [
-      "The cheap cadence: an ARP sweep every 15 minutes, recorded so that",
+      "The light cadence: an ARP sweep every 15 minutes, recorded so that",
       "absence becomes countable. Positives only; absence is derived against",
       "the sweeps that ran. Python owns this schedule, not the model."
     ],
@@ -463,7 +462,7 @@
 
   "probe": {
     "_comment": [
-      "The expensive cadence: the device inventory fingerprint probe, every",
+      "The heavy cadence: the device inventory fingerprint probe, every",
       "21 days following Microsoft's published Defender cadence.",
       "NOT a model tool at any privilege, because it ORIGINATES TRAFFIC.",
       "Both the permanent list and exclusion_list default to not touching a",

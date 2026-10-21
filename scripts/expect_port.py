@@ -7,9 +7,9 @@ scripts/expect_port.py, say a port is normal on a device, once.
 
 WHY THIS EXISTS, 2026-09-02.
 
-The owner identified a device, told the tool it was the owner's, and the open-port
+I identified a device, told the tool it was mine, and the open-port
 finding stayed at high anyway. Naming a device says nothing about which of its
-ports are normal, so the tool asked the owner about the same port three sessions
+ports are normal, so the tool asked me about the same port three sessions
 running. A tool that keeps asking a question you already answered is a tool
 you stop reading, and that is the unread review queue in 4A arriving by a
 different road.

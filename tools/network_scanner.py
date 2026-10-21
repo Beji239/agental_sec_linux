@@ -114,7 +114,7 @@ MAX_SWEEP_PREFIX = 24
 _TRUE = ("1", "true", "yes", "on")
 
 # A scan's own PTR lookups are ON by default, because a device's own name is
-# the cheapest identifying fact on a LAN and memory_engine stamps it onto
+# the easiest identifying fact on a LAN and memory_engine stamps it onto
 # every device row. They are the SLOWEST thing in the scan by two orders of
 # magnitude, though, and on a network whose resolver refuses to answer they
 # are the difference between a three second scan and a forty minute one
@@ -591,7 +591,7 @@ def _read_arp_cache() -> dict[str, str]:
 
 def _read_proc_net_arp() -> dict[str, str]:
     """
-    /proc/net/arp, the cheapest source on Linux.
+    /proc/net/arp, the lightest source on Linux.
 
     Columns are fixed: IP, HW type, Flags, HW address, Mask, Device. A row
     with flags 0x0 is an INCOMPLETE entry, which means the kernel asked and
@@ -849,11 +849,11 @@ class NetworkScanner:
 
         # WHICH CLOCK IS IN CHARGE, AND WHAT THE OTHER ONE SAYS.
         #
-        # The owner's own config has BOTH keys: `presence_sweep.interval_minutes`
+        # The live config has BOTH keys: `presence_sweep.interval_minutes`
         # at 15 and `sensors.network_scanner.poll_interval` at 300 seconds —
         # the same number twice, which is a coincidence rather than a
         # convention. The general key is the one this app has always read, so
-        # it wins and the owner's behaviour is unchanged. What is new is that the
+        # it wins and nothing changes for a live install. What is new is that the
         # module SAYS which key is live and what the losing one says, so a
         # future setting of one of them cannot go on being silently inert.
         interval, interval_key = sweep_interval_seconds(self.config)
@@ -908,7 +908,7 @@ class NetworkScanner:
     def scan(self, session_id: str = None,
              resolve_hostnames: bool = None) -> dict:
         """
-        The expensive, identifying pass: who is on this network, and what is
+        The heavy, identifying pass: who is on this network, and what is
         each address.
 
         CALLED BY THE MODEL and by nothing on a clock. It upserts
@@ -1316,7 +1316,7 @@ class NetworkScanner:
     # A SECOND CADENCE, NOT A SECOND SCANNER.
     #
     # scan() above identifies: it upserts known_devices, raises a finding for
-    # anything new, and is expensive enough to be fired occasionally, usually
+    # anything new, and is heavy enough to be fired occasionally, usually
     # because the model asked. That is the right shape for "what is on this
     # network".
     #
@@ -1343,7 +1343,7 @@ class NetworkScanner:
 
     def sweep_presence(self, session_id: str = None) -> dict:
         """
-        Record who answered, right now. Cheap, quiet, and always written.
+        Record who answered, right now. Quick, quiet, and always written.
 
         Writes a row even when it fails, with the reason. A sweep that could
         not run must not be silently missing from the record, or a stretch
@@ -1427,7 +1427,7 @@ class NetworkScanner:
         # THE METHOD COLUMN NOW MEANS SOMETHING. It was the constant string
         # "icmp+arp" for a sweep that may have probed nothing at all, and
         # nothing reads it — which is exactly why it can carry the truth
-        # cheaply: a future reader (and this round's own write-up) can tell a
+        # easily: a future reader (and this round's own write-up) can tell a
         # measured run from an ARP-only one out of the record itself.
         method = "icmp+arp" if len(unprobed) < len(hosts) else "arp-only"
         me.record_presence_sweep(
@@ -1493,7 +1493,7 @@ class NetworkScanner:
         is_permanent means the device belongs on this network. It was being
         read as "should always be answering", so marking a TV as a member of
         the network silently also signed it up to stay awake, and every quiet
-        evening produced a medium finding. The owner put it plainly: those
+        evening produced a medium finding. Put plainly: those
         devices are off because nobody is using them, which is the ordinary
         case and not an event.
 
@@ -1523,7 +1523,7 @@ class NetworkScanner:
         # this check legitimately raises nothing on a fresh upgrade. That is
         # indistinguishable from "everything is present" unless it says which
         # one it is, and the whole project exists to stop absence being read
-        # as calm. Logged once per pass, cheaply — and since 2026-09-24 also
+        # as calm. Logged once per pass, quickly — and since 2026-09-24 also
         # published by status(), so it is on the readiness row and not only in
         # a log nobody is tailing.
         declared = me.always_on_devices()
@@ -1557,7 +1557,7 @@ class NetworkScanner:
             # finding: the user quieting "this device showed up new" also
             # stops "this device has gone". Left as it is, deliberately —
             # closing it means changing what a dismissal MEANS across two
-            # rules, which is the owner's call and not this round's. Recorded
+            # rules, which is a separate decision and not this round's. Recorded
             # with its measurement in bugfinder.md (NET-9).
             if me.is_dismissed("ip", device["ip"]):
                 continue

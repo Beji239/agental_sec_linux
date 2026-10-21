@@ -19,7 +19,7 @@
 # The audit (bugfinder.md, "THE EVENT MONITOR ON LINUX, CAPABILITY ROUND",
 # EM-1 to EM-13) measured two things this file could not say for itself:
 #
-#   1. 97.4% of the owner's events table was re-stored copies of log lines
+#   1. 97.4% of the live events table was re-stored copies of log lines
 #      that had not changed. The reader took a fixed 200-entry window off the
 #      END of every file every poll, so a line that stayed inside the window
 #      was read again and written again, 971 times for one immutable kern.log
@@ -388,7 +388,7 @@ _seen_events = deque(maxlen=10000)   # in-memory second net, see _is_duplicate
 _failed_login_seen = {}              # (key, message, stamp) already counted
 
 # THE FOUR CATEGORIES THAT WERE READ AND RAISED NOTHING (2026-09-25)
-# The owner's report: "296 events collected with no detection rule to evaluate
+# The report: "296 events collected with no detection rule to evaluate
 # them... a firewall deny, a service crash, a service start, or a login
 # happening right now would show up in query_events but would not raise an
 # alert." Confirmed against the store: 55,294 service_started, 72,758
@@ -397,8 +397,8 @@ _failed_login_seen = {}              # (key, message, stamp) already counted
 #
 # WHY THEY ARE NOT RAISED ONE-FINDING-PER-EVENT, and this is the decision T1's
 # Q2 already made on a measurement rather than on taste: 2,782 successful
-# logins and 232 sudo rows in one evening is how an operator is trained to
-# ignore the owner's own tool. That decision STANDS for the per-event case. What was
+# logins and 232 sudo rows in one evening is how you get trained to
+# ignore your own tool. That decision STANDS for the per-event case. What was
 # missing is the other half of it -- the SHAPE rules. A single service failure
 # is noise; the same unit failing seven times in five minutes is a restart
 # loop. One blocked packet is the firewall doing its job; twenty from one
@@ -440,7 +440,7 @@ _login_successes = defaultdict(deque)    # src address -> timestamps
 
 # THE SAME EVENT, COUNTED ONCE. Added 2026-09-26, EM2-4.
 #
-# MEASURED, from the owner's report: the dashboard raised 69 LNX-1014
+# MEASURED, from the report: the dashboard raised 69 LNX-1014
 # "service flapping" findings in the ten minutes after one boot, against 60
 # DISTINCT units, for services that had each started ONCE (systemd reported
 # NRestarts=0 for every one of them, and the binary is the package's own).
@@ -789,7 +789,7 @@ def _poll_interval() -> int:
 #   file      the unread bytes between the read position and EOF, counted as
 #             lines (bounded scan; see _file_remaining)
 #   journald  the newest record's sequence number minus ours, which journald
-#             answers in one cheap command (_journald_remaining)
+#             answers in one quick command (_journald_remaining)
 #
 # A SOURCE THAT WAS CONFIGURED BUT REPORTED NOTHING IS A DEAD ONE, and this is
 # the case the 2026-09-21 block claimed to catch and could not: it iterated
@@ -1088,7 +1088,7 @@ def _journald_newest_seqnum() -> tuple:
     """
     (seqnum id, seqnum) of the newest record, or (None, None).
 
-    ONE CHEAP COMMAND, and it is how the backlog is measured: journald's
+    ONE QUICK COMMAND, and it is how the backlog is measured: journald's
     sequence numbers are contiguous per journal file, so newest minus ours is
     the exact number of records waiting. The Windows twin works the same way
     out of `newest - scanned_to`.
@@ -1840,7 +1840,7 @@ def _read_login_records(path: Path, kind: str, marker: dict = None,
 # timestamps with an offset. MEASURED over every line of the three live files:
 # 4774 lines read, 0 parsed by the regex, 4774 fell to a fallback that
 # returned FOUR keys (no hostname, no service, no pid) stamped with the PARSE
-# time. One row in the owner's store is 92 minutes off the event it describes,
+# time. One row in the live store is 92 minutes off the event it describes,
 # and every file-source row had an empty process_name.
 
 # RFC 5424 / systemd short-iso, which is what this host actually writes:
@@ -2198,9 +2198,9 @@ def _shape_findings(entry: dict, categories: list, fields: dict,
     """
     The SHAPE rules for the four categories that raised nothing (2026-09-25).
 
-    Each of these categories is events-only, by the owner's T1 decision, and
+    Each of these categories is events-only, by the T1 decision, and
     that decision was made on a measurement: raising one finding per login
-    trains an operator to ignore the owner's own tool. This is the other half of the
+    trains you to ignore your own tool. This is the other half of the
     same decision. One service failure is noise; the same unit failing three
     times in five minutes is a restart loop. One blocked packet is the
     firewall working; five from one address is somebody probing.
@@ -2219,7 +2219,7 @@ def _shape_findings(entry: dict, categories: list, fields: dict,
 
     # WHEN IT HAPPENED vs WHEN IT WAS READ (EM2-4)
     #
-    # The window runs on the EVENT's own clock. Measured in the owner's store:
+    # The window runs on the EVENT's own clock. Measured in the live store:
     # a line stamped 21:11:19 was counted at the 21:17 read and again at the
     # 21:20 read, and a whole boot's backlog landed inside one window it never
     # occupied. `now` is only the fallback for a line that carries no stamp
@@ -2472,7 +2472,7 @@ def _check_brute_force(source_key: str, timestamp: float,
 
     Returns a finding if the threshold is cleared, else None. `source_key` is
     an address when the log carried one and an account when it did not, which
-    is EM-3's fix: the audit measured 662 failed logins in the owner's store
+    is EM-3's fix: the audit measured 662 failed logins in the live store
     and NOT ONE carried an address, so a check keyed on ip_address alone could
     never fire on this host. The Windows twin already keys on
     `src_ip or username or "unknown"` and this is that.

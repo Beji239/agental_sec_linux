@@ -3,11 +3,11 @@ tests/test_port_scanner_clock.py — PS-14 OPTION (a), THE BACKGROUND CLOCK,
 2026-09-25.
 
 WHAT THIS FILE IS FOR. Register section 10 carried PS-14's design question as
-PENDING THE OWNER'S WORD: (a) give the port scanner a real clock, so a self-scan runs
+PENDING A DECISION: (a) give the port scanner a real clock, so a self-scan runs
 on a schedule and `sensors.port_scanner.poll_interval` gates it; or (b) keep it
 pull-only and make the switch refuse the call. (b) was built first, as the
-reversible direction; (a) was recorded as UNTOUCHED WORK. **The owner answered
-in the owner's own words: "I want you to create that back ground clock".** This file
+reversible direction; (a) was recorded as UNTOUCHED WORK. **The answer was
+(a), build the clock.** This file
 asserts the clock that answer asked for, in both directions:
 
   * the clock exists and is ARMED BY THE BOOT, with the cadence coming from
@@ -15,7 +15,7 @@ asserts the clock that answer asked for, in both directions:
   * its due arithmetic is WALL CLOCK — read off the run record, so a restart
     inside the window does not double-scan and a machine waking from sleep
     does not drift an interval further behind every reboot;
-  * the pass it runs is THE SHIPPED scan(), not a cheaper second scanner;
+  * the pass it runs is THE SHIPPED scan(), not a lighter second scanner;
   * it records what it finds, in the operator's own store shape, as a
     self-scan — and a self-scan of loopback measures what is BOUND, never
     exposure;
@@ -139,7 +139,7 @@ check("  and says why it could not be read",
 check("an absent sensors block is the same answer as an absent key",
       ps.clock_interval_seconds({"sensors": {}})[0], ps.DEFAULT_CLOCK_SECONDS)
 check("and the default IS the value the operator's own file carries, so an "
-      "absent key and the owner's file land in the same place",
+      "absent key and the live file land in the same place",
       ps.DEFAULT_CLOCK_SECONDS, 600)
 
 
@@ -289,7 +289,7 @@ print("\n[5] THE SWITCH STOPS BOTH PATHS — the clock AND the call")
 #
 # A switch that stopped only one of two paths is the AR-12 shape one layer
 # down: the operator flips it, the call refuses, and a thread carries on
-# scanning behind the owner.
+# scanning behind your back.
 _off = ps.PortScanner("clock-off",
                       config={"sensors": {"port_scanner":
                                           {"enabled": False}}})
@@ -376,17 +376,17 @@ check("and the loop's wake is the due check's resolution, never longer than "
       "wake = min(interval, ps.CLOCK_WAKE_SECONDS)" in MAIN_SRC, True)
 
 
-print("\n[8] THE OPERATOR'S OWN INSTALL: what changes for the owner, measured")
+print("\n[8] THE LIVE INSTALL: what changes, measured")
 _live = ROOT / "config.json"
 if _live.exists():
     _lc = json.loads(_live.read_text(encoding="utf-8"))
     _interval, _key = ps.clock_interval_seconds(_lc)
     _on_now = ps.scan_enabled(_lc)[0]
-    print(f"  INFO  the owner's config.json: switch {'ON' if _on_now else 'OFF'}, "
+    print(f"  INFO  the live config.json: switch {'ON' if _on_now else 'OFF'}, "
           f"clock every {_interval}s ({_key})")
-    check("the owner's own config is ON, so the clock will run for the owner",
+    check("the live config is ON, so the clock will run",
           _on_now, True)
-    check("and the owner's own poll_interval is what the clock will use",
+    check("and the live poll_interval is what the clock will use",
           _interval, 600)
 else:
     print("  SKIP  no config.json in this tree, so the operator's setting "

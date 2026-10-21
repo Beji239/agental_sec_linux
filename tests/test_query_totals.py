@@ -1,25 +1,25 @@
 """
 tests/test_query_totals.py, a list that does not say its own size. TODO 94.
 
-WHERE THIS CAME FROM, 2026-09-13. The owner asked one question after the process
+WHERE THIS CAME FROM, 2026-09-13. I asked one question after the process
 list was fixed: does the model now get everything the app could give it. The
 answer was no, and it was no in about twenty places.
 
 core/memory_engine.py has 22 query_ functions and not one of them reported a
-total or said what it held back. Measured on the owner's database: 14,676 active
+total or said what it held back. Measured on the live database: 14,676 active
 findings behind a default limit of 50. The model asks what is wrong with the
 machine, gets the newest fifty, and nothing anywhere says the other 14,626
 exist. A capped answer and a complete one were the same shape, the same
 length, and the same silence.
 
-The owner's second point is the one that makes it worse than a counting bug. The right
+The second point is the one that makes it worse than a counting bug. The right
 number of rows is a property of the NETWORK, not of the app. Fifty rows on a
 noisy night is one repeated detection and nothing else; the same fifty on a
 quiet network is the whole picture. A fixed default cannot be right for both,
 and saying nothing about which one you got is what makes it dangerous rather
 than merely limited.
 
-So the rule being tested here is the owner's rule two: a function must not assert a
+So the rule being tested here is rule two: a function must not assert a
 fact it could not check. "Here are the findings" and "here are the fifty
 newest of 14,676" are different sentences.
 
@@ -81,7 +81,7 @@ def add_event(n, session="s1"):
 
 
 print("\n[1] THE FAILURE CASE. A capped list must not read as the whole list.")
-# 120 findings behind a limit of 50. This is the owner's 14,676 behind 50, shrunk to
+# 120 findings behind a limit of 50. This is the live 14,676 behind 50, shrunk to
 # something a test can build in a second.
 add_finding(120)
 
@@ -168,7 +168,7 @@ check("rows under their own name here too", ps["ports"], [])
 
 
 print("\n[6] a count that could not run says so, and does NOT say complete")
-# Rule two, the one the owner named. "I did not check" and "there is nothing else"
+# Rule two. "I did not check" and "there is nothing else"
 # have to stay different sentences, so a broken count must never read as a
 # complete answer.
 class _BrokenConn:

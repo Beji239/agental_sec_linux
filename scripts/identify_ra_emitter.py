@@ -37,7 +37,7 @@ import time
 
 # REPOINTED 2026-09-21. This used to import from tools.packet_sniffer, the
 # stale Windows copy, which was the ONLY live consumer of that file in the
-# tree. The owner's rule took the file out, and both names it needed are now
+# tree. The no-Windows rule took the file out, and both names it needed are now
 # where they belong: the RFC 1256 parser is here, in the capture path that
 # actually sees the frames (adapters._ra_addresses, ported with the two
 # registered routing-ICMP rules), and the private-address test is the live

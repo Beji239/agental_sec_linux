@@ -237,7 +237,7 @@ def _d(*args, **kwargs) -> Detection:
 # THE HOST THIS APP RUNS ON and they needed rules: the local event monitor
 # (accounts, keys, read out of auth.log and journald) and the local process
 # monitor (the three LNX-11xx entries below). They are raised under LNX
-# numbers because that is the prefix the owner approved for them, and their
+# numbers because that is the prefix chosen for them, and their
 # `source` column names the exact sensor that raises them, so the mapping
 # from a number to a sensor is still readable without a lookup. The row's own
 # source column names the raiser too, and for the same rule those two are the
@@ -366,7 +366,7 @@ _REGISTER: list[Detection] = [
     #             force is a DIFFERENT rule reading a different log and has
     #             been since the EM round: LNX-1002 ssh_brute_force, driven by
     #             adapters.LinuxEventMonitor. Zero rows ever carried EVT-1001
-    #             in the owner's store, measured.
+    #             in the live store, measured.
     #   PRC-1002  defender_detection. Microsoft Defender's own history, read
     #             by Get-MpThreatDetection through the capability shim. Both
     #             halves are gone. Zero rows ever, measured.
@@ -384,7 +384,7 @@ _REGISTER: list[Detection] = [
            "A Windows event channel rule. This platform reads journald and the "
            "log files, and the equivalent detection here is LNX-1002 "
            "ssh_brute_force, raised by adapters.LinuxEventMonitor off the same "
-           "sensor. Measured before retiring: zero rows in the owner's store "
+           "sensor. Measured before retiring: zero rows in the live store "
            "ever carried EVT-1001. Kept so the id is never reused."
        )),
 
@@ -397,7 +397,7 @@ _REGISTER: list[Detection] = [
        retired_reason=(
            "Microsoft Defender does not exist on this platform, and the "
            "PowerShell reader that produced these rows is gone with it. "
-           "Measured before retiring: zero rows in the owner's store ever "
+           "Measured before retiring: zero rows in the live store ever "
            "carried PRC-1002. Kept so the id is never reused."
        )),
 
@@ -460,11 +460,11 @@ _REGISTER: list[Detection] = [
 
     # T2, 2026-09-17, Q2. The account and key events the local event monitor
     # reads. They were counted and dropped until now for want of a rule; the
-    # owner's answer was that these three become FINDINGS and the other eight
+    # decision was that these three become FINDINGS and the other eight
     # categories stay events only. Reason, recorded in T1_FIREWALL_TRUTH.md:
     # these are §53.3 violated-declaration cases with threshold 1, and the
     # eight that stay events include 2,782 successful logins and 232 sudo rows
-    # in one evening, which is how an operator is trained to ignore the owner's own
+    # in one evening, which is how you get trained to ignore your own
     # tool.
     #
     # THE SEVERITIES ARE THE MODULE'S OWN, read out of
@@ -531,8 +531,8 @@ _REGISTER: list[Detection] = [
     # (2026-09-17) kept firewall_block, service_failed, service_started and
     # successful_login as EVENTS ONLY, on a measurement: 2,782 successful
     # logins and 232 sudo rows in one evening, and raising a finding per login
-    # is how an operator is trained to ignore the owner's own tool. That decision
-    # STANDS and is not reversed here. What the owner's report of 2026-09-24
+    # is how you get trained to ignore your own tool. That decision
+    # STANDS and is not reversed here. What the report of 2026-09-24
     # named -- "a firewall deny, a service crash, a service start, or a login
     # happening right now would show up in query_events but would not raise an
     # alert" -- is the half that was missing: the SHAPE.
@@ -581,7 +581,7 @@ _REGISTER: list[Detection] = [
     # tools/process_monitor_linux.py has always raised and the adapter has
     # always counted and dropped, because they had no id and folding them
     # under PRC-1001 would have made one rule claim four different things.
-    # The owner approved registering them, as LNX-11xx.
+    # They are now registered, as LNX-11xx.
     #
     # SEVERITIES ARE THE MODULE'S OWN (tools/process_monitor_linux.py, the
     # _analyze_process checks): location low, masquerading high, lolbin
@@ -801,7 +801,7 @@ _REGISTER: list[Detection] = [
     # difference is the whole point of the rule. LNX-2001 says "this file is
     # not what it was". This says "this file was changed AND SOMEBODY PUT ITS
     # TIMESTAMPS BACK", which is a statement about intent that no other rule
-    # here can make. The owner's rule is one finding per claim; folding these
+    # here can make. The rule is one finding per claim; folding these
     # would put a sentence about deliberate timestamp preservation on a row
     # that mostly means an apt upgrade.
     #
@@ -836,7 +836,7 @@ _REGISTER: list[Detection] = [
     #                                      computed, and nothing arrives.
     #                                      (The comparison ledger that named
     #                                      this shape was deleted 2026-09-23
-    #                                      on the owner's instruction; the
+    #                                      on purpose; the
     #                                      shape outlived the record of it.)
     #
     # The value is the PATH, because that is what a person acts on and what a
@@ -1179,7 +1179,7 @@ _REGISTER: list[Detection] = [
        "A device asked this resolver for an unusual number of TXT records. "
        "TXT is a real record type that ordinary software uses, and it is also "
        "the record type a resolver will carry arbitrary text in, which makes "
-       "it the cheapest outbound channel on a network where DNS is the only "
+       "it the easiest outbound channel on a network where DNS is the only "
        "thing that always gets out. Volume rather than content: this tool "
        "does not read what the records SAID.", ("confidentiality",)),
 
@@ -1191,10 +1191,10 @@ _REGISTER: list[Detection] = [
     # reconfiguration, with the identity of whoever did it.
     #
     # BOTH OF THESE CAN BE STRUCTURALLY ABSENT ON A HOST, and that is the state
-    # the owner's machine is in: auditd is not installed, so neither id can
+    # this machine is in: auditd is not installed, so neither id can
     # fire however many passes run. What the app must never do is let that read
     # as a quiet machine -- query_audit_events says NOT INSTALLED in words and
-    # prints the one command, which is the owner's Q7 wording for this task.
+    # prints the one command.
     #
     # ONE ID PER CLAIM, as always: "the monitoring was RECONFIGURED" and "a
     # watched file was TOUCHED" are different facts about different things, and

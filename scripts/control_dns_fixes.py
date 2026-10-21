@@ -349,7 +349,7 @@ CONTROLS = [
             # draft carried the two leading spaces the check's label has in
             # the SOURCE, while the harness strips labels before comparing —
             # so this control reported a broken expectation against a run
-            # that was really failing red, which is the expensive direction.
+            # that was really failing red, which is the worse direction.
             "and it is COUNTED AS BLOCKED (FTL's own set includes it)",
             "the blocked set holds exactly the codes FTL marks blocked",
         ],

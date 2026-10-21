@@ -129,7 +129,7 @@ PDU_GET_BULK = 0xA5
 # THE INVARIANT. Asserted on every send. SNMP's SetRequest is 0xA3 and Trap,
 # InformRequest and Report are 0xA4, 0xA6 and 0xA8; none of them is buildable
 # by this module, and none of them is permitted through the socket either. Two
-# independent statements of the same rule, because the expensive failure would
+# independent statements of the same rule, because the worst failure would
 # be a future edit that adds a writer and leaves the comment above intact.
 _READ_ONLY_PDUS = frozenset({PDU_GET, PDU_GET_NEXT, PDU_GET_BULK})
 
@@ -231,7 +231,7 @@ def _decode_oid(body: bytes) -> tuple:
     # walk() allows MAX_WALK_REQUESTS per table and _collect_config walks
     # five, so a gateway answering every request with one maximum-size varbind
     # of continuation bytes costs minutes of CPU per collection pass, every
-    # ten minutes. Low severity, because a hostile router has cheaper ways to
+    # ten minutes. Low severity, because a hostile router has easier ways to
     # be unhelpful, chiefly not answering at all. Fixed anyway: the router is
     # explicitly inside this module's threat model, so the cost of a hostile
     # answer should be bounded rather than assumed reasonable.
@@ -1360,7 +1360,7 @@ def _raise_client_findings(new_clients: list, host: str, session_id: str,
             logger.debug(f"RTR-1001 not raised for {client['ip']}: not an "
                          f"address on the router's own network")
             continue
-        # Kept off the internet until checked in, when the owner asked.
+        # Kept off the internet until checked in, when the hold switch is on.
         device_hold.consider(client)
         if me.is_dismissed("ip", client["ip"]):
             logger.debug(f"RTR-1001 not raised for {client['ip']}: dismissed")

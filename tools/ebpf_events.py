@@ -6,7 +6,7 @@
 # The app reads the event file that ebpf/ebpf_monitor.py writes, decides which
 # of those events are worth a finding, and says what it could not read.
 #
-# THE GAP THIS CLOSES, IN THE OWNER'S WORDS
+# THE GAP THIS CLOSES
 #
 #   "Today a program that lives five seconds inside a sixty-second poll gap
 #    is invisible."
@@ -1029,7 +1029,7 @@ def analyze(config: dict = None, db_path: str = None) -> dict:
         # the HIGH-severity rule of the two.
         #
         # The floor is the last id actually looked at. A pass with nothing new
-        # moves to the newest id, which is what keeps a quiet file cheap; a
+        # moves to the newest id, which is what keeps a quiet file quick; a
         # capped pass stops on the last row it read and the next pass resumes
         # there. This is tools/auditd_monitor.py's fix, applied to the reader
         # whose window is a row count rather than a byte count.
@@ -1298,7 +1298,7 @@ def _staging_findings(rows: list, cfg: dict):
     """
     The two staging rules, capped and announced.
 
-    ONE PASS OVER THE ROWS FOR BOTH RULES, because they share the expensive
+    ONE PASS OVER THE ROWS FOR BOTH RULES, because they share the slow
     part (realpath) and because a single pass is the only way to guarantee the
     two rules agree about what they saw.
     """
@@ -1321,7 +1321,7 @@ def _staging_findings(rows: list, cfg: dict):
 
         # A change must be raised ONCE. Dedup on what this app already knows
         # is (source, entity_type, entity_value, title) and the adapter checks
-        # it; this set is the cheaper in-pass guard against the same file
+        # it; this set is the lighter in-pass guard against the same file
         # executing five times in one window.
         key = f"{did}:{entity}"
         if key in seen:

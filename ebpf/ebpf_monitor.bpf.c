@@ -7,8 +7,8 @@
 // WHY THIS FILE EXISTS
 // ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
 //
-// The owner's words, and they are the specification: "Today a program that
-// lives five seconds inside a sixty-second poll gap is invisible."
+// The specification: today a program that lives five seconds inside a
+// sixty-second poll gap is invisible.
 //
 // Every sensor in this application learns what is happening by ASKING. The
 // process monitor walks /proc once a poll; the event monitor reads journald in
@@ -52,7 +52,7 @@
 // memcpy each. There is NO per-event syscall and no per-event allocation: the
 // ring buffer is mapped once and the kernel writes into it. The measured cost
 // on this host is in the module header; the honest summary is that it is
-// cheaper than the 60-second /proc walk it exists to complement, and it is
+// lighter than the 60-second /proc walk it exists to complement, and it is
 // bounded by construction (see the drop counter below).
 //
 // A FULL RING BUFFER DROPS EVENTS, AND THAT IS COUNTED. `dropped` is a

@@ -35,7 +35,7 @@ its own question, because RFC 4795 defines no service enumeration at all.
 Section [1] is the payloads, decoded field by field, because three of the nine
 defects were packets that were not what their own comments said they were.
 
-Nothing here writes to the owner's store: memory_engine.DB_PATH is pointed at a
+Nothing here writes to the live store: memory_engine.DB_PATH is pointed at a
 throwaway database built from Schema.SQL. The scans in section [2] are REAL
 scans of this host's own addresses, which is the subject of that section.
 """
@@ -827,7 +827,7 @@ print("\n[12] PS-14: THE SWITCH THAT NOTHING READ NOW REFUSES (AR-12's shape)")
 # module was built directly in main.py and pull-only, so there was no loop for
 # the key to gate -- the shape the autoruns round closed as AR-12.
 #
-# The owner's answer there, taken up here for the same reason, is that the
+# The answer there, taken up here for the same reason, is that the
 # switch REFUSES. Both directions are asserted, because a switch that refuses
 # everything is as broken as one that refuses nothing.
 
@@ -917,7 +917,7 @@ check("and it does NOT claim an off state", "off_by_config" in _on_status, False
 check("the row renders ok when the module is on",
       st_settings._module_row("port_scanner", _on_scanner).get("state"), "ok")
 # THE OTHER KEY WAS DISCLOSED AS UNREAD, AND THAT IS NO LONGER TRUE —
-# RESTATED 2026-09-25 ON THE OWNER'S ANSWER, not deleted, because the old
+# RESTATED 2026-09-25, not deleted, because the old
 # assertion is the record of an intermediate state worth keeping. It read:
 #
 #   status names poll_interval as UNREAD, so it cannot be mistaken for a control
@@ -925,8 +925,8 @@ check("the row renders ok when the module is on",
 #
 # Both were TRUE of the tree that shipped option (b): the sensor was pull-only
 # and the key gated nothing, so status() disclosed it rather than leaving it
-# looking like a control. The owner then answered PS-14's design question in
-# the owner's own words — "I want you to create that back ground clock" — so option
+# looking like a control. PS-14's design question was then answered,
+# build the clock, so option
 # (a) is built, poll_interval IS the clock's cadence, and a status that still
 # said "read by nothing" would now be the lie of the same shape in the other
 # direction. These two assertions replace them and pin the new contract in
@@ -955,20 +955,20 @@ check("main.py hands the module the operator's config, which is the half a "
       "class-internal gate cannot do for itself",
       "config=config," in main_code, True)
 
-# AND THE OWNER'S OWN CONFIG IS UNCHANGED FOR THE OWNER. Read from the owner's live file
-# rather than assumed: a key that was always true means this is inert until the owner
-# flips it.
+# AND THE LIVE CONFIG IS UNCHANGED. Read from the live file
+# rather than assumed: a key that was always true means this is inert until
+# someone flips it.
 import json                                              # noqa: E402
 _live_cfg_path = ROOT / "config.json"
 if _live_cfg_path.exists():
     _live = json.loads(_live_cfg_path.read_text(encoding="utf-8"))
     _live_on = ps.scan_enabled(_live)[0]
     print(f"  INFO  the operator's own config.json says the switch is "
-          f"{'ON, so nothing changes for the owner today' if _live_on else 'OFF'}")
-    check("the owner's own install is unaffected until the owner flips it",
+          f"{'ON, so nothing changes today' if _live_on else 'OFF'}")
+    check("the live install is unaffected until someone flips it",
           _live_on, True)
 else:
-    print("  SKIP  no config.json in this tree, so the owner's own setting "
+    print("  SKIP  no config.json in this tree, so the live setting "
           "cannot be read here")
 
 
@@ -1055,8 +1055,7 @@ print("\n[14] PS-13, OPTION (c): THE SYN SCAN EXISTS NOW, AND THE ROW SAYS SO")
 #   a raw-socket SYN scan really is absent from the tree       -> retired
 #   and no longer names CAP_NET_RAW as the reason              -> retired
 #
-# The owner took the third design in the owner's own words -- "do option C and when
-# done report back" -- so the module now carries a real SYN pass, the row is
+# The third design was chosen, so the module now carries a real SYN pass, the row is
 # DEGRADES with both losses named, and THESE are the assertions that match.
 
 from core import privilege_linux as pv                    # noqa: E402

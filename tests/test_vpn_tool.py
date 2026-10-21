@@ -55,7 +55,7 @@ check("and says unknown is not a no", "not a no" in desc.lower(), True)
 print("\n[2] the controls are still gone, which is the point")
 check("no vpn_connect", "vpn_connect" in names, False)
 check("no vpn_disconnect", "vpn_disconnect" in names, False)
-# Nothing in the manifest may write to the VPN at all. A name check is cheap
+# Nothing in the manifest may write to the VPN at all. A name check is quick
 # and it is the thing somebody would break by copying an old branch back in.
 writers = [n for n in names if n.startswith("vpn_") or n in
            ("connect_vpn", "disconnect_vpn")]

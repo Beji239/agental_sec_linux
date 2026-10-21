@@ -149,8 +149,8 @@ check_true("and says to treat them as a prior, not a fact",
            "not as established facts" in note)
 
 
-print("\n[5] an expired lookup makes the row stale, which is the owner's call")
-# The owner's reasoning, and I think it is right: an unflagged stale fact costs nothing
+print("\n[5] an expired lookup makes the row stale, on purpose")
+# The reasoning: an unflagged stale fact costs nothing
 # right up until it is wrong, and then it is silently wrong. A flagged one
 # costs one query_enrichment call, which is free while the row is fresh.
 en.SOURCES_BY_KIND["ip"] = [
@@ -189,8 +189,8 @@ schema = next(t for t in tr.TOOL_MANIFEST
               if t["name"] == "write_behavioral_observation")
 props = schema["input_schema"]["properties"]
 check_true("basis is offered", "basis" in props)
-# FOUR SINCE v32, 2026-09-14. operator_stated is what the owner said when the
-# model asked the owner something it could not work out itself. Checked as an exact
+# FOUR SINCE v32, 2026-09-14. operator_stated is what a person said when the
+# model asked them something it could not work out itself. Checked as an exact
 # SET rather than a count, so a fifth value has to be added here deliberately
 # rather than slipping in.
 check_true("with the four values",

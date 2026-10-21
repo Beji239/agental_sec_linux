@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 scripts/remove_em24_false_findings.py — delete the 84 false LNX-1013/LNX-1014
-rows the service-burst counting bug wrote into the owner's store (EM2-4).
+rows the service-burst counting bug wrote into the live store (EM2-4).
 
 THE INSTRUCTION: delete all 84 entries.
 
@@ -31,7 +31,7 @@ SAFETY, in this order, and every one of them is checked rather than intended:
   5. the chain is verified before and after, and a break is reported rather
      than hidden;
   6. with --apply absent, EVERYTHING runs against a throwaway copy and the
-     owner's store is not opened for writing at all.
+     live store is not opened for writing at all.
 
 Run:  python3 scripts/remove_em24_false_findings.py            # dry run
       python3 scripts/remove_em24_false_findings.py --apply    # for real
@@ -52,8 +52,8 @@ LIVE_DB = ROOT / "agental_sec.db"
 DETECTION_IDS = ("LNX-1013", "LNX-1014")
 REASON = ("EM2-4: raised by the service-burst counting defect (one service "
           "start counted as a pair, again from the second source, and again "
-          "on a re-read; window on the read clock). Removed on the owner's "
-          "instruction, 2026-09-27.")
+          "on a re-read; window on the read clock). Removed on "
+          "2026-09-27.")
 
 
 def open_db(path: Path) -> sqlite3.Connection:
@@ -121,7 +121,7 @@ def remove(db_path: Path, ids: list, apply: bool) -> dict:
             "findings_removed", "findings", f"{DETECTION_IDS[0]}..{DETECTION_IDS[-1]}",
             {"count": len(present), "ids": present,
              "detection_ids": list(DETECTION_IDS), "reason": REASON,
-             "by": "agent, on the owner's instruction 2026-09-27"},
+             "by": "scripts/remove_em24_false_findings.py, 2026-09-27"},
             conn=conn)
         if entry is None:
             return {"error": "the journal refused the entry; nothing deleted"}
@@ -142,7 +142,7 @@ def dismiss_incidents(db_path: Path, incidents: list) -> int:
     then READING THE LIVE STORE instead of trusting the script's own closing
     line. The first version called core.incident.set_status(), which opens its
     OWN connection through core.memory_engine.DB_PATH -- the LIVE database --
-    so a rehearsal that had printed "the owner's store is NOT opened for
+    so a rehearsal that had printed "the live store is NOT opened for
     writing by this run" wrote two incident rows to it. The rows were ones
     this round was going to dismiss anyway and the outcome is right, but a
     rehearsal that writes is the exact class of false reading this project
@@ -171,7 +171,7 @@ def dismiss_incidents(db_path: Path, incidents: list) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true",
-                    help="write to the owner's store; without it everything "
+                    help="write to the live store; without it everything "
                          "happens on a throwaway copy")
     ap.add_argument("--copy-only", action="store_true",
                     help="rehearse on a copy even with --apply present")
@@ -190,7 +190,7 @@ def main() -> int:
         work = scratch / "agental_sec.db"
         shutil.copy2(LIVE_DB, work)
         print(f"DRY RUN -- working on a copy: {work}")
-        print("(the owner's store is NOT opened for writing by this run)")
+        print("(the live store is NOT opened for writing by this run)")
 
     print(f"chain before: {ig.verify_chain(db_path=work)['status']}")
 
@@ -264,7 +264,7 @@ def main() -> int:
         print(f"\nDRY RUN complete. Nothing in {LIVE_DB} was written.")
         print("Re-run with --apply when the list above is what you expect.")
     else:
-        print("\nAPPLIED to the owner's store.")
+        print("\nAPPLIED to the live store.")
     return 0
 
 

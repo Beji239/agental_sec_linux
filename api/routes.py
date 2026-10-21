@@ -389,7 +389,7 @@ def register_routes(app):
 
     # API answers carry findings, device names and sometimes the shape of the
     # network. None of that should sit in a disk cache or get sniffed into
-    # something the browser decides to execute. Cheap, so it goes on all of
+    # something the browser decides to execute. Quick, so it goes on all of
     # them rather than on the ones I happened to think about.
     @app.after_request
     def _api_response_headers(resp):
@@ -593,8 +593,8 @@ def register_routes(app):
         # now marks BLIND_TO with core/voice.for_you, because it is a field
         # for the MODEL and used to be read out loud. This route serves the
         # same dict to the dashboard, which renders vpn.blind_to verbatim as
-        # a tooltip, so without this the operator reads a shouty sentence
-        # telling the owner not to read the thing the owner is looking at. The marker is
+        # a tooltip, so without this you would read a shouty sentence
+        # telling you not to read the thing you are looking at. The marker is
         # stripped and nothing else: the caveat under it is the honest part
         # and stays on the page.
         from core import sanitize
@@ -853,7 +853,7 @@ def register_routes(app):
     #
     # TODO 68. The page that shows what is running, with a colour on it.
     #
-    # The listing is cheap. The signature check is one batched PowerShell
+    # The listing is quick. The signature check is one batched PowerShell
     # call and is cached on (path, size, mtime), so the first load pays a
     # second or two and later ones are free. HASHES ARE NOT TAKEN HERE, on
     # purpose: three hundred files is minutes of disk for something nobody
@@ -967,7 +967,7 @@ def register_routes(app):
         # What was missing is the record. If the key ever does leak to another
         # process on this box, a quietly blinded dashboard should be
         # reconstructable from the log rather than only visible by noticing
-        # something stopped being asked about. Cheap, and it costs nothing
+        # something stopped being asked about. Quick, and it adds nothing
         # when nothing is wrong.
         logger.info(
             f"DISMISS via HTTP: {entity_type}:{entity_value} "
@@ -1133,7 +1133,7 @@ def register_routes(app):
         # confident sentence on the card and the false one.
         #
         # Read at call time from the module the boot already loaded, and it is
-        # cheap: `check_capture_capability()` is a socket probe (0.02 s
+        # quick: `check_capture_capability()` is a socket probe (0.02 s
         # measured). `capture_interface()` is NOT called here because it costs
         # 4.9 s when capture has never started -- see its own note.
         capture = None
@@ -1326,7 +1326,7 @@ def register_routes(app):
 
     # WHAT IS LISTENING ON THIS MACHINE, AND WHAT HOLDS IT. 2026-09-25.
     #
-    # The owner's instruction: the agent has to be able to say which port
+    # What it is for: the agent has to be able to say which port
     # relates to which process, Python sweeps it on an interval, and it shows
     # up in the reports. The AGENT's copy travels in the report prompt and
     # through query_port_owner; this route is the same record for a PERSON,
@@ -1502,8 +1502,7 @@ def register_routes(app):
         means the device belongs on this network. Always on means you ALSO
         expect it awake, so its absence is a question worth raising. A TV that
         belongs here and is switched off most of the week is permanent and is
-        not always on. Only the router is always on here, and that was the
-        owner's answer when asked.
+        not always on. Only the router is always on here.
 
         Same reasoning as device_permanence above: this endpoint is the only
         way to set it and the model has no path to write it. A flag that turns
@@ -2781,11 +2780,11 @@ def register_routes(app):
             return jsonify({"error": f"no daily report with id {report_id}"}), 404
         return jsonify({"id": report_id, "html": body})
 
-    # DISMISSING REPORTS. 2026-09-25, the owner's instruction.
+    # DISMISSING REPORTS. 2026-09-25.
     #
-    # "we need a dismiss button plus check box for agent reports, also a
-    # dismiss all .. those however won't delete the agent entries from the
-    # database and baseline if it was initially writing in those."
+    # A dismiss button and a check box for each agent report, and a dismiss
+    # all. Dismissing hides a report; it never deletes what the agent wrote
+    # into the database or the baseline.
     #
     # THE ROUTES DO NOT DELETE, and that is enforced three layers down rather
     # than here: duty.dismiss_reports has no DELETE in it, the columns it sets
@@ -2956,7 +2955,7 @@ def register_routes(app):
         /api/questions/popup/claim is what spends one.
 
         in_chat is sent by the page and says the owner is looking at the chat tab. No
-        popup then: the question gets said to the owner where the owner already is. Ringing
+        popup then: the question gets said to them where they already are. Ringing
         a doorbell at somebody standing in the doorway is the exact behaviour
         this design exists to avoid.
         """
@@ -2983,7 +2982,7 @@ def register_routes(app):
     @app.route("/api/questions/answer", methods=["POST"])
     @require_api_key
     def questions_answer():
-        """The owner answers, or says the owner does not know either.
+        """The owner answers, or says they do not know either.
 
         Both go through here. 'I do not know' is stored as an answer, not
         discarded, because it says something the app cannot otherwise learn.
@@ -3038,13 +3037,13 @@ def register_routes(app):
     #
     # 39 shipped as a script, which was the honest first version. This is the
     # button, and the reason it needed one: the whole feature exists because
-    # the owner got asked the same question three sessions running, and a fix
-    # that lives in a command line is a fix the owner has to remember exists.
+    # the same question got asked three sessions running, and a fix
+    # that lives in a command line is a fix you have to remember exists.
     #
     # NOT REACHABLE BY THE MODEL, and that stays true here. There is no tool
     # for this in the manifest and these routes are not wired into
     # execute_tool. A model that can mark its own findings expected has a path
-    # to silencing itself, which is 8.1F one layer up. The owner declares it.
+    # to silencing itself, which is 8.1F one layer up. Only a person declares it.
 
     @app.route("/api/expected-ports")
     @require_api_key

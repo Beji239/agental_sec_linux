@@ -13,7 +13,7 @@ WHAT WAS MEASURED BEFORE THE FIX, and each one has a section below.
         page builds its cutoff with toISOString(), which ends in `T`. `T` is
         0x54 and a space is 0x20, so 'T' sorts after ' ', and every row whose
         DATE equals the cutoff's date compared LESS than the cutoff and failed
-        `>=` whatever its time. Measured on the owner's live store:
+        `>=` whatever its time. Measured on the live store:
 
             cutoff 2h, ISO-Z   -> findings 0, events 0, packets 0
             same window, space -> findings 7, events 500, packets 500
@@ -56,7 +56,7 @@ WHAT WAS MEASURED BEFORE THE FIX, and each one has a section below.
         so a typo ran a different scan than the page's status line claimed.
 
 Runs against a throwaway database built from Schema.SQL. It writes nothing to
-the owner's store and probes nothing: every scan here has both probes stubbed,
+the live store and probes nothing: every scan here has both probes stubbed,
 and every address is 127.0.0.1 or an RFC 5737 documentation address.
 """
 import datetime

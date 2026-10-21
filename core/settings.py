@@ -1071,7 +1071,7 @@ def _key_rows() -> list[dict]:
     # unavailable here by construction. So the row always said "Windows only.
     # Nothing to do on other systems." while core/secret_crypto -- Fernet,
     # and the module core/secret_store actually decrypts with -- was
-    # available and working the whole time. A card telling the operator the owner's secrets are stored in plain
+    # available and working the whole time. A card saying the secrets are stored in plain
     # text, on a machine where they are encrypted, is the same class of wrong
     # as the two red rows above it.
     st = crypto.status()
@@ -1273,7 +1273,7 @@ def _privilege_rows() -> list[dict]:
     # REPORTED. That argument holds for a capability this platform is supposed
     # to expose; it does not hold for one whose only possible value is "does
     # not exist here", painted on a card every time it loads, in words that name
-    # a WORKING sensor as the explanation. The owner's ruling supersedes it:
+    # a WORKING sensor as the explanation. A later decision supersedes it:
     # Windows-only code does not belong in the Linux build. So the capability
     # left core/capabilities.py, the row left this function, and there is no
     # `not_on_this_platform` branch left to render.
@@ -1626,7 +1626,7 @@ def _module_row(name: str, mod) -> dict:
     written = st.get("findings_written")
     dropped = st.get("findings_events_only") or 0
     # THE TWO EXPLAINED REMAINDERS, 2026-09-25. Both are decisions the operator
-    # made: an entity the owner dismissed, and a suppression rule that declined the
+    # made: an entity they dismissed, and a suppression rule that declined the
     # write. Neither is a fault and neither is unexplained, and the branch
     # below used to paint BOTH of them red with a sentence saying the gap had
     # no explanation -- MEASURED by driving the shipped adapter with the

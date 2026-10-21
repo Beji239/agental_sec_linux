@@ -3,10 +3,10 @@ tests/test_event_monitor_round2.py, THE EVENT MONITOR ROUND, 2026-09-25.
 
 WHAT THIS FILE IS FOR. The register (toolaudit.md) section 3 is DONE and its
 thirteen defects are closed. This file is the round that came after it, opened
-by the owner's own report -- "a firewall deny, a service crash, a service
+by a report -- "a firewall deny, a service crash, a service
 start, or a login happening right now would show up in query_events but would
-not raise an alert" -- and by the owner's standing instruction that the event monitor
-is the next piece of work.
+not raise an alert" -- and by the event monitor being the next piece
+of work.
 
 THE DEFECTS MEASURED IN THIS ROUND:
 
@@ -32,7 +32,7 @@ THE DEFECTS MEASURED IN THIS ROUND:
 
 RUNS WITH NO DATABASE, NO NETWORK AND NO ROOT. The live-log sections READ
 /etc logs and never write; every burst case is synthetic; nothing here touches
-the owner's evidence store.
+the live evidence store.
 
 SYNTHETIC ADDRESSES USE THE RFC 5737 DOCUMENTATION RANGES, and the operator's
 account and network are never pinned down here: this file ships, and a test
@@ -429,7 +429,7 @@ third = drive([TS % 5 + FAIL_LINE], "syslog")
 check("but a third new failure after that does", len(third), 1)
 
 print("\n  AND A RE-READ OF THE SAME LINES COUNTS ONCE (EM2-4):")
-# The exact mechanism the owner's 69 false findings came from: the same boot
+# The exact mechanism the 69 false findings came from: the same boot
 # backlog read again by a later poll. Driven here with the same three lines
 # twice -- same stamps, same text -- against only three distinct events.
 clear_bursts()

@@ -3,7 +3,7 @@ tests/test_process_lookup.py, what is PID 26920.
 
 TODO 66. Where this came from, 2026-09-08.
 
-The owner asked the model to stop a process by pid. It could not find out what
+I asked the model to stop a process by pid. It could not find out what
 that pid was, because nothing in this tool could: process identity only ever
 arrived attached to a packet or an event, so a pid with no traffic was a
 number with nothing behind it. It said so honestly, four times, and the
@@ -233,7 +233,7 @@ check("and it sends people to the lookup first",
 
 print("\n[5] a claimed kill that never happened")
 # TODO 67, the same evening. The model wrote "PID 31612 killed" for a process
-# that was still running, twice, and the owner caught it rather than the app. A
+# that was still running, twice, and I caught it rather than the app. A
 # card that never appears is obvious, you wait for a button. A kill that never
 # happened looks finished.
 al._killed_pids.clear()
@@ -379,10 +379,10 @@ def _row(pid, name, cmd_len):
             "started": "2026-09-13T10:00:00"}
 
 
-# A machine shaped like the owner's: mostly tiny, a tail of browser renderers.
+# A machine shaped like mine: mostly tiny, a tail of browser renderers.
 real_shape = ([_row(i, f"p{i}.exe", 80) for i in range(249)] +
               [_row(900 + i, "opera.exe", 2700) for i in range(37)] +
-              [_row(990, "claude.exe", 6351), _row(991, "claude.exe", 5257)])
+              [_row(990, "electron.exe", 6351), _row(991, "electron.exe", 5257)])
 
 BUDGET = pm._list_budget()
 
@@ -398,7 +398,7 @@ check("and the note says nothing was left out",
       "Nothing was left out" in (note or ""), True)
 
 # FAILURE TWO: a shortened command line that reads like a whole one. The
-# longest row on the owner's machine was a claude.exe renderer at 6,351 characters.
+# longest row on my machine was an Electron app renderer at 6,351 characters.
 original = [r for r in real_shape if r["pid"] == 990][0]["cmdline"]
 short = [r for r in fitted if r["pid"] == 990][0]["cmdline"]
 check("the long one really was shortened", len(short) < len(original), True)

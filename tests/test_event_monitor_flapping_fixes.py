@@ -1,14 +1,14 @@
 """
 tests/test_event_monitor_flapping_fixes.py — EM2-4, 2026-09-27.
 
-WHAT THIS FILE IS FOR. The owner reported the dashboard flooding the owner with
+WHAT THIS FILE IS FOR. The dashboard flooded with
 LNX-1014 "service flapping" findings after one boot — 69 rows against 60
 distinct units, for services that had each started ONCE. This file holds the
 fixed counting so it cannot quietly rot, and it is written in BOTH
 DIRECTIONS everywhere: a rule that stops counting real recurrences is as
 broken as one that counts one start three times.
 
-MEASURED, from the owner's store and this host's journal (all figures in
+MEASURED, from the live store and this host's journal (all figures in
 bugfinder.md, section "THE SERVICE-BURST COUNTING ROUND"):
   * one 21:11:19 start of xdg-desktop-portal-xapp was counted at the 21:17
     read AND again at the 21:20 read, and journald + syslog carried it twice;
@@ -213,7 +213,7 @@ got = drive([clock(i * 10) + "systemd[1]: Failed to start x.service - X"
 check("three 'Failed to start' lines alone do NOT fire", got, [])
 
 print("\n[6] MEASURED ON THIS HOST'S REAL BOOT -- the flood, re-driven")
-# The exact window that produced the owner's 69 false findings: everything
+# The exact window that produced the 69 false findings: everything
 # this host wrote from 21:10:40 to 21:13:30 on 2026-09-26, read out of the
 # journal, driven through the shipped rules. The old code wrote 69 rows here;
 # the fixed code must write none -- and if this machine is not the one the

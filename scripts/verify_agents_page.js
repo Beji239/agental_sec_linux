@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // scripts/verify_agents_page.js — the Agents page's evidence.
 //
-// WHY THIS EXISTS. The owner's report, 2026-09-18: *"the agent was supposed to
-// run only 4 to max 5 times a day, its constantly running now."* The cause was
+// WHY THIS EXISTS. 2026-09-18: the agent was supposed to run 4 to 5 times a
+// day at most, and it was running constantly. The cause was
 // in core/duty.py (the schedule was computed and never consulted — see
 // _tick_once). The FIX has a failure mode of its own on this page, and it is
 // the one every check in this project is organised against: once the loop

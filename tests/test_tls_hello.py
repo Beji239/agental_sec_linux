@@ -204,7 +204,7 @@ check("but the same bytes twice are stable",
       th.parse_client_hello(other)["ja3_md5"])
 
 
-print("\n[9] the cheap gate that runs on every packet")
+print("\n[9] the quick gate that runs on every packet")
 check("says yes to a hello", th.looks_like_client_hello(full), True)
 check("no to HTTP", th.looks_like_client_hello(b"GET / HTTP/1.1\r\n"), False)
 check("no to a ServerHello", th.looks_like_client_hello(bytes(server_hello)), False)

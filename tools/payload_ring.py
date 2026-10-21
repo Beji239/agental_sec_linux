@@ -1,8 +1,8 @@
 # tools/payload_ring.py
 # AgentalSec V2, TODO 113.6. Targeted payload capture with a ring buffer.
-# THE OWNER'S IDEA, 2026-09-15. Built 2026-09-20.
+# The idea, 2026-09-15. Built 2026-09-20.
 #
-# THE PROBLEM THE OWNER NAMED, WHICH IS THE ONLY REASON THIS IS NOT JUST A FLAG
+# THE PROBLEM, WHICH IS THE ONLY REASON THIS IS NOT JUST A FLAG
 #
 # The database-size objection to keeping payload goes away if capture can be
 # switched on for ONE destination instead of for everything. That part is
@@ -13,10 +13,10 @@
 #
 # It is worse for TLS, where the ClientHello is the FIRST packet of the
 # connection. Flipping capture on after a detection catches the next
-# connection and never the one that raised the question. The owner's words, and they
-# are the whole design constraint.
+# connection and never the one that raised the question. That is the whole
+# design constraint.
 #
-# THE FIX, ALSO THE OWNER'S: a small always-on ring in memory, capped, overwritten
+# THE FIX: a small always-on ring in memory, capped, overwritten
 # constantly, NEVER written to disk. When a detector fires, flush that flow's
 # ring into the database. You get the bytes that CAUSED the alert rather than
 # the bytes after it.
@@ -44,7 +44,7 @@
 # "flush everything for this address every N seconds" is a design decision
 # (which flows, how often, how much disk) that belongs to the owner.
 #
-# DESTINATION ONLY. NOT PROCESS. THE OWNER'S INSTRUCTION AND IT STANDS.
+# DESTINATION ONLY. NOT PROCESS. THAT STANDS.
 #
 # Arming by process would need a TCP-table lookup at capture time, and short
 # lived connections vanish before the lookup can run. Different job, different
@@ -55,7 +55,7 @@
 #
 # 1. CAPTURED PAYLOAD GETS ITS OWN SHORT RETENTION, unlike the behavioural
 #    tables which are never pruned. This is the ONE THING in this database
-#    that can contain the owner's own plaintext session data, and it is the only
+#    that can contain your own plaintext session data, and it is the only
 #    table in the app with a default lifetime measured in days.
 #
 # 2. RULE TWO APPLIES HARD. "No match in payload" and "capture was not on for
@@ -122,15 +122,15 @@ MAX_FRAMES_PER_FLOW = 64
 
 # How long a flow sits in the ring untouched before it is dropped. Not a
 # retention policy, just hygiene: a finished connection holding bytes is
-# holding the owner's plaintext for no reason.
+# holding your plaintext for no reason.
 FLOW_IDLE_SECS = 300
 
 # Bytes kept from any one frame. The head is where protocol banners,
-# request lines and handshakes live, and the tail of a data transfer is the owner's
+# request lines and handshakes live, and the tail of a data transfer is your
 # actual content.
 FRAME_HEAD_BYTES = 512
 
-# retention. THE OWNER'S FIRST CONSTRAINT.
+# retention. THE FIRST CONSTRAINT.
 #
 # The only default lifetime in days anywhere in this database. Behavioural
 # tables are never pruned because a packet row is four numbers and a
@@ -544,7 +544,7 @@ class PayloadRing:
 
     def _evict_if_needed(self, now: float, protect=None):
         """Make room for a new flow. Armed flows are never evicted."""
-        # Idle flows first. A finished connection holding the owner's plaintext for no
+        # Idle flows first. A finished connection holding your plaintext for no
         # reason is the thing to drop before anything else.
         stale = [k for k, f in self._flows.items()
                  if not f["armed"] and now - f["touched"] > FLOW_IDLE_SECS]
@@ -938,7 +938,7 @@ class PayloadRing:
         }
 
 
-# RETENTION. THE OWNER'S FIRST CONSTRAINT.
+# RETENTION. THE FIRST CONSTRAINT.
 
 # THE ACTIVE RING. How a detector on another thread reaches the bytes.
 #

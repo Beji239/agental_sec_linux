@@ -1692,7 +1692,7 @@ def test_a_refresh_does_not_move_the_policy_digest(monkeypatch):
 
 def test_each_provider_gets_its_own_header_and_not_abusech_s(monkeypatch):
     """
-    THE DEFECT THIS LOCKS DOWN, found on 2026-09-23 with the owner's own live
+    THE DEFECT THIS LOCKS DOWN, found on 2026-09-23 with a real live
     OTX key in .env.
 
     `_fetch` sent EVERY key as `Auth-Key`. That is abuse.ch's header, and while

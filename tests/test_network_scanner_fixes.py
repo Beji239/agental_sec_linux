@@ -17,7 +17,7 @@ WHAT WAS MEASURED BEFORE THE FIX, and each one has a section here:
           responders straight out of the cache. Measured with a PATH holding
           no `ping`: 254 targets, 7 responders, outcome ok.
   NET-4   a device row was created by the ICMP answer alone, so an ARP-only
-          device never got one. Measured on the owner's store: 13 addresses
+          device never got one. Measured on the live store: 13 addresses
           answering, 9 with rows.
   NET-5   the subnet came from a UDP socket connected to a public resolver, so
           a host with no default route refused to sweep its own LAN.
@@ -33,10 +33,10 @@ WHAT WAS MEASURED BEFORE THE FIX, and each one has a section here:
   NET-12  the app's own device row could never carry its own MAC.
   NET-13  a retired device that came back was watched by nothing, forever.
   NET-14  scan_network was unconditionally gated, so the dashboard's own
-          button asked the operator to confirm what the owner had just clicked.
+          button asked you to confirm what you had just clicked.
 
 Runs against a throwaway database built from Schema.SQL. It writes nothing to
-the owner's store and probes nothing outside it: every probe here is either
+the live store and probes nothing outside it: every probe here is either
 127.0.0.1 or an RFC 5737 documentation address, and the one section that needs
 a real sweep drives it on a range it constructs.
 """
@@ -387,7 +387,7 @@ print("\n[NET-7] BOTH CONFIG KEYS MEAN SOMETHING, AND ONE READER OWNS THEM")
 # THE DEFECT: `sensors.network_scanner.poll_interval` was documented in the
 # module's own comment block and read by NOTHING in the tree, while
 # `presence_sweep.enabled`/`interval_minutes` were read by main.py. A control
-# the operator believes the owner has.
+# you believe you have.
 
 check("the module owns the interval", "def sweep_interval_seconds" in _scan, True)
 check("and the switch", "def sweep_enabled" in _scan, True)
@@ -399,7 +399,7 @@ check("  and no longer reads the general block directly",
           "def _start_presence_sweeper")[1].split("def _start_dns_importer")[0],
       False)
 
-# The precedence, with the owner's OWN config among the cases.
+# The precedence, with the live config among the cases.
 check("the general key wins when both are set",
       ns.sweep_interval_seconds({"presence_sweep": {"interval_minutes": 15},
                                  "sensors": {"network_scanner":
@@ -544,7 +544,7 @@ print("\n[NET-9] A DISMISSAL OF AN ADDRESS SILENCES NET-1002 TOO (RECORDED, NOT 
 # no detection id, so a dismissal made to quiet "this device showed up new"
 # also silences "this device has gone". Closing it means changing what a
 # dismissal MEANS across two rules, which is a behaviour change over rows
-# already in the store and therefore the owner's call, not this round's. This
+# already in the store and therefore a separate decision, not this round's. This
 # section asserts the CURRENT behaviour so the finding cannot be lost, and
 # asserts that the code says so where a reader will find it.
 
@@ -716,7 +716,7 @@ _c.close()
 
 print("\n[NET-14] THE SCAN IS UNGATED ON THIS HOST'S OWN NETWORK, GATED ELSEWHERE")
 # THE DEFECT: scan_network sat in PERMISSION_GATED, so the dashboard's own
-# button asked the operator to confirm the click the owner had just made, and the
+# button asked you to confirm the click you had just made, and the
 # duty loop had to exclude it by hand.
 
 from core import tool_registry as tr                  # noqa: E402
@@ -752,7 +752,7 @@ check("the gated branch renders a card that names the range",
 print("\n[NEW] query_inventory_gaps: the question the gap made unaskable")
 # Only scan() writes device rows and only the model fires it, while the
 # sweeper runs on its own clock. Nothing could ask "is the inventory missing
-# what the sweeps have been seeing". Measured on the owner's store: 4 such
+# what the sweeps have been seeing". Measured on the live store: 4 such
 # addresses, 2 of them neighbour-cache-only.
 
 # A sweep that sees an address with no device row, through the real writer.

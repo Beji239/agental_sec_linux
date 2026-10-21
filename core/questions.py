@@ -17,9 +17,9 @@
 #
 # THE RULES, and most of them are about not being annoying
 #
-# 1. ASK ONLY AFTER THE AUTOMATED PATH FAILED. Asking the owner what RDAP
-#    could have answered is the fastest way to make the owner stop reading these,
-#    and once the owner stops, every other rule here is worthless. file_question
+# 1. ASK ONLY AFTER THE AUTOMATED PATH FAILED. Asking you what RDAP
+#    could have answered is the fastest way to make you stop reading these,
+#    and once you stop, every other rule here is worthless. file_question
 #    refuses when the enrichment row resolved the thing.
 #
 # 2. NEVER ASK THE SAME THING TWICE. Answered, refused or ignored, it is
@@ -504,7 +504,7 @@ def popup_due(in_chat: bool = False, actions_waiting: int = 0) -> dict:
     spends the budget.
 
     in_chat true means the owner is looking at the chat tab. No popup then: the
-    question can simply be said to the owner where the owner already is. The popup is a
+    question can simply be said to them where they already are. The popup is a
     doorbell, and ringing it at somebody standing in the doorway is the exact
     behaviour this whole design is trying to avoid.
     """
@@ -625,7 +625,7 @@ def claim_popup(question_ids: list = None, actions_waiting: int = 0) -> dict:
 
 def mark_shown_in_chat(question_ids: list) -> dict:
     """
-    The owner is in the chat and the question was said to the owner there.
+    The owner is in the chat and the question was said there.
 
     THIS DOES NOT SPEND THE POPUP BUDGET, because no popup happened. It does
     start the expiry clock, which is the honest call: the owner was shown it.
@@ -656,7 +656,7 @@ def mark_shown_in_chat(question_ids: list) -> dict:
 def answer(question_id: int, answer_text: str = None,
            do_not_know: bool = False, verdict: str = None) -> dict:
     """
-    The owner answers, or says the owner does not know either.
+    The owner answers, or says they do not know either.
 
     'I do not know' IS AN ANSWER AND IS STORED AS ONE. It closes the question
     so the owner is never asked again, and it says something the app could not
@@ -886,14 +886,14 @@ def _unheard_answers(rows: list) -> list:
     entity -- the sign that the owner's answer and the question never got joined up.
 
     MEASURED 2026-09-26, on this host's own queue, and it is why this exists.
-    The one question on this machine: asked 2026-09-23 03:26, shown to the owner at
-    03:45, and at 03:37 -- BETWEEN those two -- the owner answered it in chat ("ok
-    then do it example-app") and the model filed the answer as
+    The one question on this machine: asked 2026-09-23 03:26, shown at
+    03:45, and at 03:37 -- BETWEEN those two -- it was answered in chat
+    and the model filed the answer as
     `operator_stated`: "user confirmed intentional install of example-app
     26.1.5". The question row was never closed, because nothing joins the two
     up, so eleven days later the page still shows it waiting on the owner and the
     model still gets "wait" when it tries to ask anything about that package.
-    The owner had answered. The queue did not know.
+    I had answered. The queue did not know.
 
     WHY THIS ONLY MARKS AND NEVER CLOSES. Closing it would be the app
     deciding that an observation is an answer to a question, and that is a

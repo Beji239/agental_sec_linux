@@ -1384,7 +1384,7 @@ def src_ipapi_is(ip: str) -> tuple[dict | None, str, str | None]:
 
     The key goes in the request body, not the address, so it stays out of
     logs. These flags say WHAT an address is, never whether it is a problem:
-    the owner's own VPN exit is a VPN.
+    your own VPN exit is a VPN.
     """
     key = _key_for("ipapi_is")
     url = "https://api.ipapi.is"
@@ -2282,9 +2282,9 @@ def _scan_flagged_hash(file_hash: str):
         logger.debug(f"could not ask for a scan of {file_hash}: {e}")
 
 
-# A MALWARE HIT IS A HEADLINE. TODO 41.7, owner's call 2026-09-04.
+# A MALWARE HIT IS A HEADLINE. TODO 41.7, 2026-09-04.
 #
-# THE OWNER'S WORDS: "a malware is a malware, it should raise something."
+# Malware is malware, it should raise something.
 #
 # WHAT WAS WRONG. A live URLhaus hit came back with the headline
 # `partial (single_source)`, because `status` describes the OWNERSHIP LADDER

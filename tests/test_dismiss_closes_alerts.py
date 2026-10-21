@@ -2,10 +2,10 @@
 tests/test_dismiss_closes_alerts.py, does the dismiss button do the thing the
 person pressing it is asking for.
 
-THE OWNER'S REPORT, 2026-09-17: the dismiss button in the alert adds that finding to
-the review but immediately after the same finding appears in Alerts. And:
-pressing Dismiss All once is asking for pressing it again and after the second
-press it only shows the Dismiss All button again.
+THE REPORT, 2026-09-17: the dismiss button on an alert added that finding to
+the review, but right after, the same finding appeared in Alerts again. And
+Dismiss All had to be pressed twice, and after the second press it only
+showed the Dismiss All button again.
 
 WHAT WAS ACTUALLY WRONG, and it was two separate faults that looked like one:
 
@@ -20,7 +20,7 @@ WHAT WAS ACTUALLY WRONG, and it was two separate faults that looked like one:
      strings, the route refused them all with a 400, and the page reported
      nothing because it never looked at the response.
 
-THE FAILURE CASES COME FIRST. Section [1] is the exact thing the owner saw.
+THE FAILURE CASES COME FIRST. Section [1] is the exact thing I saw.
 
 What is tested, in order:
 

@@ -70,9 +70,9 @@ logger = logging.getLogger(__name__)
 # Agents tab renders: the hypothesis, evidence, verdict and "what I saw" the
 # model left behind, plus the coverage that existed when it wrote them.
 #
-# v38 to v41, 2026-09-21: THE WINDOWS-SIDE SCHEMA, PORTED. The owner's
-# instruction for this pass was to take everything in the Windows tree's
-# Schema.SQL that is possible to port, and this is that. Four things arrive:
+# v38 to v41, 2026-09-21: THE WINDOWS-SIDE SCHEMA, PORTED. This pass
+# took everything in the Windows tree's Schema.SQL that is possible to
+# port. Four things arrive:
 #
 #   v38  runbook.cvss_* and ransomware_use, so a row can carry a rating
 #        fetched from a source that publishes one, kept apart from the feed's
@@ -156,7 +156,7 @@ logger = logging.getLogger(__name__)
 # v69, 2026-10-15: learned_rule.reason_kind, owner_words, trial_until and
 # kept_at, so a rule says which fact Python checks and when a trial lapses.
 # v72, 2026-10-18: learned_rule.question_id and question_state, provisional
-# rules made while the owner's answer is due.
+# rules made while an answer is due.
 # v72 also: device_hold, new devices kept off the internet until checked in.
 # v73, 2026-10-18: sensor_service, the capture service's reports to the core.
 SCHEMA_VERSION = 73
@@ -510,8 +510,8 @@ def _migrate_runbook_qualifiers(conn) -> int:
 
 # THE WINDOWS-SIDE FEATURES, PORTED 2026-09-21, TODO 113.2 / 113.4 / 113.6
 #
-# These four came across with the schema port the owner asked for: take
-# everything in Schema.SQL that is possible to port. They are v36, v38, v40
+# These four came across with the schema port: everything in Schema.SQL
+# that is possible to port. They are v36, v38, v40
 # and v41 in the Windows tree; this tree runs them as one step to v41 because
 # it never had any of them and there is no install of this tree in the field
 # that would need them separated.
@@ -888,7 +888,7 @@ def _migrate_port_protocol(conn) -> int:
     through socket.create_connection. Nothing in the codebase has ever sent a
     UDP probe. Both facts were true and neither was written on the row, so the
     Ports tab, query_port_scan and the model all saw a bare number and had to
-    supply the protocol themselves. The owner read the tool as covering UDP,
+    supply the protocol themselves. I read the tool as covering UDP,
     which is a completely reasonable reading of "port 500 open" and is exactly
     the ambiguity this column removes.
 
@@ -1725,8 +1725,8 @@ def _migrate_detection_ids(conn) -> int:
     told by a column that was added last week.
 
     scripts/detection_report.py --backfill-preview shows what an exact
-    title-prefix match WOULD claim, read only, writing nothing. If the owner wants
-    those rows stamped it is the owner's call with the numbers in front of the owner.
+    title-prefix match WOULD claim, read only, writing nothing. If you want
+    those rows stamped, decide with the numbers in front of you.
 
     THE ALTER CARRIES NO CHECK and none is wanted. detection_id is validated
     against core/detections at the only place that writes it, which is
@@ -2217,7 +2217,7 @@ def _migrate_duty_loop(conn) -> int:
     reader would look at. A counter and a log disagree eventually, and the
     one that disagrees quietly is the one that lets a runaway spend happen.
 
-    WHY duty_report IS ITS OWN TABLE. The owner asked for a page where the
+    WHY duty_report IS ITS OWN TABLE. There had to be a page where the
     agent's work is READABLE, and the report is the artifact: a hypothesis, the
     evidence it gathered, a verdict, and -- when the verdict is "no action" --
     what it actually saw, in its own words. It is not a chat message, it is not
@@ -2321,14 +2321,14 @@ def _migrate_duty_loop(conn) -> int:
                 -- What this report is ABOUT. An incident report names one; a
                 -- regular report names the two findings it chose, and the
                 -- second one is here rather than in a join table because the
-                -- number is fixed at two by the owner's instruction and a
+                -- number is fixed at two and a
                 -- report about one thing must not look like a report about
                 -- two.
                 incident_id     INTEGER,
                 finding_id      INTEGER,
                 second_finding_id INTEGER,
 
-                -- THE THREE PARTS THE OWNER ASKED TO BE ABLE TO READ.
+                -- THE THREE PARTS A REPORT HAS TO SHOW.
                 hypothesis      TEXT,
                 evidence        TEXT,
                 verdict         TEXT,
@@ -2389,8 +2389,8 @@ def _migrate_agent_record_seal(conn) -> int:
     THAT MATTERS MORE NOW, NOT LESS. This column lands in the same commit as
     core/integrity.seal_row, which digests duty_run rows. A seal over a run
     that says which tools ran is a record of the agent's behaviour; a seal
-    over a run that only says how much it spent is a receipt. The owner's
-    complaint was specifically "the tools it called" — this is the half of
+    over a run that only says how much it spent is a receipt. What was
+    missing was specifically "the tools it called" — this is the half of
     that which was collectable without a new table.
 
     NULL AND '[]' ARE DIFFERENT AND BOTH ARE KEPT. NULL means no unattended
@@ -2426,12 +2426,11 @@ def _migrate_report_dismissal(conn) -> int:
     """
     v51, 2026-09-25. DISMISSING A REPORT WITHOUT DELETING IT.
 
-    The owner's instruction: "we need a dismiss button plus check box for agent
-    reports, also a dismiss all ... those however won't delete the agent
-    entries from the database and baseline if it was initially writing in
-    those."
+    A dismiss button and a check box for each agent report, and a dismiss
+    all, and dismissing never deletes what the agent wrote into the database
+    or the baseline.
 
-    That last clause is the whole design and it is the correct instinct. An
+    That last part is the whole design and it is the correct instinct. An
     agent report is not a chat message: it is the agent's own hypothesis,
     evidence and verdict, and for a report written while something was blind it
     is also the coverage record of that moment. Deleting one would remove the
@@ -2500,7 +2499,7 @@ def _migrate_port_owner(conn) -> int:
     """
     v51, 2026-09-25. WHICH PROCESS OWNS WHICH PORT ON THIS HOST.
 
-    The owner's instruction: the agent has to be able to say which port relates
+    What it is for: the agent has to be able to say which port relates
     to which process, Python has to sweep it on a set interval, and the agent
     has to be able to drive a pass itself when it wakes to write a report.
 
@@ -2689,9 +2688,9 @@ def _migrate_agent_runs(conn) -> int:
     """
     v37, 2026-09-17, TODO 116. The Windows agent driver's own record.
 
-    PORTED TO LINUX 2026-09-21, AND THESE THREE ARE DORMANT HERE. The owner's
-    instruction for this pass was to take everything in the Windows Schema.SQL
-    that is possible to port, so they are created. Nothing in this tree writes
+    PORTED TO LINUX 2026-09-21, AND THESE THREE ARE DORMANT HERE. This pass
+    took everything in the Windows Schema.SQL that is possible to port, so
+    they are created. Nothing in this tree writes
     to them: this tree's agentic record is T2/T3/T4, which is `incident`,
     `watcher_run`, `action_request`, `duty_run` and `duty_report`, and THAT is
     the design wired into main.py, the routes, the UI and the verification
@@ -2705,7 +2704,7 @@ def _migrate_agent_runs(conn) -> int:
     left to be inferred from a row count.
 
     They are ported anyway, and the reason is that the fork is decision C2 and
-    it is not a schema port's to close. If the owner ever chooses the Windows
+    it is not a schema port's to close. If I ever choose the Windows
     design, these tables exist and that port is a code job; if these did not
     exist, it would be a schema change under a live database first. Three
     empty tables cost a few kilobytes and close nothing.
@@ -3141,9 +3140,9 @@ def _migrate_case_memory(conn) -> int:
     """
     v43, 2026-09-22. CASE MEMORY: the patient file.
 
-    The owner's words are the specification: "the agent writes an assessment
-    for every incident and never reads the old ones. Every alert is
-    investigated from a blank page. A doctor with no patient file." Verified in
+    The specification: the agent wrote an assessment for every incident and
+    never read the old ones. Every alert was investigated from a blank page,
+    like a doctor with no patient file. Verified in
     the source before this was built -- no embedding, no vector search and no
     precedent retrieval anywhere in the tree.
 
@@ -3280,7 +3279,7 @@ def _migrate_always_on(conn) -> int:
     device should always be answering" and raised a medium finding every time
     a permanent device went quiet.
 
-    Those are not the same statement, and the owner said so plainly: a TV, a
+    Those are not the same statement: a TV, a
     console, a VM sit dark for days because nobody is using them. Under the old
     reading, vouching for a device silently also signed it up to stay awake.
 
@@ -3362,10 +3361,10 @@ def _migrate_scan_run(conn) -> int:
 
     THE BUG THIS ANSWERS, 2026-09-02. The model port scanned a device, then
     read the packet table, saw source port 27017 and 32400 going to ephemeral
-    ports on this host, and told the owner the device was "actively probing
+    ports on this host, and told me the device was "actively probing
     THIS host's ports". Those are the scanned device answering with RST
     because the port is closed. It reported the reply leg of its own scan as
-    unsolicited hostile activity, and did it while arguing with the owner
+    unsolicited hostile activity, and did it while arguing with me
     about whether the device was safe.
 
     WHY A NEW TABLE AND NOT A COLUMN ON packets. Same argument as
@@ -3417,12 +3416,12 @@ def _migrate_scan_run(conn) -> int:
 
 def _migrate_expected_ports(conn) -> int:
     """
-    v24. One column so the owner can say "that port is fine" and be believed.
+    v24. One column so you can say "that port is fine" and be believed.
 
-    WHY, 2026-09-02, and it came out of the owner being annoyed, which is the
-    right reason. The owner identified a device, told the tool it was the owner's, and the
+    WHY, 2026-09-02, and it came out of me being annoyed, which is the
+    right reason. I identified a device, told the tool it was mine, and the
     open-port finding stayed at high anyway. Naming a device says nothing
-    about which of its ports are normal, so the tool asked the owner about the same
+    about which of its ports are normal, so the tool asked me about the same
     port three times running. A tool that keeps asking a question you already
     answered is one you stop reading. That is the unread review queue in 4A
     arriving by a different road.
@@ -3533,12 +3532,12 @@ def _migrate_observation_basis(conn) -> int:
     """
     v26. What KIND of thing is this baseline row.
 
-    THE ARGUMENT, and the owner won half of it, which is why the column exists
+    THE ARGUMENT, and it was settled halfway, which is why the column exists
     in this shape rather than as a ban.
 
-    My first position was that enrichment facts should not be written into the
-    baseline at all, because they are second-hand. The owner pushed back and the owner was
-    right: a model that re-looks-up the same address every session is exactly
+    The first position was that enrichment facts should not be written into the
+    baseline at all, because they are second-hand. That was
+    wrong: a model that re-looks-up the same address every session is exactly
     the waste the enrichment engine was built to stop, and not logging is
     worse than logging. The record has to be here or it does not get used.
 
@@ -3594,7 +3593,7 @@ def _migrate_packet_process(conn) -> int:
     path is ever wanted it is process_monitor's job, keyed by the pid we do
     store.
 
-    ADD COLUMN, same as scope and basis. Cheap at any table size, and the CHECK
+    ADD COLUMN, same as scope and basis. Quick at any table size, and the CHECK
     problem does not arise because neither column is constrained.
 
     OLD ROWS STAY NULL and there is no backfill, because none is possible. The
@@ -4098,9 +4097,9 @@ def _migrate_events_time_index(conn) -> int:
     a question that names no column but the time.
 
     WHY THIS HAD TO BE A MIGRATION. Schema.SQL is what a FRESH database is
-    built from. The owner's database has 725,000 event rows in it and was
+    built from. The live database has 725,000 event rows in it and was
     created long before this index existed, so a line added to Schema.SQL
-    alone would leave the owner's store without it and the page slow for ever, while a
+    alone would leave that store without it and the page slow for ever, while a
     new install was fast. That is exactly the "migrated and fresh differ"
     defect Schema.SQL's own comment records for idx_packets_sensor, in the
     other direction. Both places, deliberately.

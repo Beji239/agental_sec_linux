@@ -7,9 +7,9 @@
 #
 # WHY THIS FILE EXISTS
 #
-# The owner's words, and they are the whole specification: "the agent writes an
-# assessment for every incident and never reads the old ones. Every alert is
-# investigated from a blank page. A doctor with no patient file."
+# The problem in one line: the agent wrote an assessment for every incident
+# and never read the old ones. Every alert was investigated from a blank
+# page, like a doctor with no patient file.
 #
 # Verified in the source before this was built: there is no embedding, no vector
 # search and no precedent retrieval anywhere in the tree. Incident assessments
@@ -316,8 +316,8 @@ def ensure_index_tables() -> dict:
     THE MIGRATION IS THE PATH; THIS IS THE PARACHUTE. core/migrations v43
     creates exactly these three objects, and Schema.SQL carries them for a
     fresh install. This function exists so that a database sitting at v42 with
-    the module loaded -- which is the state of the operator's own copy between
-    the deploy and the owner's next boot -- answers honestly ("the index is not built
+    the module loaded -- which is the state of a live copy between
+    the deploy and the next boot -- answers honestly ("the index is not built
     yet") instead of raising a raw "no such table" out of a tick.
 
     It is idempotent and it is called from the writer, not from a reader: a read

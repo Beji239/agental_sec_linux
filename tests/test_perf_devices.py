@@ -2,8 +2,8 @@
 tests/test_perf_devices.py, the Performance page lists DEVICES, and says why a
 block is hollow.
 
-WHY THIS EXISTS, 2026-09-15. The owner opened the tab and found every endpoint
-on the owner's network listed beside every destination the owner's sessions had talked to, with
+WHY THIS EXISTS, 2026-09-15. I opened the tab and found every endpoint
+on my network listed beside every destination my sessions had talked to, with
 not one coloured block anywhere, and nothing on the page explaining either.
 
 Three separate faults, and they compounded into "this is broken":
@@ -138,7 +138,7 @@ me.set_preference("perf_min_history_hours", "12")
 # FAILURE CASES FIRST
 
 print("\n[1] FAILURE FIRST: a destination is not a device")
-# The owner's PC talking to a web server makes one device row and one destination. The
+# A PC talking to a web server makes one device row and one destination. The
 # destination gets no baseline, because its history is a record of what this
 # network sent it.
 hour = NOW - timedelta(hours=2)
@@ -152,8 +152,8 @@ perf.build_hour(hour)
 
 view = perf.device_view(hours=24, now=NOW)
 listed = {d["entity_value"] for d in view["devices"]}
-check("the owner's PC is listed", HOST in listed, True)
-check("the owner's TV is listed", TV in listed, True)
+check("the home PC is listed", HOST in listed, True)
+check("the TV is listed", TV in listed, True)
 check("the web destination is NOT listed", REMOTE in listed, False)
 check("the resolver is NOT listed", DNS in listed, False)
 check("the mDNS group is NOT listed", MCAST in listed, False)
@@ -265,7 +265,7 @@ print("\n[8] running the backfill twice rewrites nothing")
 # The hours that ARE revisited are the ones with no packets in them at all.
 # They have no rows, so they cannot be skipped by looking for rows, and they
 # must not get an invented zero bucket just to mark them done. Revisiting them
-# is two indexed queries that return nothing. That is the cheap half of the
+# is two indexed queries that return nothing. That is the light half of the
 # trade and the honest one.
 again = perf.backfill(hours=24, now=NOW)
 check("every bucketed hour was skipped", again["skipped"], 18)

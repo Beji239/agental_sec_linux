@@ -2,7 +2,7 @@
 tests/test_device_ban.py, TODO 53.2. Banning a device, and the two rules
 around it that matter more than the firewall call.
 
-THE OWNER'S RULE, 2026-09-06, in the owner's words: a new device gets investigated, the
+THE RULE, 2026-09-06: a new device gets investigated, the
 user is ASKED whether they know it, yes goes in the known list and monitoring
 carries on, no means ban. And the ban asks first, every time, the way
 Secure.AI did it. There is no automatic path and there is not going to be one.

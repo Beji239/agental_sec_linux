@@ -93,7 +93,7 @@ fi
 # camera's whole job is to load BPF programs and read kernel tracepoints, which
 # needs CAP_BPF and CAP_PERFMON (or CAP_SYS_ADMIN on an older kernel) -- so it
 # must run as root and cannot be dropped into a sandbox that takes those away.
-# What IS taken away is everything else that is cheap to take: no new
+# What IS taken away is everything else that is easy to take: no new
 # privileges, a read-only system except for its own data directory, no access to
 # the operator's home, and no device nodes beyond the ones the kernel itself
 # provides. The honest statement is that this is a root process with a narrow

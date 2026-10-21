@@ -92,7 +92,7 @@ check("newest matches", summ["newest_at"], max(s["last_at"] for s in inv))
 s = rt.status(str(db))
 check("status reports it", (s["capture_runs"], s["oldest_run_at"]),
       (4, "2026-08-01 00:00:00"))
-check("the cheap inventory skips the byte sum",
+check("the quick inventory skips the byte sum",
       rt.session_inventory(sqlite3.connect(db), with_bytes=False)[0]["bytes_estimate"],
       None)
 

@@ -3,9 +3,8 @@
 Which Windows-derived code is still in the Linux tree, and is each one
 NECESSARY for functionality on this host?
 
-The owner's rule, 2026-09-21: "no windows related code comes to the linux
-version of the App unless its necessary for the functionality of the code, so
-is the folder, unless its necessary not even in the folder."
+The rule, 2026-09-21: no Windows code comes to the Linux version unless it is
+necessary for it to work, and the same goes for the folder.
 
 The test is therefore never "does it mention Windows". It is:
 
@@ -32,7 +31,7 @@ WIN = ROOT.parent / "agental_sec"
 
 # WHERE THE WINDOWS-ONLY MATERIAL LIVES NOW.
 #
-# The owner's rule, 2026-09-21: no Windows-only code in the Linux tree, and
+# The rule, 2026-09-21: no Windows-only code in the Linux tree, and
 # not the folder either, unless it is necessary. So the reference material was
 # moved OUT of the tree entirely and now sits beside the two source folders,
 # where neither platform ships it. This script looks for it there, and its job
@@ -193,7 +192,7 @@ def main():
               f"{runs[:26]:<28} {imp}{flag}")
 
     print("\n" + "=" * 78)
-    print("UNREACHABLE (the case the owner's rule is about)")
+    print("UNREACHABLE (the case the rule is about)")
     print("=" * 78)
     dead = [r for r in rows if not r["reachable"]]
     if not dead:

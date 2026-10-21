@@ -93,8 +93,8 @@ SWEEP_MIN_INTERVAL = 30
 # TIER C, ADDED 2026-09-22. Three hours, and the number is measured rather
 # than picked: a full dpkg -V run on this host took 209s over 2755 packages,
 # and the thing it detects -- a file a package shipped being replaced -- is
-# not a race with a three-hour window. The owner's instruction was "expensive,
-# hourly at most"; this is slower than hourly on purpose, and the config knob
+# not a race with a three-hour window. It is a slow run, so hourly at most;
+# this is slower than hourly on purpose, and the config knob
 # can bring it in for a host where package integrity is the thing being
 # watched. The floor is 300s because below that the run costs more than the
 # machine changes.
@@ -161,7 +161,7 @@ def _valid_entity(entity_type: str, value: str) -> bool:
 
     NARROW ON PURPOSE, and it exists because of a measured bug rather than a
     principle. The audit of the event monitor (EM-3, and the "rhost" rows
-    under it) found 164 rows in the owner's store whose username column held
+    under it) found 164 rows in the store whose username column held
     the literal string "rhost", because a regex designed for `user=alice`
     matched `user= rhost=` on a pam_unix line and took the next word. The
     entity a finding is filed against decides what can be dismissed and what
@@ -353,8 +353,8 @@ class _BaseAdapter:
 #   lolbin_abuse                 -> LNX-1103 (registered in T2)
 #   (brute force is the event monitor's, below)
 #
-# THE THREE THAT HAD NO ENTRY ARE NOW REGISTERED, on the owner's answer to Q1
-# on 2026-09-17. Before that they were logged with their own detail and
+# THE THREE THAT HAD NO ENTRY ARE NOW REGISTERED, since
+# 2026-09-17. Before that they were logged with their own detail and
 # counted in status(), and the boot log said how many were waiting for ids,
 # because writing them under PRC-1001 would have made the Detections page
 # report that one rule catches four different things.
@@ -427,7 +427,7 @@ class LinuxProcessMonitor(_BaseAdapter):
                     )
                 continue
 
-            # THE THREE THAT NOW HAVE IDS. T2, 2026-09-17, owner's answer Q1.
+            # THE THREE THAT NOW HAVE IDS. T2, 2026-09-17.
             #
             # These were counted and logged for one day, from the moment this
             # adapter was written until T2, because writing them under PRC-1001
@@ -555,7 +555,7 @@ class LinuxEventMonitor(_BaseAdapter):
     # exactly this table and for exactly this reason ("an in-memory-only
     # marker meant every restart either re-ingested old events or skipped new
     # ones"), and the Linux port kept nothing at all: EM-5 measured the
-    # consequence in the owner's store, where auth.log produced exactly 200
+    # consequence in a real store, where auth.log produced exactly 200
     # distinct lines per minute for twelve minutes and no cursor existed to
     # catch up from.
     PREF_MARKERS = "event_monitor_cursors"
@@ -589,8 +589,8 @@ class LinuxEventMonitor(_BaseAdapter):
     # happen: change one and the other silently disagrees.
     #
     # The severities those categories would carry are visible in
-    # tools/event_monitor_linux.py's WATCHED_PATTERNS, which is the thing the
-    # owner needs to read when deciding whether each deserves a detection id.
+    # tools/event_monitor_linux.py's WATCHED_PATTERNS, which is the thing to
+    # read when deciding whether each deserves a detection id.
 
     def __init__(self, session_id, config=None):
         super().__init__(session_id, config)
@@ -811,7 +811,7 @@ class LinuxEventMonitor(_BaseAdapter):
         # thousand row table, which is the kind of fix that makes the sensor
         # slower than the bug it replaced.
         #
-        # THE COST OF THIS LOOP, MEASURED 2026-09-23 on the owner's 706 MB
+        # THE COST OF THIS LOOP, MEASURED 2026-09-23 on a 706 MB
         # store, because it is a real number and somebody will meet it: about
         # 15 ms PER ROW, which is one connection, one WAL commit and one fsync
         # per event, and save_event opens its own connection. A first run
@@ -923,7 +923,7 @@ class LinuxEventMonitor(_BaseAdapter):
                 continue
 
             # THE THREE PER-EVENT CATEGORIES THAT ARE FINDINGS. T2,
-            # 2026-09-17, owner's answer Q2.
+            # 2026-09-17.
             #
             # account_created, account_deleted and ssh_key_added are §53.3
             # "violated declaration" cases: threshold 1, not statistical.
@@ -945,10 +945,10 @@ class LinuxEventMonitor(_BaseAdapter):
             # AND WHAT CHANGED 2026-09-25 IS THE OTHER HALF OF THAT
             # DECISION: the four get SHAPE rules.
             #
-            # The owner's report named four categories that "would not raise
+            # A report named four categories that "would not raise
             # an alert": firewall_block, service_failed, service_started and
             # successful_login. The decision above is not reversed -- one
-            # finding per login is still what trains an operator to ignore the owner's
+            # finding per login is still what trains you to ignore your
             # own tool -- but a BURST is a different fact from an event, and
             # the module now raises one finding per burst. Those four types
             # are wired here, each with its own registered id, its own entity
@@ -2213,9 +2213,9 @@ class LinuxPacketSniffer(_BaseAdapter):
             # either, which is the same shape as a disabled sensor reading as
             # a quiet network.
             #
-            # This is the owner's rule applied rather than quoted: the FILE is
+            # This is the rule applied rather than quoted: the FILE is
             # Windows-only and is out of the tree, and the PARTS of it that
-            # this host needs are ported. See the ledger, THE OWNER'S RULE.
+            # this host needs are ported. See the ledger.
             #
             # WHAT IT READS, and why the source address alone is not the test.
             # A router advertisement is defined by what it CLAIMS, not by
@@ -2578,7 +2578,7 @@ class LinuxPacketSniffer(_BaseAdapter):
                     self._tls_pending[key] = held
                 return
             # The continuation of a hello this flow already started. The
-            # cheap gate is NOT applied to it: the first segment is a
+            # quick gate is NOT applied to it: the first segment is a
             # handshake record and the rest is raw continuation bytes, so
             # looks_like_client_hello is false on those by construction.
             buf = held["buf"] + payload
@@ -2971,7 +2971,7 @@ class LinuxPacketSniffer(_BaseAdapter):
         return len(expired) + len(quic_expired)
 
     def tls_run_counts(self) -> dict:
-        """The five TLS counters, cheap enough for a page to ask (TP-7)."""
+        """The five TLS counters, quick enough for a page to ask (TP-7)."""
         return {
             "read":        getattr(self, "_tls_saved_this_run", 0),
             "unreadable":  getattr(self, "_tls_unreadable_this_run", 0),
@@ -3421,7 +3421,7 @@ class LinuxLocalIntegrity(_BaseAdapter):
                     f"local_integrity: the dpkg baseline is SEEDED from "
                     f"{result.get('packages_verified')} package(s) in "
                     f"{result.get('seconds')}s. Nothing is raised for the "
-                    f"package files themselves: this is the owner's rule, so "
+                    f"package files themselves: that is by design, so "
                     f"that firefox's icons and the kernel images are known-"
                     f"normal on day one rather than a page of findings. What "
                     f"IS raised is the {result.get('refused_count')} package(s) "
@@ -4236,7 +4236,7 @@ class LinuxRemediation:
 
         # KILL THEATRE. L2, 2026-09-22.
         #
-        # WHAT THIS PREVENTS, in the owner's own word for it. On a systemd host
+        # WHAT THIS PREVENTS. On a systemd host
         # a service unit with Restart=always owns its process: SIGTERM it, the
         # unit goes active (auto-restart), systemd starts it again within
         # seconds, and every reader downstream of this call is told the thing
@@ -5001,7 +5001,7 @@ class LinuxRemediation:
         if unreadable:
             # A vault folder whose manifest cannot be read is REPORTED, not
             # skipped: REM-9. A quarantined file the operator cannot see is one
-            # the owner cannot get back, and the count alone would hide that.
+            # you cannot get back, and the count alone would hide that.
             out["note"] = (
                 f"{len(unreadable)} folder(s) in the vault could not be read "
                 f"and are listed with their reason rather than dropped. "
@@ -5877,11 +5877,11 @@ class LinuxAutorunMonitor(_BaseAdapter):
     #
     # `sensors.autorun_monitor.enabled` was documented in config.json and read
     # by NOTHING, for the reason its entry in bugfinder.md gives: this sensor
-    # has no poll loop, so there was nothing for the key to gate. The owner's
-    # answer, 2026-09-24, was the second of the two designs offered: keep it
+    # has no poll loop, so there was nothing for the key to gate. The choice,
+    # 2026-09-24, was the second of the two designs: keep it
     # pull-only and make the switch REFUSE THE CALL, rather than give it a
-    # background clock that would start writing rows into the owner's evidence store on
-    # a schedule the owner did not ask for.
+    # background clock that would start writing rows into the evidence store on
+    # a schedule nobody asked for.
     #
     # WHAT IT DOES, EXACTLY: with `enabled: false`, query_autoruns does not
     # read systemd, cron, init.d or a single shell file. It returns the refusal

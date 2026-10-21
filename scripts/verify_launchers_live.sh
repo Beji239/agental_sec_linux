@@ -25,7 +25,7 @@
 # `sudo` that runs its command under `unshare -r` (a real uid 0) with SUDO_USER
 # set, which is what sudo hands back after a correct password. The real
 # `[sudo]` prompt interacting with a real terminal is the one thing this cannot
-# supply, and it was verified to appear by the owner's own click.
+# supply, and it was verified to appear by a real click.
 #
 # THE APP BOOTS OUT OF A SCRATCH TREE (hardlinks of the project + a copy of the
 # store), so a run that goes root cannot write into the operator's log, store or
@@ -75,11 +75,11 @@ cleanup() {
     return $rc
 }
 
-# LA-4: the owner's file must have exactly ONE name before anything writes to it. A
+# LA-4: the live file must have exactly ONE name before anything writes to it. A
 # second name anywhere -- a hardlinked scratch tree, an old harness -- turns
-# the cp below into a write through that name into the owner's file (measured
+# the cp below into a write through that name into the live file (measured
 # 2026-09-25: nlink=4 on config.json and .env). This script never needs to
-# swap the owner's config, but it refuses to boot a tree while anything else holds a
+# swap the live config, but it refuses to boot a tree while anything else holds a
 # name for it.
 LIVE_LINKS=$(stat -c %h "$ROOT/config.json" 2>/dev/null || echo 1)
 if [[ "$LIVE_LINKS" != "1" ]]; then
@@ -153,7 +153,7 @@ for f in agental_sec.db config.json .env; do
     [[ -e "$ROOT/$f" ]] || continue
     if [[ "$(stat -c %i "$ROOT/$f")" == "$(stat -c %i "$TREE/$f")" ]]; then
         echo "REFUSING TO RUN: $TREE/$f IS THE SAME INODE as the operator's"
-        echo "  $ROOT/$f. A run in this tree would write into the owner's file."
+        echo "  $ROOT/$f. A run in this tree would write into the live file."
         exit 2
     fi
 done
@@ -316,8 +316,8 @@ chk "no root-owned files left in the project by a run that went root" \
 
 echo
 echo "D. NOTE, NOT A CHECK: two SIGTERMs during one shutdown"
-# MEASURED 2026-09-25, recorded as bugfinder.md PROC-14, PENDING THE OWNER'S
-# WORD on what a second signal SHOULD do. This script sends ONE signal (above)
+# MEASURED 2026-09-25, recorded as bugfinder.md PROC-14, PENDING A
+# DECISION on what a second signal SHOULD do. This script sends ONE signal (above)
 # because a harness that sends them in a loop changes the subject under test.
 # What the pair showed, run by run: one SIGTERM -> "AgentalSec stopped cleanly"
 # and exit 0, every time; two, three seconds apart -> the app logs "Shutdown

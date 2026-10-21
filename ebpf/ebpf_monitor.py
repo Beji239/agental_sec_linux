@@ -1016,7 +1016,7 @@ def run(args) -> int:
     # when `finally` is reached, and a SIGKILL skips it entirely. A stale
     # pidfile whose pid has been REUSED by another process called "python3
     # .../ebpf_monitor.py" makes the next camera refuse to start -- the
-    # operator's remedy then is to find and delete a file the owner has never heard
+    # remedy then is to find and delete a file you have never heard
     # of. E-8. The guard's own reading of the file is unchanged and still
     # checks that the holder is a camera; this only makes the file's lifetime
     # the process's lifetime.

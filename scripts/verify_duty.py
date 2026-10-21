@@ -10,7 +10,7 @@ tests that assert the happy path cannot catch either. So this asserts THE
 FAILURE MODES, in the order they matter:
 
   1. THE BUDGETS ARE HARD STOPS. At the ceiling, a tick examines NOTHING and
-     records `budget`. It does not examine a cheap one and it does not start
+     records `budget`. It does not examine a small one and it does not start
      and give up. Asserted by putting the spend over the ceiling in the
      database and calling a real tick — the model must not be called at all.
 
@@ -40,7 +40,7 @@ FAILURE MODES, in the order they matter:
   8. IT DOES NOT WRITE FINDINGS AND IT DOES NOT TOUCH THE CHAT HISTORY.
 
   9. THE PICKER TAKES TWO FINDINGS FROM DIFFERENT TOOLS. Two rows from one
-     sensor is one fact repeated; the owner's instruction was two different
+     sensor is one fact repeated; it has to be two different
      tools.
 
   10. THE MODEL'S OWN SPEND IS WHAT FILLS THE CEILING. A run row's
@@ -493,7 +493,7 @@ def main():
           spend["estimated_rows"] == 1 and
           duty.budget_state()["spend_is_estimated"] is True)
 
-    section("12. the schedule is the owner's local hours")
+    section("12. the schedule is in local hours")
     sched = duty._next_regular_moment()
     check("three wake-ups are configured, the last for the daily report",
           len(sched["hours"]) == 3, f"hours={sched['hours']}")
@@ -502,10 +502,10 @@ def main():
           f"reported local hour {sched['local_hour']}")
     check("a next moment is always named", sched.get("next_hour") is not None)
 
-    # THE GATE ITSELF, WHICH IS THE DEFECT THE OWNER FOUND.
+    # THE GATE ITSELF, WHICH IS THE DEFECT I FOUND.
     #
-    # "the agent was supposed to run only 4 to max 5 times a day, its
-    # constantly running now." Measured on the owner's live database before this
+    # The agent was supposed to run 4 to 5 times a day at most, and it was
+    # running constantly. Measured on the live database before this
     # section existed: 62 duty_run rows in 2h10m, eight runs that called the
     # model for 2,216,938 tokens, and a `budget` row EVERY SIXTY SECONDS once
     # the daily ceiling was crossed. `_next_regular_moment()` had the right
@@ -588,7 +588,7 @@ def main():
 
     # AND A REFUSED WAKE STILL COUNTS AS THE HOUR'S ATTEMPT. Otherwise the
     # budget refusal above would re-fire every sixty seconds, which is what
-    # the owner's database showed: one `budget` row per minute for a whole hour.
+    # the live database showed: one `budget` row per minute for a whole hour.
     with me._get_conn() as conn:
         conn.execute("DELETE FROM duty_run")
         conn.execute("""INSERT INTO duty_run (session_id, ran_at, ended_at,
@@ -616,7 +616,7 @@ def main():
           f"due_now={sched['due_now']} at :59 with a run at :00")
 
     # AND THE EMERGENCY STILL OUTRANKS THE CLOCK. The schedule gate must not
-    # be able to suppress the one trigger the owner said cannot wait.
+    # be able to suppress the one trigger that cannot wait.
     #
     # MEASURED ON THE ENABLED PATH ONLY, and that distinction cost this
     # assertion its first version. The switched-off branch legally consults
@@ -676,7 +676,7 @@ def main():
           f"last_skip={st2.get('last_skip')}")
     duty._duty_state.update({"polls": 0, "last_poll": None})
 
-    section("12c. the poll is cheap and quiet")
+    section("12c. the poll is quick and quiet")
     # THE POLL RUNS 1,440 TIMES A DAY NOW, so two things must be true that
     # did not matter when a tick was a model call: it must be FAST (it runs
     # inside the loop thread), and it must not CHATTER (an undamped warning
@@ -787,7 +787,7 @@ def main():
           duty.start("verify-duty") is False)
     # THE LOOP NOW POLLS WITHOUT WAKING, AND THE CHECK HAD TO CHANGE WITH IT.
     # The old assertion was "its ticks were recorded to disk" — that every
-    # tick leaves a row — which is exactly the defect the owner found: a row a
+    # tick leaves a row — which is exactly the defect I found: a row a
     # minute forever. What must be true instead is that the loop LOOKED, and
     # that it did not write a row per look while nothing was due.
     check("the loop is POLLING even when no wake-up is due",

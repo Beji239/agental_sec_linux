@@ -1,9 +1,8 @@
 """
 tests/test_udp_scan.py, does the UDP pass say only what it can prove.
 
-TODO 117, 2026-09-17. The owner's words: ports doesn't have UDP port finder
-(sock.SOCK_DGRAM) and in that decree I am sure many other important ports are
-also left unchecked.
+TODO 117, 2026-09-17. The port scanner had no UDP pass (sock.SOCK_DGRAM), and
+because of that many other important ports were left unchecked too.
 
 THE FAILURE CASES COME FIRST, and on UDP they are the entire risk. UDP has
 three answers and a scanner that knows two of them is worse than no scanner:

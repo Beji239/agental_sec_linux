@@ -22,7 +22,7 @@ back at the old confidence as if nothing had been withdrawn. Section [3] is
 that check and it is the reason this file exists.
 
 Builds a temp database from the REAL Schema.SQL, so a schema that does not
-carry the v29 columns fails here rather than at runtime on the owner's machine.
+carry the v29 columns fails here rather than at runtime on a real machine.
 Runs anywhere.
 """
 import os
@@ -90,7 +90,7 @@ def row(key=KEY):
 
 
 print("\n[1] the schema carries the v29 columns")
-# If this fails, the migration and Schema.SQL have drifted apart and the owner's
+# If this fails, the migration and Schema.SQL have drifted apart and a live
 # machine would take the ALTER while a fresh install would not have it.
 with _Conn() as c:
     base_cols = {r[1] for r in c.execute("PRAGMA table_info(behavioral_baseline)")}
@@ -230,7 +230,7 @@ print("\n[9] it is reachable, and it is NOT a model tool")
 # an intruder. This is an owner action, so it gets a script and stays out of
 # the tool manifest.
 script = ROOT / "scripts" / "retract_baseline.py"
-check("the owner has a way to run it", script.exists(), True)
+check("there is a way to run it", script.exists(), True)
 check("and it refuses without a reason",
       "--reason is required" in script.read_text(encoding="utf-8"), True)
 
@@ -239,7 +239,7 @@ check("the model has no path to it", "retract_baseline" in registry, False)
 
 
 print("\n[10] a database that has not migrated yet does NOT crash")
-# MY BUG, and the owner hit it on the first thing the owner ran. I put
+# MY BUG, and I hit it on the first thing I ran. I put
 # "AND retracted_at IS NULL" in the session count, and
 # query_behavioral_baseline calls that count on EVERY row, so on a pre-v29
 # database every baseline read raised:

@@ -507,7 +507,7 @@ def _with_config(block, fn):
 
     It moves core_settings.CONFIG_PATH, the ONE path the app loads, the
     settings panel writes and the router toggle writes, rather than writing
-    the operator's file. The owner's config.json is READ here and never modified.
+    the operator's file. The live config.json is READ here and never modified.
     """
     holder = pathlib.Path(tempfile.mkdtemp(prefix="remcfg_"))
     cfg_path = holder / "config.json"

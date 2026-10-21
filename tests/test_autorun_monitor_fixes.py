@@ -7,7 +7,7 @@ BOTH DIRECTIONS wherever the fix is a detector or a refusal, because a detector
 that stops firing is as broken as one that fires on everything -- and this
 round's headline defect was exactly the second kind.
 
-The module is driven unmodified. Nothing here writes to the owner's database:
+The module is driven unmodified. Nothing here writes to the live database:
 the write-path checks build their own store from Schema.SQL and point
 AGENTALSEC_TEST_DB at it.
 """
@@ -24,7 +24,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
 
-# NOT THE OWNER'S DATABASE.
+# NOT THE LIVE DATABASE.
 # The write-path checks below call me.save_finding, and without this the store
 # they would write into is the one beside main.py.
 _DB = pathlib.Path(tempfile.mkdtemp()) / "autorun_test.db"
@@ -500,12 +500,12 @@ check_true("and this round made that claim true, which it was not before "
            len(am.get_user_units()) >= 1)
 
 print()
-print("[AR-12] THE OFF SWITCH REFUSES THE CALL (owner's answer, 2026-09-24)")
+print("[AR-12] THE OFF SWITCH REFUSES THE CALL (2026-09-24)")
 
 # `sensors.autorun_monitor.enabled` was documented and read by nothing. The
-# owner chose the second design offered: keep the sensor pull-only and make the
+# second design was chosen: keep the sensor pull-only and make the
 # switch REFUSE, rather than give it a background clock that would write rows
-# into the owner's evidence store on a schedule. Both directions are asserted here,
+# into the evidence store on a schedule. Both directions are asserted here,
 # because a switch that refuses everything is as broken as one that refuses
 # nothing.
 _OFF_CFG = {"sensors": {"autorun_monitor": {"enabled": False,

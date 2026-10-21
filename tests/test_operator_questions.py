@@ -71,8 +71,8 @@ def seed_enrichment(indicator, status, kind="ip", gap=None, tried=None):
 
 
 print("\n[1] FAILURE FIRST: do not ask the owner what the lookups already answered")
-# The fastest way to kill this feature is to spend the owner's attention on something
-# the app could have worked out. Once the owner stops reading these, every other rule
+# The fastest way to kill this feature is to spend your attention on something
+# the app could have worked out. Once you stop reading these, every other rule
 # in the file is worthless.
 seed_enrichment("203.0.113.9", "resolved")
 r = q.file_question(SID, "identify_destination", "ip", "203.0.113.9",

@@ -598,7 +598,7 @@ TOOL_MANIFEST = [
             "controls the device. Recording it as evidence costs nothing and "
             "already happened automatically. Promoting it to the answer for "
             "what a device IS is the step that a hostile device would want "
-            "taken, and it is cheap for a person to confirm and expensive to "
+            "taken, and it is quick for a person to confirm and hard to "
             "undo.\n\n"
             "Standard SNMP carries no device names, so on that backend this "
             "will usually report that there is nothing recorded to adopt. "
@@ -3138,7 +3138,7 @@ TOOL_MANIFEST = [
             "says which source saw it (this_machine, router). Devices come from "
             "the router agent's connection log; 'router.available' false means "
             "only this machine is covered, so say so before describing the "
-            "whole home. For a short overview, query_map_summary is cheaper."
+            "whole home. For a short overview, query_map_summary is shorter."
             "\n\ncomplete, endpoints_complete and unlocated_complete say whether the two lists are whole. returned against total_located is the endpoint side. The COUNTS are exact even when the lists beside them are cut."
         ),
         "input_schema": {
@@ -3810,8 +3810,8 @@ TOOL_MANIFEST = [
         "name": "undismiss_entity",
         "description": (
             "Resume monitoring an entity that dismiss_entity silenced. NO GATE, "
-            "this only ever restores visibility, so it is the cheap direction and "
-            "should stay cheap. "
+            "this only ever restores visibility, so it is the easy direction and "
+            "should stay easy. "
             "Use when the user says a dismissal was wrong, when evidence contradicts "
             "one, or when you are unsure whether a dismissal still holds: resuming "
             "alerts on something benign costs noise, leaving a real one silenced "
@@ -4208,7 +4208,7 @@ TOOL_MANIFEST = [
     # in a packet payload. Same reasoning as the local-mode manifest below.
     #
     # The READING came back on 2026-09-06 as query_vpn_state below, TODO
-    # 48.2. The owner's call, and the reasoning above survives it untouched: 8.3
+    # 48.2. The reasoning above survives it untouched: 8.3
     # removed the two things that CHANGE the tunnel, and this one only looks.
 
     {
@@ -4538,7 +4538,7 @@ TOOL_MANIFEST = [
 # LOCAL MODE IS GONE, 2026-09-14, TODO 105.
 #
 # There used to be a second, smaller manifest here for a local model, and a
-# whole mode around it. The owner's call to remove it, and the reasoning is worth
+# whole mode around it. It was removed, and the reasoning is worth
 # keeping because it decides what happens if anyone proposes bringing it back:
 # the local model has no write authority anyway, so it was carrying weight
 # without earning it, and anybody who wants to run a model on their own
@@ -4719,8 +4719,8 @@ PERMISSION_GATED = {
     "block_port",
     "quarantine_file",
 
-    # Banning a device, TODO 53.2, and its undo. The user's rule is that an
-    # unidentified device ends in a ban, and the owner's other rule is that the ban
+    # Banning a device, TODO 53.2, and its undo. The rule is that an
+    # unidentified device ends in a ban, and the ban
     # asks first, every time, the way Secure.AI did it. There is deliberately
     # no automatic path: a wrong automatic ban takes the user's own television
     # off the network and they find out from the television.
@@ -4769,7 +4769,7 @@ PERMISSION_GATED = {
     # one has no such field to fill in, because the basis is fixed and is "the
     # device said so". The confirmation stands in for the evidence.
     #
-    # Cheap to confirm, expensive to undo, and the tool takes no name
+    # Quick to confirm, hard to undo, and the tool takes no name
     # parameter, so approving it cannot approve arbitrary text.
     "adopt_router_hostname",
 
@@ -4790,11 +4790,11 @@ PERMISSION_GATED = {
     # This one records the traffic, to disk, and on a home network that can
     # include things the user typed.
     #
-    # Cheap to confirm, and the cost of getting it wrong is not a broken
-    # machine, it is the owner's plaintext in a table. That is worth one question.
+    # Quick to confirm, and getting it wrong is not a broken
+    # machine, it is your plaintext in a table. That is worth one question.
     #
     # disarm_payload_capture is deliberately NOT here, same as every other
-    # undo: the direction that keeps less of the owner's data never asks.
+    # undo: the direction that keeps less of your data never asks.
     "arm_payload_capture",
 }
 
@@ -4825,7 +4825,7 @@ SUPPRESSION_GATED = {
 # Gating them puts identical friction on the correction and on the mistake.
 # A correction that costs a confirmation tap is one the model learns to
 # skip, and the thing being corrected here is a silence nobody can see. The
-# mistake should be expensive; undoing it should be free.
+# mistake should be hard; undoing it should be free.
 #
 # revert_suppression was gated until 2026-08-19 and was ungated on the
 # user's decision. dismiss_entity stays gated, because that is the direction
@@ -5018,9 +5018,9 @@ def requires_permission(name: str, params: dict = None) -> bool:
     # the host does not already carry in its neighbour table, and the model can
     # read every address it would find through query_known_devices and
     # query_presence without asking anybody anything. Gating it protects
-    # nothing and costs the one caller the design wants — the operator clicking
-    # a button on the owner's own dashboard, who was being asked to confirm that the owner
-    # wanted what the owner had just clicked.
+    # nothing and costs the one caller the design wants — you clicking
+    # a button on your own dashboard, being asked to confirm that you
+    # wanted what you had just clicked.
     #
     # WHAT IS STILL GATED, because the cost argument does not cover it:
     #   * a sweep aimed anywhere other than this host's own network, which is
@@ -6258,7 +6258,7 @@ def _dispatch(name: str, params: dict):
         # about one address, got [], and had no way to tell whether that meant
         # "no such traffic" or "wrong window", so it guessed a window, tried
         # again, and went round six times. Reading its reasoning is what found
-        # this; the loop was expensive and none of the attempts could have
+        # this; the loop was long and none of the attempts could have
         # worked, because all_sessions did not exist.
         #
         # Now the result says what it searched and what it did not, and
@@ -6566,7 +6566,7 @@ def _dispatch(name: str, params: dict):
         # reading thirty rows with empty labels tends to describe them as
         # known devices, because they came out of a table called
         # known_devices. Saying "4 of 30 identified" in the payload makes the
-        # gap impossible to miss and is cheap to compute.
+        # gap impossible to miss and is quick to compute.
         named = sum(1 for d in devices if (d.get("known_as") or "").strip())
 
         # Split the unnamed rows by whether their address is a usable

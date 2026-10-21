@@ -3,7 +3,7 @@
 # on the Devices tab, off by default. While it is on, a hardware address first
 # seen after the switch went on, and not named by the owner, is blocked at the
 # router until the owner names it. When the router cannot be reached the
-# device stays online and the notice says so (the owner chose fail open).
+# device stays online and the notice says so (fail open, by choice).
 
 import logging
 import re

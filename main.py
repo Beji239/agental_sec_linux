@@ -780,8 +780,8 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
     # That is the point of the tier rather than an oversight: the answer a
     # reader most needs from this role is the one where the feed does not
     # exist, because an empty findings list has to be readable as "nothing was
-    # watching" rather than as "nothing happened". The owner's Q7 instruction
-    # for this task was that the module reports "not installed, blind, here is
+    # watching" rather than as "nothing happened". The module
+    # reports "not installed, blind, here is
     # the one command" rather than pretending, and the boot log is where that
     # sentence belongs.
     #
@@ -1101,9 +1101,8 @@ def _start_port_owner_sweeper(config: dict, session_id: str) -> None:
     """
     Correlate listening ports with the processes that own them, on a tick.
 
-    THE OWNER'S INSTRUCTION, 2026-09-25: "python should execute the scan on set
-    intervals and on top of that agent should be able to call python to execute
-    a scan whenever it wants to complete a report".
+    2026-09-25: Python runs the scan on a set interval, and the agent can also
+    call it whenever it needs a fresh scan to complete a report.
 
     This function is the FIRST half of that sentence. The second half is
     tools/port_owner.sweep_now, which the duty loop calls before it builds a
@@ -1193,9 +1192,8 @@ def _start_port_scanner_clock(config: dict, modules: dict,
     The port scanner's background clock, on a daemon thread, for as long as
     the app runs.
 
-    THE OWNER'S INSTRUCTION, 2026-09-25, in the owner's own words: "I want you to
-    create that back ground clock". That is PS-14's option (a), which the
-    register carried as PENDING THE OWNER'S WORD while the module ran pull-only and
+    2026-09-25: the background clock is built. That is PS-14's option (a), which
+    the register carried as PENDING while the module ran pull-only and
     the switch refused the call; the switch and the refusal both stay, and
     OFF stops this clock too.
 
@@ -2289,9 +2287,8 @@ def main(argv=None):
     # question somebody asks when something else is broken.
     _start_port_owner_sweeper(config, session_id)
 
-    # THE PORT SCANNER'S BACKGROUND CLOCK. PS-14 option (a), 2026-09-25, on
-    # the owner's own instruction: "I want you to create that back ground
-    # clock". Started after the module table so the first pass runs against a
+    # THE PORT SCANNER'S BACKGROUND CLOCK. PS-14 option (a), 2026-09-25.
+    # Started after the module table so the first pass runs against a
     # fully initialised scanner, and unconditionally rather than behind the
     # usual module check -- the function itself reports the two cases where
     # nothing will run (the module did not load; the operator switched it
@@ -2754,7 +2751,7 @@ def main(argv=None):
 
     # TAKE THE PORT BEFORE ANNOUNCING ANYTHING. 2026-09-18
     #
-    # THE BUG THIS IS, in the operator's words: "the privileged launcher
+    # THE BUG THIS IS, as it showed: "the privileged launcher
     # exited with code 1". What actually happened is below, and every line of
     # it was true at the same time:
     #

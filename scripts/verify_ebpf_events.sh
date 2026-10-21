@@ -78,7 +78,7 @@ else
 fi
 
 echo "mode            : $MODE"
-echo "port under test : $PORT (the owner's copy on 5000 is untouched)"
+echo "port under test : $PORT (the live copy on 5000 is untouched)"
 echo "camera file     : $CAMERA_DB"
 echo "scratch         : $TMP"
 echo
@@ -95,11 +95,11 @@ BOOT_PID=""
 # The residue rule, carried the way verify_launchers_live.sh carries it, so
 # every script that swaps the operator's config.json does it the same way:
 #
-#   1. THE OWNER'S FILE IS THE REFERENCE, taken BEFORE anything is written. A
+#   1. THE LIVE FILE IS THE REFERENCE, taken BEFORE anything is written. A
 #      reference taken after the swap would be the swap.
 #   2. A COPY THAT IS SECRETLY A LINK IS REFUSED. A scratch tree that hard-
 #      links the project and then `cp`s a modified config over one of those
-#      links writes THROUGH the link into the owner's real file (measured 2026-09-25:
+#      links writes THROUGH the link into the real file (measured 2026-09-25:
 #      nlink=4 on config.json and .env). `-ef` is the inode test.
 #   3. THE RESTORE LIVES IN THE TRAP, so it runs on every exit path. MEASURED
 #      on this host's bash 5.2.21, 2026-09-25: the trap runs on a plain exit,
@@ -110,13 +110,13 @@ BOOT_PID=""
 #      to its end and exit 0, so an interrupted run would print its normal
 #      summary and read green.
 #   4. THE RESTORE IS PROVEN, and a failed proof KEEPS the copy and forces a
-#      non-zero status. A script that cannot prove it put the owner's file back must
+#      non-zero status. A script that cannot prove it put the live file back must
 #      leave the material for putting it back by hand.
 #   5. NOBODY CAN CLOSE THE kill -9 DOOR FROM INSIDE, and this file does not
 #      pretend to. A run killed with no moment to run a trap leaves the
 #      operator's file on that run's scratch port, and a later run cannot
-#      tell THE OWNER'S bytes from a scratch copy's without risking an overwrite of
-#      a setting the owner changed on purpose. The door is NAMED, not papered over.
+#      tell the live bytes from a scratch copy's without risking an overwrite of
+#      a setting you changed on purpose. The door is NAMED, not papered over.
 
 # THE REFERENCE, taken before anything is written. This is the only place the
 # operator's config.json is READ for restoration, and it happens before the
@@ -166,12 +166,12 @@ trap 'exit 129' HUP
 #
 # BOTH TESTS ARE ABOUT LINKS, NOT BYTES, and both come from one measured
 # condition (2026-09-25: nlink=4 on the operator's config.json and .env, four
-# scratch trees each holding a second name for the owner's file):
+# scratch trees each holding a second name for the live file):
 #
-#   1. THE SCRATCH COPY MUST NOT *BE* THE OWNER'S FILE. One inode with two names is
+#   1. THE SCRATCH COPY MUST NOT *BE* THE LIVE FILE. One inode with two names is
 #      how a `cp` writes through a link: it opens the path and truncates the
 #      inode, so the "copy" lands in the operator's file.
-#   2. THE OWNER'S FILE MUST HAVE EXACTLY ONE NAME. If anything -- a scratch tree, an
+#   2. THE LIVE FILE MUST HAVE EXACTLY ONE NAME. If anything -- a scratch tree, an
 #      old harness, a hand-made link -- holds another name for it, the swap
 #      below writes the scratch config through THAT name too.
 # A refusal names what it found and how to find the other name.
@@ -182,7 +182,7 @@ if [[ -e "$TMP/config.orig.json" && "$ROOT/config.json" -ef "$TMP/config.orig.js
     # DROP THE SPARE NAME, NOT THE FILE: removing the scratch path removes one
     # link and leaves the operator's own file exactly where it was.
     rm -f "$TMP/config.orig.json"
-    echo "  (the spare name has been dropped; the owner's file's own link count is the owner's)"
+    echo "  (the spare name has been dropped; the live file keeps its own link count)"
     exit 2
 fi
 

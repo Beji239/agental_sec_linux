@@ -413,7 +413,7 @@ check("and it is INFO, not a warning, because nothing is wrong",
 print("\n[11] the smallest budget is not one you fall over on day one")
 # 1 GB was the smallest option. The real database is already about 1.6 GB, so
 # picking it would have put the file over the line immediately and the first
-# thing that choice ever did would be to delete. Owner's call to raise it.
+# thing that choice ever did would be to delete. So it was raised.
 smallest = min(p["trigger"] for p in rt.PRESETS)
 check("smallest preset is 2 GB", smallest, 2_000_000_000)
 check("and it matches the unconfigured default",

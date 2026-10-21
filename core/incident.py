@@ -6,8 +6,8 @@
 #
 # WHY THIS FILE EXISTS
 #
-# The owner's complaint: "it seems to me that it is entirely up to the human to
-# launch pretty much anything". Verified in the source, and the sharpest part
+# The problem: almost everything had to be launched by a person. Verified in
+# the source, and the sharpest part
 # of it was not the model. It was that FINDINGS HAVE NO CONSUMER. The only
 # autonomous reader of the findings table was predictions.check_due, and it
 # only counted rows. A critical finding could be written at 3am and nothing in
@@ -65,10 +65,9 @@ class BadIncidentInput(ValueError):
 
 # CAPS AND THRESHOLDS
 #
-# Owner's answers, Q6, 2026-09-17. Every one of these is a preference rather
-# than a constant, so changing one is a recorded decision with a date on it
-# instead of a diff in a file nobody re-reads. The defaults are what the owner
-# approved; the preference keys are how the owner changes the owner's mind later.
+# Set 2026-09-17. Every one of these is a preference rather than a constant,
+# so changing one is a recorded decision with a date on it instead of a diff
+# in a file nobody re-reads. The preference keys are how to change them later.
 
 DEFAULT_TICK_SECONDS       = 60
 DEFAULT_INCIDENTS_PER_DAY  = 40

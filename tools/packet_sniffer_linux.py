@@ -377,7 +377,7 @@ def local_addresses() -> frozenset:
     The cached set, read once if it has never been read.
 
     A detector calls this per packet, so it must not do the read per packet:
-    psutil's net_if_addrs is cheap but not free, and the set only changes when
+    psutil's net_if_addrs is quick but not free, and the set only changes when
     the machine's network changes.
     """
     if not _LOCAL_ADDRESSES:
@@ -680,7 +680,7 @@ def _describe_pid(pid):
     is called once per captured packet. Measured after the socket-snapshot
     cache went in, the remaining 1.0 ms of a packet's 1.015 ms was this
     function: the snapshot made the LOOKUP free and left the DESCRIPTION
-    expensive. A pid's name and command line do not change while it lives, so
+    slow. A pid's name and command line do not change while it lives, so
     the entry is reused for PID_INFO_TTL seconds; a pid that dies and is
     reused inside that window is the one way this can be stale, and the
     process that inherits it will have been gone less than five seconds.

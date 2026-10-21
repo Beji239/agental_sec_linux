@@ -7,7 +7,7 @@
 #
 # On 2026-09-07 the dashboard was fixed three times in one afternoon for the
 # same fault: a sensor that could not see, reported as fine. Every fix was on
-# a screen. Then the obvious question, which the owner asked: the model does not
+# a screen. Then the obvious question: the model does not
 # look at screens.
 #
 # On a run where capture is blind, query_packets returns []. Nothing in that
@@ -271,7 +271,7 @@ DEPENDS: dict[str, tuple] = {
     # THE TWO WINDOWS CAPABILITIES CAME OFF IT 2026-09-25. `cap:security_log`
     # and `cap:defender` were declared here and on query_important below, and
     # on this platform neither could ever be anything but unavailable, so they
-    # were a permanent degradation line on the two tools the owner reads most.
+    # were a permanent degradation line on the two tools read most.
     # The sensors that raise the findings these tools return are all named
     # above them, which is the declaration that carries information.
     "query_findings": (
@@ -384,7 +384,7 @@ DEPENDS: dict[str, tuple] = {
     # the action queue, v36, T3.
     #
     # THE READS DECLARE NOTHING, the same argument again: these answer "what
-    # has this app asked the operator to approve and what did the owner say", which
+    # has this app asked the operator to approve and what did they say", which
     # is a fact about our own bookkeeping and not about the network.
     #
     # THE EXECUTOR'S OWN HEALTH is the one thing here that can be blind, and

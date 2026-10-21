@@ -13,7 +13,7 @@ function none of them. So on any search with a filter that was not an address,
 the rows answered the model's question and the count answered "how many
 packets are there".
 
-Three symptoms, and the third is the expensive one:
+Three symptoms, and the third is the worst one:
 
   * the total was described as matching and was really the whole table
   * complete said false on answers that were whole

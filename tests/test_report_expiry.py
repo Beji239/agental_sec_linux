@@ -2,7 +2,7 @@
 tests/test_report_expiry.py, agent reports are kept one week and the list
 shows the current run.
 
-The owner's rule (2026-10-08): reports leave the database after a week, and
+The rule (2026-10-08): reports leave the database after a week, and
 the Agents tab shows this run's reports unless earlier runs are asked for.
 
 Run it directly: python tests/test_report_expiry.py

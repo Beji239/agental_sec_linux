@@ -705,7 +705,7 @@ check("a vendor prefix lasts a year",
       en._ttl_for("mac", "resolved"), 365 * 86400)
 
 
-print("\n[13] the queue: enqueue is cheap, does not block, and does not duplicate")
+print("\n[13] the queue: enqueue is quick, does not block, and does not duplicate")
 q = en.enqueue("cve-2024-38063", reason="runbook check")
 check("queued", q["queued"], True)
 check("kind worked out", q["kind"], "cve")
@@ -837,8 +837,8 @@ check_true("something is stated as never sent", len(en.NEVER_SENT) >= 1)
 
 
 print("\n[malware is a headline, 41.7]")
-# The owner's call, 2026-09-04: "a malware is a malware, it should raise
-# something." A live URLhaus hit had printed `partial (single_source)` as its
+# 2026-09-04: malware is malware, it should raise
+# something. A live URLhaus hit had printed `partial (single_source)` as its
 # headline because status describes the ownership ladder and rdap had timed
 # out. True, and softer than the row deserved.
 check("a urlhaus hit is flagged",

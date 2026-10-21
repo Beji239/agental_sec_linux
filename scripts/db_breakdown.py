@@ -9,7 +9,7 @@ Where the database size actually goes. Read only, changes nothing, ever.
 
 WHY THIS EXISTS
 
-TODO section 34. The owner's number: about 8 hours of running produced 1.6 GB,
+TODO section 34. The measured number: about 8 hours of running produced 1.6 GB,
 so roughly 200 MB per hour. Section 23.5 had assumed 100 MB per calendar day,
 which is out by a mile, and every duration figure that came from it is wrong.
 

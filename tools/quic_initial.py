@@ -92,7 +92,7 @@ def _varint(buf: bytes, i: int) -> tuple:
 
 
 def looks_like_initial(datagram: bytes) -> bool:
-    """Cheap gate: a long-header packet of a version this module decrypts."""
+    """Quick gate: a long-header packet of a version this module decrypts."""
     if not datagram or len(datagram) < 7 or (datagram[0] & 0xC0) != 0xC0:
         return False
     version = int.from_bytes(datagram[1:5], "big")

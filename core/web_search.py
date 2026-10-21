@@ -145,7 +145,7 @@ KIND_PRIORITY = [BLOCKED, RATE_LIMITED, REFUSED, UNRECOGNISED,
                  TIMED_OUT, UNREACHABLE, BAD_RESPONSE, EMPTY]
 
 # Which HTTP method to try first against a scraped endpoint with no history.
-# GET stays first only because it is the cheaper thing to be wrong about;
+# GET stays first only because it is the safer thing to be wrong about;
 # see the header for why neither of them is the answer.
 METHOD_ORDER_DEFAULT = ("get", "post")
 
@@ -210,8 +210,8 @@ RESULT_MARKERS = ("result__a", "result-link", "result__snippet", "results.tbl")
 # the source was one working path out of four with no spare. On 09-06 a real
 # answer about a CVE went out saying search was unavailable.
 #
-# WHAT THEY ARE NOT: a paid service. The owner's call and it is the right one, the
-# model is already a bill and the VPN was cut for cost. Every one of these has
+# WHAT THEY ARE NOT: a paid service. The model is already a
+# bill and the VPN was cut for cost. Every one of these has
 # a free tier that needs a key and no card:
 #
 #   google_cse  100 queries a DAY, and the day resets. More than this app uses.
@@ -517,7 +517,7 @@ class WebSearch:
             # likely reading is that the requests before it earned the block.
             #
             # So the worst case drops from five requests to three, and the
-            # cheap instant-answer call still happens first because it is a
+            # quick instant-answer call still happens first because it is a
             # different host.
             # Scraped endpoints only. The argument is about one provider
             # seeing one address, so it says nothing about a keyed API, and

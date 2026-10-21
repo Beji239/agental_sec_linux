@@ -208,7 +208,7 @@ DNS_ACTIVITY_WINDOW_HOURS = 4
 TUNNEL_MIN_PAYLOAD_LEN = 12
 
 # TUNNEL: a FLOOR on the entropy of that label, and the honest description of
-# it is "a cheap filter, not the discriminator".
+# it is "a quick filter, not the discriminator".
 #
 # MEASURED ON THIS HOST, 2026-09-22, because choosing this number by feel is
 # how a rule becomes a random-name printer:
@@ -229,7 +229,7 @@ TUNNEL_MIN_PAYLOAD_LEN = 12
 # So the gate is 3.0, which is a NOISE FLOOR rather than a classifier: it
 # excludes the words at the bottom of that list ("international" 2.873,
 # "administration" 3.039) and it lets "windowsupdate" through on purpose,
-# because the count below is what carries the claim. It is cheaper to admit a
+# because the count below is what carries the claim. It is easier to admit a
 # word than to build a dictionary into a detector.
 TUNNEL_ENTROPY_FLOOR = 3.0
 
@@ -1147,7 +1147,7 @@ def _check_activity(conn, session_id: str) -> dict:
                         f"authentication, domain verification and a few "
                         f"vendor lookups all use it. It is also the record "
                         f"type a resolver will carry arbitrary text in, which "
-                        f"makes it the cheapest outbound channel on a network "
+                        f"makes it the easiest outbound channel on a network "
                         f"where DNS is the only thing that reliably gets "
                         f"out.\n\n"
                         f"WHAT WAS MEASURED AND WHAT WAS NOT: the count of "

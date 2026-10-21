@@ -1119,7 +1119,7 @@ def get_status() -> dict:
     readiness card and the model-facing health check both read a module that
     cannot read /etc/os-release as a healthy one (measured 2026-09-25:
     os_name 'Linux' with an error recorded, status() still {'available':
-    True}). It now runs the cheapest read that can fail and reports what it
+    True}). It now runs the lightest read that can fail and reports what it
     got: a key is present only when it was read, and `note` carries the
     reason when something was not.
     """

@@ -2,8 +2,7 @@
 # AgentalSec V2, pure socket port scanner, no Nmap needed.
 #
 # IT RUNS A REAL RAW SYN SCAN NOW, 2026-09-25, and it is the fallback the
-# connect scan never was. PS-13, option (c), on the owner's instruction:
-# "do option C and when done report back". The privilege row for this module
+# connect scan never was. PS-13, option (c). The privilege row for this module
 # used to claim a SYN scan that did not exist in the tree; the row was
 # corrected once (to "needs nothing") and that correction was itself false for
 # the module as a whole, because a self-scan's OWNER LOOKUP loses every root
@@ -33,9 +32,9 @@
 #
 # IT SENDS UDP NOW, 2026-09-17. TODO 117.
 #
-# The owner's words on 2026-09-17: ports doesn't have UDP port finder
-# (sock.SOCK_DGRAM) and in that decree I am sure many other important ports
-# are also left unchecked. Both halves were right. This file now runs a second
+# 2026-09-17: the port scanner had no UDP pass (sock.SOCK_DGRAM), and because
+# of that many other important ports were left unchecked too. Both halves
+# were right. This file now runs a second
 # pass with real UDP datagrams, and the section below is the old TCP-only
 # write-up kept because the reasoning still governs every result row.
 #
@@ -320,17 +319,16 @@ SEVERITY_ORDER = ["none", "low", "medium", "high", "critical"]
 # gate -- the same shape the autoruns round closed as AR-12.
 #
 # TWO DESIGNS WERE ON THE TABLE and the register carried the choice as PENDING
-# THE OWNER'S WORD, because finishing the section is not an answer to the question
+# A DECISION, because finishing the section is not an answer to the question
 # inside it:
 #
 #   (a) give this module a real clock, so the key gates a loop and the sensor
-#       measures the owner's own machine on a schedule nobody has to ask for;
+#       measures this machine on a schedule nobody has to ask for;
 #   (b) keep it pull-only and make the switch REFUSE the call.
 #
 # (b) was built first as the reversible direction; (a) was NOT, and was
-# recorded as untouched work. **THE OWNER ANSWERED IN THE OWNER'S OWN WORDS, 2026-09-25:
-# "I want you to create that back ground clock". OPTION (a) IS WHAT THIS FILE
-# CARRIES NOW** -- see THE CLOCK below. It is not a reversal of (b): the switch
+# recorded as untouched work. **ON 2026-09-25 THE ANSWER WAS (a), BUILD THE
+# CLOCK. OPTION (a) IS WHAT THIS FILE CARRIES NOW** -- see THE CLOCK below. It is not a reversal of (b): the switch
 # still REFUSES, and OFF still stops both the clock and the call, which is what
 # a switch in a sensor's own config block has to mean.
 #
@@ -353,15 +351,14 @@ def scan_enabled(config: dict) -> tuple[bool, str]:
     return True, "no key is set, so it is ON"
 
 
-# THE CLOCK -- OPTION (a), THE OWNER'S ANSWER, 2026-09-25
+# THE CLOCK -- OPTION (a), 2026-09-25
 #
-# THE OWNER'S WORDS, and they are why this section exists: **"I want you to
-# create that back ground clock"**. PS-14 offered two designs -- (a) a real
+# PS-14 offered two designs -- (a) a real
 # clock on this module, (b) pull-only with the switch refusing -- and the
-# register carried the choice as PENDING THE OWNER'S WORD because finishing the
+# register carried the choice as PENDING A DECISION because finishing the
 # section is not an answer to the question inside it. (b) was built first as
 # the reversible direction; (a) was NOT, and was recorded as untouched work.
-# The owner has now answered, so the clock is here. The switch and the refusal both
+# The answer was (a), so the clock is here. The switch and the refusal both
 # STAY: OFF stops the clock AND the call, which is what a switch in a
 # sensor's own config block has to mean.
 #
@@ -370,7 +367,7 @@ def scan_enabled(config: dict) -> tuple[bool, str]:
 # other caller uses, against SELF_SCAN_TARGET (127.0.0.1), session-scoped to
 # the boot that is running. It is not a second scanner and not a shortcut:
 # the payload, the owner lookup, the finding policy and the run record are
-# the shipped ones, because a clock that scanned "more cheaply" would be a
+# the shipped ones, because a clock that scanned "more lightly" would be a
 # second implementation of the same question.
 #
 # WHY 127.0.0.1 AND NOT "the machine's addresses". A scan measures what
@@ -404,13 +401,13 @@ def scan_enabled(config: dict) -> tuple[bool, str]:
 # of scan("127.0.0.1", port_set="common") is 55 TCP probes + 25 UDP probes
 # and took 0.54 s wall (0.32 s on the warm second pass), writing 3 rows in
 # port_scan_results and 1 row in port_scan_run. At the floor of 60 s that is
-# under 1% of a core; at the owner's own 600 s it is under 0.1%. The floor
+# under 1% of a core; at the live config's 600 s it is under 0.1%. The floor
 # exists for the config that asks for 5.
 MIN_CLOCK_SECONDS = 60
 
 # What the clock runs on when the key is absent or unreadable. 600 is the
-# value the operator's own config.json already carries, so an absent key and
-# the owner's file land in the same place.
+# value the live config.json already carries, so an absent key and
+# the live file land in the same place.
 DEFAULT_CLOCK_SECONDS = 600
 
 # The address the clock measures. See the block above for why it is this
@@ -575,7 +572,7 @@ def _now() -> str:
 # WHICH TCP METHOD THIS MODULE IS ALLOWED TO USE
 #
 # PS-13 option (c). The module now has two TCP probes and the operator gets to
-# say which one is acceptable on THE OWNER'S network, because the two are not the same
+# say which one is acceptable on THEIR network, because the two are not the same
 # thing:
 #
 #   "auto"     (default, and the absent key) SYN where a raw socket opens,
@@ -938,8 +935,8 @@ def build_udp_probe(port: int, host: str = None) -> tuple:
         return (name, builder(host), transport, scope)
     return (name, builder(), transport, scope)
 
-# The UDP ports the pass covers even when nothing profiled them. The owner's point on
-# 2026-09-17 was the second half of the complaint: the important UDP services
+# The UDP ports the pass covers even when nothing profiled them. The point on
+# 2026-09-17 was the second half of the problem: the important UDP services
 # were never going to appear just because the TCP list happened to include the
 # number. A port here with no entry in UDP_PROBES is still probed, with an
 # empty datagram, and silence on it is reported as silence rather than as a
@@ -1992,10 +1989,10 @@ class PortScanner:
     # `sensors.port_scanner.enabled` was documented in config.json and read by
     # NOTHING, because this sensor is built directly in main.py and pull-only,
     # so there was no loop for the key to gate -- the same shape the autoruns
-    # round closed as AR-12. The owner's answer there, and the design taken up
+    # round closed as AR-12. The answer there, and the design taken up
     # here for the same reason, is the second of the two offered: keep the
     # sensor PULL-ONLY and make the switch REFUSE the call, rather than give
-    # it a background clock that would write self-scan rows into the owner's evidence
+    # it a background clock that would write self-scan rows into the evidence
     # store every 600 seconds forever.
     #
     # THE CONSTRUCTION SITE IS PART OF THE FIX: main.py builds this class
@@ -2197,9 +2194,8 @@ class PortScanner:
 
         # THE CLOCK, REPORTED AS THE OPERATOR WILL MEET IT.
         #
-        # THE KEY THAT HAD NO READER NOW HAS ONE, 2026-09-25, on the owner's
-        # answer -- "I want you to create that back ground clock" (PS-14's
-        # option (a)). `poll_interval` is the clock's cadence, read by
+        # THE KEY THAT HAD NO READER NOW HAS ONE, 2026-09-25, with PS-14's
+        # option (a), the clock. `poll_interval` is the clock's cadence, read by
         # clock_interval_seconds above; this branch publishes the winner's
         # name, the effective number and what the clock is actually doing, so
         # the Settings card, the boot log and the model cannot describe three
@@ -2340,7 +2336,7 @@ class PortScanner:
 
         # THE UDP SET IS NOT THE TCP SET. TODO 117.
         #
-        # The owner's second point on 2026-09-17 was that important ports go
+        # The second point on 2026-09-17 was that important ports go
         # unchecked, and this is where that was true: the UDP services worth
         # asking about do not appear just because the requested TCP set
         # happens to contain the number. So the pass covers the fixed UDP
@@ -2400,9 +2396,8 @@ class PortScanner:
 
         # WHEN THE TARGET IS THIS HOST, SAY WHAT HOLDS EACH OPEN PORT.
         #
-        # Added 2026-09-25 on the owner's instruction: "agent now has to have
-        # access to ports and processes finding in this machine to be able to
-        # report which port relates to which process". A scan of this machine
+        # Added 2026-09-25: the agent has to be able to report which port
+        # relates to which process on this machine. A scan of this machine
         # produces a list of open ports and has never been able to say WHAT
         # opened them, which left every self-scan result one question short.
         #
@@ -2848,7 +2843,7 @@ class PortScanner:
             # become a finding, so scanning a Windows box manufactured three
             # alerts about its own default configuration, the noise that
             # makes a real one easy to miss.
-            # THE OWNER SAID THIS PORT IS NORMAL HERE. Schema v24, TODO 39.
+            # THIS PORT WAS DECLARED NORMAL HERE. Schema v24, TODO 39.
             #
             # Naming a device says nothing about which of its ports belong to
             # it, so an identified Echo kept raising a high finding on 8888

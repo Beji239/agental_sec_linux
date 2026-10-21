@@ -227,7 +227,7 @@ def _rollup_loop():
     # page had six blocks after two days and never coloured any of them.
     #
     # It runs here rather than in main.py so boot is not held up by it, and it
-    # is cheap on the second run because hours that already have rows are
+    # is quick on the second run because hours that already have rows are
     # skipped.
     _backfill_perf()
 

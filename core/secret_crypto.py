@@ -26,7 +26,7 @@
 # module, ctypes against crypt32.dll -- was sitting beside it in the tree
 # while nothing but the Settings card imported it. That is the shape this
 # round exists to remove: a Windows file in a Linux build, reached by a live
-# code path, which is how the card came to tell the operator the owner's secrets were
+# code path, which is how the card came to say the secrets were
 # "stored in plain text, Windows only" on a machine where they are encrypted.
 #
 # So: the Windows module moved to agental_sec_win32_reference/core/dpapi.py,

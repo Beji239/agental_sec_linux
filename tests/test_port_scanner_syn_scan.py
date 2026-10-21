@@ -32,7 +32,7 @@ independently:
       substitute a connect test, which is the original PS-13 defect in
       miniature.
 
-Nothing here writes to the owner's store: memory_engine.DB_PATH is pointed at
+Nothing here writes to the live store: memory_engine.DB_PATH is pointed at
 a throwaway database built from Schema.SQL, and the live section binds its own
 listener on loopback. THE LIVE SECTION BINDS 127.0.0.1 AND NOTHING ELSE, so it
 cannot touch another machine, and the ports it uses come from the OS.

@@ -7,8 +7,8 @@ hears that legitimately, behind any gateway, with no hardware.
 
 The parsing matters, but the property this suite really guards is the wording
 and the fencing. Every string here is chosen by the device, therefore by
-whoever controls the device, and a cheap gadget with a settable hostname is
-the cheapest injection channel on a home network. So the tests below check
+whoever controls the device, and a throwaway gadget with a settable hostname is
+the easiest injection channel on a home network. So the tests below check
 that output is length-capped, control characters are stripped, nothing is
 resolved into a claim it does not support, and the tools exposing it are
 inside the untrusted fence.

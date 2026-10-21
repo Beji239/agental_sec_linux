@@ -3,8 +3,8 @@ tests/test_always_on.py, v22, membership and availability are two statements.
 
 is_permanent meant "this device belongs on my network". The absence check read
 it as "this device should always be answering", so vouching for a TV silently
-signed it up to stay awake and every quiet evening produced a finding. The
-owner put it plainly: those devices are off because nobody is using them.
+signed it up to stay awake and every quiet evening produced a finding. Put
+plainly: those devices are off because nobody is using them.
 
 Checked here, worst outcome first:
 

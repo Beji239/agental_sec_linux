@@ -68,7 +68,7 @@ def is_defined(url: str) -> bool:
 
 
 print("\n[1] every route the page calls actually exists")
-# The cheapest possible catch for a typo in a URL, which fails silently in a
+# The easiest possible catch for a typo in a URL, which fails silently in a
 # browser and shows an empty panel rather than an error.
 check("no UI call points at a missing route",
       sorted(u for u in CALLED if not is_defined(u)), [])
@@ -95,7 +95,7 @@ print("\n[3] 28.4: permanent and always-on are shown as DIFFERENT things")
 # UI that shows only one of them re-creates it for the person reading it.
 check("the table has an always-on column", "Always on?" in UI, True)
 check("there is a toggle", "setAlwaysOn(" in UI, True)
-# 2026-09-21, the owner's catch: the cell showed "yes" next to a button reading
+# 2026-09-21, my catch: the cell showed "yes" next to a button reading
 # "not always", so it read "yes not always". The column asks a yes or no
 # question and must answer with one word. Failure checks first.
 check("the old action-label button is gone",
@@ -558,7 +558,7 @@ check("the permission card uses it",
       UI.count("${APPROVAL_WARNING}") >= 1, True)
 check("and so does the important-findings panel",
       UI.count("${APPROVAL_WARNING}") >= 2, True)
-# The last line is the one that matters and it is the owner's. A warning that
+# The last line is the one that matters. A warning that
 # only says "be careful" teaches nothing; this one says what the mistake DOES.
 #
 # Matched against a whitespace-flattened copy, because the sentence is wrapped
@@ -592,8 +592,8 @@ print("\n[20] the Alerts screen says what it is actually showing")
 # button next to it. What it actually shows is /api/findings, which passes
 # session_id=sid and limit 50, so it is this run only and the newest fifty.
 #
-# The owner had 14,676 undismissed findings in the database while that screen sat
-# empty. The owner's call on the fix, and it is the right one: this is a LABEL
+# There were 14,676 undismissed findings in the database while that screen sat
+# empty. The fix: this is a LABEL
 # problem, not a behaviour problem. The scope is fine, the sentence was not.
 check("the card names the scope", "Active Findings, this session" in UI, True)
 check("and says the row cap out loud",

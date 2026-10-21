@@ -36,9 +36,9 @@
 # applies with full force to a module whose entire job is turning
 # device-authored text into inventory records the model will read. A device
 # can name itself anything, including text shaped like an instruction. That
-# is not a hypothetical: it is the cheapest injection channel on a home
+# is not a hypothetical: it is the easiest injection channel on a home
 # network, because it needs no compromise of this host at all, just one
-# cheap device with a settable hostname.
+# throwaway device with a settable hostname.
 #
 # So: the query tools that expose this data are in sanitize.UNTRUSTED_TOOLS,
 # every harvested string is length-capped, and NOTHING here is ever treated

@@ -4,9 +4,9 @@ about, and a TCP silence is not allowed to speak for UDP.
 
 WHY THIS EXISTS, 2026-09-15.
 
-The owner asked whether the port scanner covers UDP. It does not, and never
+I asked whether the port scanner covers UDP. It does not, and never
 has: _check_port is socket.create_connection, a TCP connect, and it is the only
-probe in the codebase. The owner had been reading the tool as covering both, which is
+probe in the codebase. I had been reading the tool as covering both, which is
 the only reasonable reading of a result that prints "port 500 open" with no
 protocol on it anywhere.
 

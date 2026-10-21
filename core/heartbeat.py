@@ -129,7 +129,7 @@ def beat(state):
             lines.append("heartbeat threads: " + "; ".join(bits))
     state["threads"] = now_threads
 
-    # Say the word leak out loud rather than leaving the owner to divide two numbers
+    # Say the word leak out loud rather than leaving you to divide two numbers
     # that are four hours apart in a log file.
     if rss is not None and state.get("first_rss"):
         first = state["first_rss"]

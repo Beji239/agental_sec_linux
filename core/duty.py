@@ -6,9 +6,8 @@
 #
 # WHY THIS FILE EXISTS
 #
-# The owner, 2026-09-17: "it seems to me that it is entirely up to the human to
-# launch pretty much anything... the Agentic soul of the code has been
-# missing." The verified diagnosis named four pieces. T2 built the ledger
+# 2026-09-17: almost everything had to be launched by a person, and the
+# agent never acted on its own. The verified diagnosis named four pieces. T2 built the ledger
 # (what is worth looking at). T3 built the executor (so a decision outlives
 # the turn that asked for it). This is the piece in between, and it is the one
 # that actually spends tokens: SOMETHING HAS TO DO THE LOOKING.
@@ -17,7 +16,7 @@
 # from /api/chat and from nowhere else. No thread, timer or sensor ever called
 # the model. If nobody typed, the analyst did not exist that hour.
 #
-# THE TWO TRIGGERS, ON THE OWNER'S INSTRUCTION (AGENTIC_PROGRAMME §T4)
+# THE TWO TRIGGERS (AGENTIC_PROGRAMME §T4)
 #
 # 1. EMERGENCY. An incident of a kind that cannot wait for a scheduled moment:
 #    a UDP port under attack, a high volume of packets inbound AND outbound.
@@ -56,7 +55,7 @@
 # 2. THE BUDGETS ARE HARD STOPS, NOT ADVICE. Three investigations an hour and a
 #    daily token ceiling, both counted from rows that were actually written, and
 #    when a cap is reached the tick records `budget` and examines NOTHING. It
-#    does not examine a cheap one, it does not start and give up: a ceiling that
+#    does not examine a small one, it does not start and give up: a ceiling that
 #    can be walked past is decoration.
 #
 # 3. THE LOOP CANNOT ACT ON ITS OWN. Every write goes through the same
@@ -118,8 +117,8 @@ class BadDutyInput(ValueError):
 #
 # Every one of these is a preference rather than a constant, so changing one is
 # a recorded decision with a date on it rather than a diff in a file nobody
-# re-reads. The defaults are the owner's Q6 answers (AGENTIC_PROGRAMME, owner
-# decisions 2026-09-17): "3 investigations/hour, token ceiling with hard stop".
+# re-reads. The defaults (AGENTIC_PROGRAMME, 2026-09-17): 3 investigations an
+# hour, and a token ceiling with a hard stop.
 
 DEFAULT_TICK_SECONDS       = 60
 DEFAULT_MAX_PER_HOUR       = 3
@@ -318,9 +317,9 @@ def _wake_hours() -> tuple:
     The local hours of the wake-ups; the last one writes the daily report.
 
     LOCAL, not UTC, and the difference is the point: "around the day's ordinary
-    points" is a statement about the owner's day. The machine is at UTC-7, so a
-    list held in UTC would drift an hour twice a year and mean nothing the owner could
-    check against the owner's own clock.
+    points" is a statement about your day. The machine is at UTC-7, so a
+    list held in UTC would drift an hour twice a year and mean nothing you could
+    check against your own clock.
 
     config.json holds a real JSON list here. The preference table can only hold
     a string, so it is parsed as JSON too rather than as a comma list: one
@@ -360,10 +359,9 @@ def _daily_token_ceiling() -> int:
 
 # THE EMERGENCY CHECK — deterministic, bounded, and it names its own limits
 #
-# WHAT THE OWNER ASKED FOR, in the owner's words: "an incident of emergency — for
-# example a UDP port under attack, a high volume of packets inbound and
-# outbound — the agent has to become active, without waiting for a scheduled
-# moment."
+# WHAT IT IS FOR: an emergency, for example a UDP port under attack or a
+# high volume of packets inbound and outbound, has to wake the agent without
+# waiting for a scheduled moment.
 #
 # WHAT THIS ACTUALLY MEASURES, and the shape of it matters more than the
 # thresholds. Three conditions, all computed as ONE bounded SQL aggregate over
@@ -373,8 +371,8 @@ def _daily_token_ceiling() -> int:
 #                    window
 #   flood_inbound    one remote source sent this many packets at us at all
 #   two_way          one remote peer is BOTH sending us a lot AND receiving a
-#                    lot from us, which is the "inbound AND outbound" shape the owner
-#                    named and is the one that separates an attack from a
+#                    lot from us, the "inbound AND outbound" shape, which
+#                    is the one that separates an attack from a
 #                    backup or a download
 #
 # THE THRESHOLDS ARE MEASURED ON THIS MACHINE, not guessed. The busiest five
@@ -952,7 +950,7 @@ DUTY_TOOL_ALLOWLIST = (
     # on rather than a number it repeats.
     "query_inventory_gaps",
     # T9, 2026-09-25. WHAT IS LISTENING ON THIS HOST AND WHAT HOLDS IT. It is
-    # in the unattended allowlist because the owner asked for it there: the
+    # in the unattended allowlist on purpose: the
     # report should come back naming the process behind a port, and this is the
     # tool that answers that. It is read-only, it originates no traffic (unlike
     # run_port_scan, kept out above and for the same reason scan_network is
@@ -1014,7 +1012,7 @@ DUTY_TOOL_ALLOWLIST = (
     "query_runbook", "query_performance",
     # the writes the loop is allowed, which only touch our records
     "file_action_request",
-    # Quiet rules from false alarms (owner, 2026-10-15). Python verifies each
+    # Quiet rules from false alarms (2026-10-15). Python verifies each
     # one, a rule made here is on trial, and there is a daily limit.
     "learn_quiet_rule", "query_learned_rules", "undo_learned_rule",
     # Questions for the owner. Filing one changes nothing on the machine and
@@ -1095,10 +1093,8 @@ def pick_findings(n: int = 2) -> list:
     """
     Up to N findings from DIFFERENT tools, newest and worst first.
 
-    THE OWNER'S INSTRUCTION: "Each report is about 2 findings — whether the
-    findings came from the alerts or from processes... It picks 2 reports from
-    different tools — all of them are candidates. It can look for the ones that
-    seem to have high priority."
+    EACH REPORT IS ABOUT 2 FINDINGS, from the alerts or from processes, picked
+    from two different tools, all of them candidates, highest priority first.
 
     "FROM DIFFERENT TOOLS" IS ENFORCED HERE, not requested of the model. A
     report about two rows from the same sensor is one fact repeated, and the
@@ -1112,7 +1108,7 @@ def pick_findings(n: int = 2) -> list:
     do not want to hear about it, and re-raising it in a report would be the
     nag §53.3 exists to prevent.
     """
-    n = max(1, min(int(n or 2), 2))       # the owner fixed this at two
+    n = max(1, min(int(n or 2), 2))       # fixed at two
     with me._get_readonly_conn() as conn:
         if not _table_ready(conn, "findings"):
             return []
@@ -1189,7 +1185,7 @@ def _record_run(session_id: str, trigger: str, outcome: str, *,
     THE SEAL IS TAKEN IN THE SAME TRANSACTION AS THE INSERT, so a crash
     cannot leave a run row that nothing attests to. See core/integrity's
     SEALED_TABLES block: this row is the agent's account of its own wake, and
-    it is one of the four things the owner meant by "the agent's history".
+    it is one of the four things that make up "the agent's history".
     """
     usage = usage or {}
     coverage = coverage or {}
@@ -1336,8 +1332,8 @@ def write_report(session_id: str, kind: str, trigger: str, body: str, *,
     return {"report_id": report_id, "kind": kind, "verdict": verdict}
 
 
-# Reports are kept for one week and then deleted. The owner's rule: anything
-# longer is too much for a home network.
+# Reports are kept for one week and then deleted. Anything longer is too
+# much for a home network.
 REPORT_KEEP_DAYS = 7
 
 
@@ -1445,8 +1441,8 @@ def dismiss_runs(run_ids: list, restore: bool = False,
 
 # THE PROMPTS
 #
-# WRITTEN IN THIS APP'S OWN VOICE, on the owner's instruction, and the
-# instruction has a reason behind it worth writing down: a page of model prose
+# WRITTEN IN THIS APP'S OWN VOICE, and the reason is worth writing down:
+# a page of model prose
 # in a different register from the rest of the dashboard reads as a different
 # product. The same voice also carries the same rules — say what you saw, say
 # what you could not see, do not narrate a card you did not send.
@@ -1668,11 +1664,10 @@ def _findings_block(rows: list) -> str:
     return "\n".join(lines)
 
 
-# THE HOST SURVEY -- THE SECOND HALF OF THE OWNER'S INSTRUCTION
+# THE HOST SURVEY. 2026-09-25.
 #
-# "agent also should start reporting those in its report page ... whenever the
-# agent wakes up to a full check and report back in the report page, it should
-# be able to deploy python". 2026-09-25.
+# The agent reports what is listening on this machine in its report page, and
+# every full check it wakes up for runs Python to look first.
 #
 # So this runs on EVERY wake-up, before the prompt is built, whatever the tick
 # turned out to be about, and its output goes into the prompt as a block the
@@ -1764,8 +1759,7 @@ def build_host_survey_block(session_id: str, modules: dict = None,
     last wake-up. NEVER RAISES; a failure is a sentence in the block.
 
     Runs a fresh sweep first so the report describes the machine as it is at
-    the moment the agent looked, which is the owner's third instruction in the owner's
-    own words. The sweep is the same one the interval thread runs, so there is
+    the moment the agent looked. The sweep is the same one the interval thread runs, so there is
     one implementation of the correlation and one place its coverage sentence
     is written.
     """
@@ -1902,7 +1896,7 @@ def _next_regular_moment(now: datetime = None) -> dict:
     """
     When the next regular wake-up is, and whether this minute is one.
 
-    THE SCHEDULE IS THE OWNER'S HOURS IN LOCAL TIME, and "is it due" is
+    THE SCHEDULE IS YOUR HOURS IN LOCAL TIME, and "is it due" is
     answered by the last run rather than by a timer that fires once: the loop
     ticks every minute, so a moment is due when the local hour matches and no
     regular run has happened in this hour yet. That makes a wake-up survive a
@@ -1934,7 +1928,7 @@ def _next_regular_moment(now: datetime = None) -> dict:
 
     due = local.hour in hours
     # THE WINDOW IS THE CLOCK HOUR, built from the LOCAL value so the boundary
-    # is the top of the owner's hour whatever the machine's offset. Replacing
+    # is the top of your hour whatever the machine's offset. Replacing
     # the minutes on the UTC-converted value is identical on a whole-hour
     # offset like this box's UTC-7 and WRONG on a 30- or 45-minute offset,
     # where it would move the boundary half an hour and let a wake-up repeat
@@ -2031,13 +2025,13 @@ def _tick_once(session_id: str, modules: dict = None,
     2026-09-18: 62 duty_run rows between 19:08 and 22:05 — eight runs that
     called the model (2,216,938 tokens between them), and once the daily
     ceiling was crossed at 22:04, a `budget` row EVERY SIXTY SECONDS, still
-    being written when this was read. The owner's requirement was four
+    being written when this was read. It should be four
     moments a day.
 
     So the poll decides between three things, and they are different facts:
 
       * an EMERGENCY, which outranks the schedule and runs NOW;
-      * a REGULAR MOMENT, when the owner's local hour matches and no run that
+      * a REGULAR MOMENT, when the local hour matches and no run that
         reached the model has happened in this hour;
       * NOTHING DUE, which writes NO row and is recorded only in the loop's
         own state (`polls`, `last_poll`, `last_skip`). The run table is the
@@ -2050,7 +2044,7 @@ def _tick_once(session_id: str, modules: dict = None,
     condition that cannot wait for a schedule must be noticed on the minute it
     happens, not at the next scheduled hour. It only ever SAVES money (it
     promotes a tick that would otherwise be a no-op) or spends it on the one
-    thing the owner said must not wait.
+    thing that must not wait.
 
     A tick a budget refused still writes its row, because "a cap stopped it"
     is an outcome a person needs to see. It just does not consume the hour's
@@ -2474,10 +2468,8 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
 
     # THE HOST SURVEY, AND IT RUNS BEFORE THE PROMPT IS BUILT.
     #
-    # The owner's instruction, 2026-09-25: the agent "should start reporting
-    # those in its report page" and "whenever the agent wakes up to a full
-    # check and report back in the report page, it should be able to deploy
-    # python". This runs a FRESH port-ownership sweep and renders the result
+    # 2026-09-25: the agent reports what is listening in its report page, and
+    # every full check runs Python to look first. This runs a FRESH port-ownership sweep and renders the result
     # into the prompt, so a report always describes the machine as it was when
     # the agent looked rather than as it was up to a sweep-interval ago.
     #
@@ -2486,7 +2478,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
     # think to ask for is retrieval that happens exactly when an investigation
     # already feels uncertain. The survey is the machine's standing state, it
     # costs 65 ms, and a report about a host that does not carry it is a report
-    # written from a blank page about the one thing the owner asked to see.
+    # written from a blank page about the one thing it is meant to show.
     #
     # subject_values ties the survey to THIS tick's work: an incident about
     # port 8888 or about an address gets those rows ranked first. It is passed
@@ -2519,7 +2511,7 @@ def _run_once_unguarded(session_id: str, trigger: str = "manual", *,
         # Case memory, 2026-09-22. This is a call in the PROMPT-BUILDING PATH
         # rather than a tool the model may choose to use, and that is the whole
         # difference between retrieval that happens and retrieval that is
-        # available. The owner's complaint was that every alert was
+        # available. The problem was that every alert was
         # investigated from a blank page; a memory the model has to think to
         # ask for would be the same blank page with an extra step, and would be
         # asked for exactly when an investigation already felt uncertain.
@@ -3030,12 +3022,11 @@ def dismiss_reports(report_ids: list, dismissed_by: str = "user",
     STOP SHOWING THESE REPORTS. Delete nothing, change no verdict, touch no
     baseline.
 
-    The owner's instruction, 2026-09-25: "we need a dismiss button plus check
-    box for agent reports, also a dismiss all ... those however won't delete
-    the agent entries from the database and baseline if it was initially
-    writing in those."
+    2026-09-25: a dismiss button and a check box for each agent report, and a
+    dismiss all. Dismissing never deletes what the agent wrote into the
+    database or the baseline.
 
-    EVERY CLAUSE OF THAT IS HONOURED LITERALLY AND THIS IS HOW:
+    EVERY PART OF THAT IS HONOURED LITERALLY AND THIS IS HOW:
 
       * nothing is DELETEd -- `dismissed_at` is set and the row stays;
       * the report's own words (verdict, evidence, saw, body, coverage) are

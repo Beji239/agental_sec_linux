@@ -95,8 +95,8 @@ def _fresh_report(verdict="no_action", body="a body", saw="what it saw",
 
 
 print("\n[1] A DISMISSAL DELETES NOTHING AND THE ROW IS UNCHANGED")
-# THE OWNER'S OWN SENTENCE, asserted as literally as it can be: "those however
-# won't delete the agent entries from the database". The check reads the row
+# THE RULE, asserted as literally as it can be: dismissing never deletes
+# what the agent wrote into the database. The check reads the row
 # back BEFORE and AFTER and compares every column that carries what the agent
 # SAID, so a dismissal that quietly rewrote a verdict would fail here.
 r1 = _fresh_report(verdict="benign", body="the original body text",
@@ -133,8 +133,8 @@ check("and it records who did it", after["dismissed_by"], "user")
 print("\n  -- and there is NO DELETE ANYWHERE in the dismissal path")
 # THE TEST STRIPS COMMENTS AND STRINGS FIRST, and that is not fussiness: the
 # first draft of this check FAILED against correct code, because the function's
-# own DOCSTRING quotes the owner's sentence "those however won't delete the
-# agent entries" and the docstring legitimately talks about baselines. A check
+# own DOCSTRING states the rule about never deleting what the agent wrote,
+# and the docstring legitimately talks about baselines. A check
 # that fires on a word rather than on an act is the noise this project's test
 # rules are written against, so the check reads the CODE.
 import io as _io
@@ -830,10 +830,9 @@ check_true("the sweep note says rows were skipped",
            "skipped" in (part["note"] or ""), part["note"])
 
 
-print("\n[10] THE TWO ENTRY POINTS THE OWNER ASKED FOR")
-# "python should execute the scan on set intervals AND ... agent should be
-# able to call python to execute a scan whenever it wants to complete a
-# report". Both halves are asserted: the timer's clock, and the on-demand call
+print("\n[10] THE TWO ENTRY POINTS")
+# Python runs the scan on a set interval, AND the agent can call it whenever
+# it needs a fresh scan to complete a report. Both halves are asserted: the timer's clock, and the on-demand call
 # the duty loop makes.
 print("\n  -- the interval: read from one key, floored in code")
 secs, key = po.sweep_interval_seconds({"sensors": {"port_owner":

@@ -122,8 +122,8 @@ VALID_OBSERVATION_BASIS = {"measured", "external_intel", "model_conclusion",
 
 # Valid behavior keys per entity type
 #
-# operator_answer added v32, 2026-09-14, on all four. It holds what the owner
-# said when the model asked the owner something it could not work out, and it is on
+# operator_answer added v32, 2026-09-14, on all four. It holds what a person
+# said when the model asked them something it could not work out, and it is on
 # every entity type because the question queue covers all four.
 #
 # WHY IT IS ITS OWN KEY AND NOT user_action_history. That key records things
@@ -1046,11 +1046,11 @@ def _mark_self_induced(rows: list[dict], windows: list) -> list[dict]:
 
     WHY THIS EXISTS, and it is the whole point of the flag. On 2026-09-02 the
     model port scanned a device, queried this table, saw rows with source port
-    27017 and 32400 going to ephemeral ports on this host, and told the owner
+    27017 and 32400 going to ephemeral ports on this host, and told me
     the device was "actively probing THIS host's ports". Those rows are the
     scanned device answering with RST because the port is closed. It read the
     reply leg of its own scan as unsolicited hostile activity, and escalated
-    on it while the owner was telling it the device was the owner's.
+    on it while I was telling it the device was mine.
 
     A packet counts as self-induced when the OTHER end of it was a scan target
     and it falls inside that scan's window. Both directions are marked: the
@@ -1295,7 +1295,7 @@ def packet_search_scope(session_id=None, all_sessions=False, src_ip=None,
     more in earlier runs" are different facts with different fixes, and a
     reader handed one number cannot tell which they have.
 
-    Cheap on purpose: two COUNT queries against indexed columns, and only the
+    Quick on purpose: two COUNT queries against indexed columns, and only the
     dispatcher calls it.
     """
     conditions, params = _packet_conditions(
@@ -2336,7 +2336,7 @@ def _stamp_suggested_name(row: dict) -> dict:
 
     It is a suggestion and it is labelled as one. 4A's rule stands: the human
     is the enrollment authority here because there is no MDM, so this makes
-    the naming cheaper, it does not do the naming. Nothing reads
+    the naming easier, it does not do the naming. Nothing reads
     suggested_name except a person deciding what to type.
 
     A hostname beats a vendor, because a hostname is what the device calls
@@ -3527,9 +3527,9 @@ def reacknowledge_device(ip: str, reason: str = None) -> dict:
         declared always-on still carries the declaration, and lifting the
         retirement puts that declaration back in force — NET-1002 can fire for
         this device again. That is the right way round, because the operator
-        never withdrew it: the owner said this device should always answer, the
+        never withdrew it: you said this device should always answer, the
         machine stopped expecting it because it went quiet for a day, and it
-        answers again. Clearing the flag here would silently overrule the owner. The
+        answers again. Clearing the flag here would silently overrule you. The
         asymmetry is PUBLISHED in the return so nobody has to read the code to
         find out which of the two declarations came back;
       * it does not erase the retirement. `retired_at` and `retired_reason`
@@ -3606,7 +3606,7 @@ def inventory_gaps() -> dict:
     record can hold an address for a week that the inventory has never heard
     of, and nothing anywhere says so.
 
-    Measured on the owner's own store: 142 sweeps, 13 distinct addresses
+    Measured on a live store: 142 sweeps, 13 distinct addresses
     answering, 9 with a device row — and the four without one had replied to
     93, 140, 142 and 21 sweeps respectively. Two of them were seen ONLY
     through the neighbour cache, which is exactly the case `scan()`'s
@@ -4400,13 +4400,13 @@ def _enrichment_is_stale(basis_ref: str) -> bool | None:
     """
     Has the lookup behind this observation expired? None when unknowable.
 
-    The owner's call, 2026-09-02, and I think it is the right one: STALE the
+    2026-09-02, and it is the right call: STALE the
     fact rather than just date-stamp it. An unflagged stale fact costs nothing
     right up until it is wrong, and then it is silently wrong. A flagged one
     costs a single query_enrichment call, which is free when the row is still
     fresh because the cache answers it.
 
-    The trade the owner named out loud: it will occasionally push a session into
+    The trade, said out loud: it will occasionally push a session into
     re-looking-up something that had not really changed. That is a few hundred
     tokens. The other way round is a baseline quietly asserting an allocation
     that was reassigned months ago.
@@ -4690,7 +4690,7 @@ def write_behavioral_observation(
 
     WHY THIS EXISTS, and it is two real rows from one afternoon.
 
-    The owner's point, and the owner is right: enrichment facts SHOULD be recorded
+    The point, and it is right: enrichment facts SHOULD be recorded
     here. A model that re-looks-up the same address every session is the waste
     the whole enrichment engine was built to stop. Not logging is worse than
     logging.
@@ -4917,7 +4917,7 @@ def evidence_gate(entity_type: str, entity_value: str,
     # BOTH REASONS WHEN BOTH APPLY. An entity with no clean evidence at all
     # trips the floor AND the cap, and reporting only the first leaves the
     # model told it cannot suppress while silently wondering why its
-    # confidence moved. Two sentences is cheaper than that confusion.
+    # confidence moved. Two sentences beat that confusion.
     parts = []
     if not may_suppress:
         parts.append(
@@ -6528,7 +6528,7 @@ def finding_already_open(source: str, entity_type: str, entity_value: str,
     telling me", and dismissed_findings already handles that separately by
     entity. If a dismissed row blocked a re-raise here too, an entity that was
     dismissed and then genuinely came back would be silenced by the wrong
-    mechanism, and silence is the expensive kind of wrong.
+    mechanism, and silence is the worst kind of wrong.
 
     Matched on the four fields that make up what the row SAYS. Not on the
     description, which carries counts and timestamps and would differ on every
@@ -7565,7 +7565,7 @@ def _retract_ready(conn) -> bool:
     "AND retracted_at IS NULL" to the session count, and
     query_behavioral_baseline calls that count on EVERY row. So on a database
     that had not taken the v29 migration, every baseline read raised
-    OperationalError: no such column. The owner hit it on the first thing the owner ran.
+    OperationalError: no such column. I hit it on the first thing I ran.
 
     The app migrates at boot so the app itself was fine, but any script
     against a not-yet-migrated file blew up, and "run the app first" is not an
@@ -7872,7 +7872,7 @@ def log_message(session_id: str, role: str, content: str, token_count: int = Non
     Log a chat message. Trigger in DB caps at 500 per session.
 
     SEALED AS OF 2026-09-23. This is the record of what was SAID TO THE MODEL
-    and what it said back — the prompts and the answers, in the owner's own
+    and what it said back — the prompts and the answers, in the
     list of what "the agent's own record" means. Nothing sealed it, so a root
     user could rewrite an assistant turn or delete a prompt and the chain
     would still verify.
@@ -7917,7 +7917,7 @@ def log_message(session_id: str, role: str, content: str, token_count: int = Non
 #
 # The ceiling does not try to tell a good dismissal from a bad one, it
 # cannot, and pretending otherwise is how a control becomes theatre. It makes
-# volume expensive. One dismissal is routine. Twenty in an afternoon is a
+# volume hard. One dismissal is routine. Twenty in an afternoon is a
 # different event, and it now has to be noticed and re-authorised rather than
 # happening quietly.
 #
@@ -7943,7 +7943,7 @@ def blinding_budget() -> dict:
     silencing their own monitor is making a choice about their own network;
     the ceiling exists to stop the MODEL being talked into it at scale. That
     asymmetry is the same one the rest of this file keeps: reversal is free,
-    suppression is expensive, and a human may always overrule.
+    suppression is hard, and a human may always overrule.
     """
     since = f"-{BLINDING_WINDOW_HOURS} hours"
     with _get_readonly_conn() as conn:
@@ -8049,7 +8049,7 @@ def declare_expected_port(ip: str, port: int, reason: str,
 
     There is no entry for this in the tool manifest and there should not be
     one. A model that can mark its own findings expected has a path to
-    silencing itself, which is 8.1F one layer up. The owner declares this,
+    silencing itself, which is 8.1F one layer up. Only a person declares this,
     through scripts/expect_port.py.
 
     A reason is required rather than optional. The whole value of this column
@@ -8058,7 +8058,7 @@ def declare_expected_port(ip: str, port: int, reason: str,
 
     It silences the FINDING, not the observation. The port still lands in
     port_scan_results, still shows on the device row, and any OTHER port on
-    the same device still raises normally. That is the rule the owner set for
+    the same device still raises normally. That is the rule set for
     the safe list on 2026-08-31.
     """
     if not reason or not str(reason).strip():
@@ -8098,7 +8098,7 @@ def declare_expected_port(ip: str, port: int, reason: str,
     entry = dict(current[str(port)])
 
     # TODO 39.5, 2026-09-04. Declaring used to stop FUTURE scans raising and
-    # leave the ones already raised sitting in the review queue, so the owner
+    # leave the ones already raised sitting in the review queue, so I
     # answered the question and the question stayed on screen. That is the
     # unread queue arriving by a different road, which is the exact failure
     # 39 was built to stop, so the declaration now clears its own backlog.
@@ -8137,7 +8137,7 @@ def clear_port_findings(ip: str, port: int, reason: str,
     only record of which device it was about is the title, which reads
     "... listening on <host>:<port>" with the operator's own address in it.
     Matching that string is ugly and it is honest: the alternative is telling
-    the owner their old findings cannot be cleared because of a column we
+    you your old findings cannot be cleared because of a column we
     forgot to write.
     """
     needle = f"{ip}:{port}"
@@ -8211,21 +8211,20 @@ def undeclare_expected_port(ip: str, port: int) -> bool:
 
 # FINDINGS THAT MATTER. TODO 81/84, 2026-09-09.
 #
-# The owner's idea, and the owner named the failure mode in the same breath as the
-# idea: a table of important findings would be useful, and it would be
+# The idea came with its failure mode in the same breath: a table of important findings would be useful, and it would be
 # extremely annoying the moment it filled with things that are not important.
 # The seventeen false masquerading findings of 2026-09-08 are the proof. A
 # model asked to promote what matters will promote all seventeen, confidently.
 #
 # So the value of this list is not its contents. It is its BELIEVABILITY. One
-# row in it the owner knows is wrong and it becomes a second alert list that
+# row in it you know is wrong and it becomes a second alert list that
 # gets ignored, which is worse than not having it.
 #
 # THREE RULES, AND THE CODE BELOW IS JUST THEM WRITTEN OUT:
 #
 #   1. The model NOMINATES. It never promotes. There is no engine function
 #      that lets it, and no tool that reaches one.
-#   2. The owner confirms. That is the only path to promoted = 1.
+#   2. A person confirms. That is the only path to promoted = 1.
 #   3. It lives on the finding, not in a table of its own, so a finding that
 #      is dismissed or cleared takes its promotion with it. No copy, nothing
 #      to go stale, nothing to remember to clean twice.
@@ -8233,8 +8232,8 @@ def undeclare_expected_port(ip: str, port: int) -> bool:
 # ON NOMINATION AND ATTACKER-CONTROLLABLE TEXT. Process names and log lines
 # reach the model as tool output and an attacker can influence them, which is
 # why dismiss_entity is gated. Nomination is the one model write where that
-# risk points the safe way: the worst a planted nomination achieves is the
-# owner looking at something harmless. It still gets a cap, because burying
+# risk points the safe way: the worst a planted nomination achieves is
+# you looking at something harmless. It still gets a cap, because burying
 # the real nomination under forty invented ones is a real attack even when
 # each one is individually harmless.
 MAX_OPEN_NOMINATIONS = 25
@@ -8243,7 +8242,7 @@ MAX_OPEN_NOMINATIONS = 25
 def nominate_finding(finding_id: int, reason: str,
                      nominated_by: str = "model") -> dict:
     """
-    Raise a hand about one finding. Writes nothing the owner has to trust.
+    Raise a hand about one finding. Writes nothing you have to trust.
 
     Returns {"nominated": bool, "finding_id": int, ...}. Never promotes,
     never changes what the finding says, never touches severity. Nominating

@@ -115,7 +115,7 @@ except (caps.CapabilityError, caps.CapabilityUnavailable) as e:
 
 
 print("\n[3] process_details reads, and only reads")
-# Added on the owner's call so command lines do not go blank on a shared machine.
+# Added so command lines do not go blank on a shared machine.
 # The check that matters is that it stays a read: it takes numbers and gives
 # back strings, and it cannot be handed anything else.
 if caps.PSUTIL_AVAILABLE:

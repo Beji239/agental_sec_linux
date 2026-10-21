@@ -35,7 +35,7 @@ after that is the agent trusted to speak for a router.
 
 WHAT THIS IS ACTUALLY FOR
 
-The passing cases are the cheap half. The ones that matter are the refusals:
+The passing cases are the easy half. The ones that matter are the refusals:
 
   A quiet pass writes NO rows. A collector on a ten minute timer that grows
   the database every tick is a collector the operator turns off, and then the
@@ -548,7 +548,7 @@ def run() -> list:
     finally:
         agent.close()
 
-    # WIRING. Cheap to check and expensive to get wrong quietly.
+    # WIRING. Quick to check, and bad to get wrong quietly.
     from core import sanitize
     from core import tool_registry as registry
 

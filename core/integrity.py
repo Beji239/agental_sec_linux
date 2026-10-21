@@ -153,8 +153,8 @@ JOURNALLED = {
     # Added 2026-09-27 for EM2-4. The service-burst rule LNX-1014 counted one
     # service start three times (the pair of systemd lines, the same line out
     # of the second source, and a re-read by a lagging cursor) and wrote 84
-    # false alerts into the owner's store before the counting was fixed. The owner's
-    # instruction was to "get rid of all those 84 entries all together".
+    # false alerts into the store before the counting was fixed. All 84 had to
+    # go.
     #
     # DELETED, not dismissed, and the distinction is the reason this operation
     # exists rather than reusing finding_dismissed. A dismissal is a person
@@ -624,8 +624,8 @@ def anchor(out_path=None, db_path=None) -> dict:
 #
 # That is the exact class of attack this file exists for, aimed at the one
 # record an operator is most likely to trust without checking: the agent's
-# account of its own work. The owner's words: "Someone with root could edit
-# the agent's history and no seal would break."
+# account of its own work. The gap in one line: someone with root could edit
+# the agent's history and no seal would break.
 #
 # MEASURED BEFORE IT WAS FIXED, on a copy of the live database (627 MB, 229
 # journal entries): rewrote `duty_report.verdict` from 'no_action' to 'benign',
@@ -725,7 +725,7 @@ SEALED_TABLES = {
                         "column is worth."),
             "read_by": "Same reason as read_at.",
             # v51, 2026-09-25. The DISMISSAL FLAG, same argument as read_at
-            # with more force: the owner asked for a dismiss button on the
+            # with more force: there is a dismiss button on the
             # Reports list, and a person clicking a button must not break a row
             # witness. The transition is not lost -- it is journalled as
             # `report_dismissed`, an EVENT entry, which is the shape this file
@@ -773,12 +773,12 @@ SEALED_TABLES = {
     # question on this host's queue was read back and found to contain a false
     # statement about a file. Every other write in this journal is the app's
     # account of the NETWORK or of its own decisions; this one is the app's
-    # account of what it SAID TO THE OWNER, and that is the text the owner reads when the owner
-    # decides whether to spend the owner's attention. If root can rewrite the prose of
+    # account of what it SAID TO YOU, and that is the text you read when you
+    # decide whether to spend your attention. If root can rewrite the prose of
     # a question whose why_stuck was wrong, the record of the wrong advice
     # disappears with it.
     #
-    # WHAT IS SEALED: the prose and the facts about WHEN it entered the owner's view.
+    # WHAT IS SEALED: the prose and the facts about WHEN you first saw it.
     # asked_at is in, because the ordering of "the answer was filed" against
     # "the question was asked" is the whole of the unheard-answer finding.
     "operator_question": {

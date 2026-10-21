@@ -298,7 +298,7 @@ def test_flow_count_is_bounded():
 
 def test_idle_flows_are_forgotten():
     """
-    A finished connection holding the owner's plaintext for no reason is the first
+    A finished connection holding your plaintext for no reason is the first
     thing to drop. This is hygiene, not retention.
     """
     r = _ring(max_flows=4)
@@ -511,12 +511,12 @@ def test_search_finds_a_marker_that_is_held():
     assert out["matched"] is True
 
 
-# SECTION 8. RETENTION. The owner's first constraint.
+# SECTION 8. RETENTION. The first constraint.
 
 def test_retention_default_is_days_not_forever():
     """
     The only default lifetime in days anywhere in this database, and that is
-    on purpose: this is the one table that can hold the owner's own plaintext.
+    on purpose: this is the one table that can hold your own plaintext.
     """
     assert pr.DEFAULT_PAYLOAD_RETENTION_DAYS > 0
     assert pr.DEFAULT_PAYLOAD_RETENTION_DAYS <= 30

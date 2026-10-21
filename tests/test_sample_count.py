@@ -11,7 +11,7 @@ So the number a human reads as "forty sessions of consistent behaviour",
 the number that drives confidence, and confidence drives suppression, could
 be asserted rather than counted. An attacker patient enough to poison a
 baseline over weeks did not need the weeks. One call claiming forty would do,
-which is cheaper than the slow attack the provenance work was defending
+which is easier than the slow attack the provenance work was defending
 against.
 
 This is clamped rather than annotated, unlike provenance and direction. Those
