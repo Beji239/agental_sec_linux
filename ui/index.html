@@ -988,6 +988,9 @@
 
   .data-table tr:hover td { background: var(--bg3); }
 
+  /* A wide table scrolls inside its card instead of running past the edge */
+  .table-scroll { overflow-x: auto; }
+
   /* Detections page, readable text and real buttons */
   .det-guide { font-size: 12px; color: var(--text); line-height: 1.55; max-width: 900px; }
   .det-guide p { margin-top: 8px; }
@@ -2438,10 +2441,12 @@
       <label style="font-size:11px;color:var(--text-dim);display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;cursor:pointer;">
         <input type="checkbox" id="devices-show-retired" data-onchange="toggleRetiredDevices(this.checked)"> show retired devices
       </label>
+      <div class="table-scroll">
       <table class="data-table" id="devices-table">
-        <thead><tr><th>IP</th><th>Label</th><th>Type</th><th>Identity</th><th>Basis</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Last Seen</th></tr></thead>
+        <thead><tr><th>IP</th><th>Label</th><th>Type</th><th>Identity</th><th>Basis</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th style="white-space:nowrap;">Last Seen</th></tr></thead>
         <tbody id="devices-tbody"></tbody>
       </table>
+      </div>
     </div>
 
     <!-- ROUTER VIEW
@@ -6371,8 +6376,8 @@ async function loadDevices() {
         <td style="font-size:10px;color:var(--text-dim);max-width:220px;">${basis}</td>
         <td>${esc(d.mac||'-')}</td>
         <td>${esc(d.vendor||'-')}</td>
-        <td>${esc(d.hostname||'-')}</td>
-        <td>${fmtTime(d.last_seen)}</td>
+        <td style="overflow-wrap:anywhere;">${esc(d.hostname||'-')}</td>
+        <td style="white-space:nowrap;">${fmtTime(d.last_seen)}</td>
       </tr>`;
     }).join('');
 
