@@ -96,6 +96,7 @@
   #update-notice.sec { border-color: var(--red); }
   #update-notice .un-title { font-weight: 600; margin-bottom: 6px; }
   #update-notice .un-body { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; }
+  #updates-card .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .upd-log { white-space: pre-wrap; max-height: 260px; overflow: auto;
              font-family: var(--mono); font-size: 11px; background: var(--bg3);
              padding: 10px; border-radius: var(--radius); margin: 6px 0; }
@@ -1757,6 +1758,10 @@
     background: radial-gradient(circle, rgba(0, 229, 160, 0.06), transparent 70%);
   }
   .hl-alarm .hl-radar { --hl-c: var(--red); }
+  .hl-radar-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .hl-radar-note { font-size: 11px; color: var(--text-dim); text-align: center;
+                   max-width: 280px; line-height: 1.5; }
+  .hl-radar-note:empty { display: none; }
   .hl-ring {
     position: absolute;
     border-radius: 50%;
@@ -2218,6 +2223,7 @@
   <!-- DASHBOARD -->
   <div class="page" id="page-dashboard">
     <div class="hl-hero" id="hl-hero">
+      <div class="hl-radar-col">
       <div class="hl-radar" id="hl-radar" aria-hidden="false">
         <div class="hl-ring hl-r1"></div>
         <div class="hl-ring hl-r2"></div>
@@ -2229,6 +2235,8 @@
           <div class="hl-count" id="hl-count">-</div>
           <div class="hl-count-lbl" id="hl-count-lbl">sensors</div>
         </div>
+      </div>
+      <div class="hl-radar-note" id="hl-radar-note"></div>
       </div>
       <div class="hl-hero-side">
         <div class="hl-kicker">The watch</div>
@@ -4101,7 +4109,8 @@ function renderUpdates(d) {
   helpers.title = behind.length ? 'Behind: ' + behind.join(', ') : '';
   document.getElementById('upd-daily').checked = !!d.enabled;
   const why = [];
-  if (!can.ok && can.reason) why.push(esc(can.reason));
+  if (!can.ok && can.reason) why.push('<span style="color:var(--amber);">Update now is off here: '
+                                      + esc(can.reason) + '</span>');
   if (behind.length) why.push('The root helpers or sensors differ from this folder: '
     + esc(behind.join(', ')) + '. Reinstall helpers brings them level with one password.');
   document.getElementById('upd-why').innerHTML = why.join('<br>');
@@ -5378,10 +5387,14 @@ function hlRender() {
   document.getElementById('hl-hero').classList.toggle('hl-alarm', quiet.length > 0);
   document.getElementById('hl-count').textContent =
     checked ? `${ok.length}/${ok.length + quiet.length}` : '-';
-  document.getElementById('hl-count-lbl').textContent =
-    checked ? ['collecting'].concat(off.length ? [`${off.length} off`] : [],
-                                    standby.length ? [`${standby.length} on demand or not in use`] : []).join(', ')
-            : 'sensors';
+  document.getElementById('hl-count-lbl').textContent = 'sensors';
+  // Under the dial: the sensors the count leaves out, and why.
+  const notes = [];
+  if (checked && off.length)
+    notes.push('Switched off: ' + off.map(s => hlName(s.sensor)).join(', ') + '.');
+  if (checked && standby.length)
+    notes.push('Not counted: ' + standby.map(s => `${hlName(s.sensor)} (${s.use})`).join(', ') + '.');
+  document.getElementById('hl-radar-note').innerHTML = notes.map(esc).join('<br>');
   document.getElementById('hl-headline').textContent = !checked
     ? 'Waiting for the first sensor check'
     : quiet.length
