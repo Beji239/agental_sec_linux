@@ -25,17 +25,17 @@
 <link rel="icon" type="image/svg+xml" href="/ui/img/agentalsec-mark.svg">
 <style>
   :root {
-    --bg:        #0a0c0f;
-    --bg2:       #111318;
-    --bg3:       #181c23;
-    --border:    #1e2430;
+    --bg:        #0c1a36;
+    --bg2:       #112448;
+    --bg3:       #183058;
+    --border:    #26407a;
     --green:     #00e5a0;
     --green-dim: #00a36e;
     --amber:     #f5a623;
     --red:       #e5334a;
     --blue:      #4a9eff;
     --text:      #c8d0de;
-    --text-dim:  #5a6478;
+    --text-dim:  #6f7d98;
     --text-hi:   #edf0f5;
     --mono:      'JetBrains Mono', monospace;
     --sans:      'Inter', sans-serif;
@@ -1132,13 +1132,13 @@
     height: 520px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
-    background: #0a0e14;
+    background: #0a1630;
   }
 
   /* The base map is a shipped country outline now, not downloaded tiles, so
      there is nothing to darken with a filter any more. The colours are just
      the shape's own fill and stroke, set in JS where the layer is built. */
-  #threat-map .leaflet-container { background: #0a0e14; }
+  #threat-map .leaflet-container { background: #0a1630; }
 
   /* Map side panel and the movable chat window */
   #map-wrap { position: relative; }
@@ -1188,7 +1188,7 @@
   }
 
   .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-    background: var(--panel, #121821);
+    background: var(--panel, #112448);
     color: var(--text, #d6e1f0);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -1579,7 +1579,7 @@
   .aon-switch .aon-opt { font-size:10px; padding:2px 10px; margin:0; border-radius:0; opacity:.55; }
   .aon-switch .aon-opt:first-child { border-radius:4px 0 0 4px; }
   .aon-switch .aon-opt:last-child  { border-radius:0 4px 4px 0; }
-  .aon-switch .aon-cur { opacity:1; color:var(--bg, #0a0c0f); background:var(--green); border-color:var(--green); cursor:default; }
+  .aon-switch .aon-cur { opacity:1; color:var(--bg, #0c1a36); background:var(--green); border-color:var(--green); cursor:default; }
 
   /* Live LAN tab */
   .lan-head { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
@@ -1891,7 +1891,7 @@
     padding: 10px 12px 0;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: rgba(17, 19, 24, 0.85);
+    background: rgba(17, 36, 72, 0.85);
     text-align: left;
     color: inherit;
     font: inherit;
@@ -6817,9 +6817,9 @@ async function drawBaseMap(m) {
       // sea, and on a real screen it read as an empty black box with a
       // couple of dots floating in it. Land needs to be clearly lighter than
       // sea or the map is decoration rather than information.
-      color:       '#2b3a4d',   // borders
+      color:       '#34528a',   // borders
       weight:      0.6,
-      fillColor:   '#161e29',   // land
+      fillColor:   '#1b335e',   // land
       fillOpacity: 1,
       interactive: false,       // the arcs are what you click, not the land
     };
@@ -7393,7 +7393,7 @@ async function loadThreatMap() {
       fillColor: '#ffffff', fillOpacity: 0.12
     }).addTo(mapLayer);
     L.circleMarker([home.lat, home.lon], {
-      radius: 7, color: '#0a0e14', weight: 3,
+      radius: 7, color: '#0a1630', weight: 3,
       fillColor: '#ffffff', fillOpacity: 1
     }).bindPopup(
       `<b>${esc(home.label)}</b><br>${esc((home.ips || []).join(', ') || 'local')}`
