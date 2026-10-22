@@ -183,8 +183,10 @@ do_apply() {
     say "names helper, as root:"
     /usr/bin/python3 "$NAMES_DST" --check || die "the names helper could not read the socket tables"
     systemctl daemon-reload
-    systemctl enable --now "$NAMES_UNIT" || die "the names helper did not start"
-    systemctl enable --now "$CAPTURE_UNIT" || die "the capture service did not start"
+    # Restart, not enable --now: a unit that is already running keeps the old code.
+    systemctl enable "$NAMES_UNIT" "$CAPTURE_UNIT" >/dev/null 2>&1
+    systemctl restart "$NAMES_UNIT" || die "the names helper did not start"
+    systemctl restart "$CAPTURE_UNIT" || die "the capture service did not start"
     say ""
     say "Installed. Restart AgentalSec with the normal launcher; it now runs as"
     say "$REAL_USER and reads the capture service. Check any time with:"
