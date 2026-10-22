@@ -164,7 +164,7 @@ class Routes(BaseHTTPRequestHandler):
             if not person:
                 return self._reply(404, {"ok": False, "reason": "No such person."})
             if person["state"] == "paired" and person.get("chat_id"):
-                b.say(person["chat_id"], "Your pairing was reset at the computer. "
+                b.say(person["chat_id"], "\U0001F504 Your pairing was reset at the computer. "
                                          "Alerts stop until you pair again.")
             code = b.store.new_code(person["id"])
             b.store.event("code_made", person["name"], "New pairing code made at the computer.")
@@ -175,7 +175,7 @@ class Routes(BaseHTTPRequestHandler):
             person = b.store.person(body.get("id") or 0)
             if not person:
                 return self._reply(404, {"ok": False, "reason": "No such person."})
-            b.tell_and_remove(person, "You were removed from AgentalSec Remote at "
+            b.tell_and_remove(person, "\U0001F6AB You were removed from AgentalSec Remote at "
                                       "the computer. No more alerts will come here.")
             b.store.event("removed", person["name"], "Removed at the computer.")
             return self._reply(200, {"ok": True})
@@ -211,7 +211,7 @@ class Routes(BaseHTTPRequestHandler):
             everyone = b.store.remove_everyone()
             for p in everyone:
                 if p["state"] == "paired" and p.get("chat_id"):
-                    b.say(p["chat_id"], "Remote access to AgentalSec was revoked at "
+                    b.say(p["chat_id"], "\U0001F6AB Remote access to AgentalSec was revoked at "
                                         "the computer. No more alerts will come here.",
                           {"remove_keyboard": True})
             b.store.event("revoked", None,

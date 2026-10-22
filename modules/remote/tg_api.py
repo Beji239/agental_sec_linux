@@ -3,8 +3,10 @@
 # connection, so the bot only ever connects out and does not open a new
 # connection on every poll.
 
+import html
 import http.client
 import json
+import re
 import ssl
 import threading
 import urllib.parse
@@ -85,14 +87,23 @@ class Telegram:
         return self.call("getMe")
 
     def get_updates(self, offset: int = None, wait: int = 50):
-        params = {"timeout": wait, "allowed_updates": ["message"]}
+        params = {"timeout": wait, "allowed_updates": ["message", "callback_query"]}
         if offset is not None:
             params["offset"] = offset
         return self.call("getUpdates", params, timeout=wait + 15)
 
     def send(self, chat_id: int, text: str, reply_markup: dict = None):
-        params = {"chat_id": chat_id, "text": text[:4000],
+        params = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                   "disable_web_page_preview": True}
+        if len(text) > 4000:
+            # Cutting could split a tag, so a long one goes out as plain text.
+            plain = html.unescape(re.sub(r"<[^>]+>", "", text))
+            params.update(text=plain[:4000], parse_mode=None)
+            params.pop("parse_mode")
         if reply_markup is not None:
             params["reply_markup"] = reply_markup
         return self.call("sendMessage", params)
+
+    def answer_button(self, query_id: str):
+        """Stops the spinner on a pressed button."""
+        return self.call("answerCallbackQuery", {"callback_query_id": query_id})

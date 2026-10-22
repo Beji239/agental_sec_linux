@@ -804,8 +804,10 @@ Sample data.*
   phone is lost. Switch the module off as well if you want the bot silent.
 
 On the phone, `/status` says how the computer is doing and `/pending` lists
-what waits for your decision. Deciding from the phone comes in a later
-version.
+what waits for your decision. Both are in the bot's menu, and every alert has
+**Status** and **What's waiting** buttons under it. Alerts show the severity
+as a coloured dot and the time in your computer's time zone. Deciding from
+the phone comes in a later version.
 
 ## Settings
 

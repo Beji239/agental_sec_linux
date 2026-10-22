@@ -56,7 +56,7 @@ print("alert text")
 import bot as remote_bot                              # noqa: E402
 _b = remote_bot.Bot.__new__(remote_bot.Bot)
 check("a raise says raised to",
-      "raised to CRITICAL" in _b._alert_text([{"severity": "critical", "raised": True,
+      "Raised to CRITICAL" in _b._alert_text([{"severity": "critical", "raised": True,
                                                "title": "t", "entity_type": "process",
                                                "entity_value": "x"}]), True)
 
@@ -77,12 +77,13 @@ class FakeTelegram:
     def __init__(self):
         self.updates = []
         self.sent = []
+        self.calls = []
         self.next_id = 1
         self.cond = threading.Condition()
 
-    def push(self, message):
+    def push(self, message, kind="message"):
         with self.cond:
-            self.updates.append({"update_id": self.next_id, "message": message})
+            self.updates.append({"update_id": self.next_id, kind: message})
             self.next_id += 1
             self.cond.notify_all()
 
@@ -116,6 +117,10 @@ class TgHandler(BaseHTTPRequestHandler):
         elif method == "sendMessage":
             fake.sent.append(body)
             out = {"ok": True, "result": {"message_id": len(fake.sent)}}
+        elif method in ("setMyCommands", "setMyDescription", "setMyShortDescription",
+                        "answerCallbackQuery"):
+            fake.calls.append((method, body))
+            out = {"ok": True, "result": True}
         else:
             out = {"ok": False, "error_code": 404, "description": "Not Found"}
         raw = json.dumps(out).encode()
@@ -213,6 +218,11 @@ try:
     check("the module does not get the model key", b"AGENTAL_API_KEY=" in child_env, False)
     connected = wait_for(lambda: (lambda c: c[1]["bot"].get("username") if c[0] == 200 else None)(call("/state")))
     check("connected as the bot", connected, "test_home_bot")
+    wait_for(lambda: any(c[0] == "setMyCommands" for c in fake.calls))
+    menu = [c[1] for c in fake.calls if c[0] == "setMyCommands"]
+    check("the command menu is set",
+          bool(menu) and [m["command"] for m in menu[-1]["commands"]], ["status", "pending", "help"])
+    check("the description is set", any(c[0] == "setMyDescription" for c in fake.calls), True)
 
     print("pairing")
     code_, out = call("/people/add", "POST", {"name": "Sam", "phone": "07700 900123"})
@@ -279,6 +289,25 @@ try:
     fake.push({"message_id": 9, "from": sam, "chat": chat, "text": "/pending"})
     wait_for(lambda: "decision" in fake.to(111)[-1]["text"])
     check("/pending answers", "decision" in fake.to(111)[-1]["text"], True)
+    check("answers carry the view buttons",
+          [b["callback_data"] for b in fake.to(111)[-1]["reply_markup"]["inline_keyboard"][0]],
+          ["status", "pending"])
+    check("every message is HTML", all(m.get("parse_mode") == "HTML" for m in fake.sent), True)
+
+    print("buttons")
+    n_before = len(fake.to(111))
+    fake.push({"id": "q1", "from": sam, "data": "status",
+               "message": {"message_id": 5, "chat": chat}}, kind="callback_query")
+    wait_for(lambda: len(fake.to(111)) > n_before)
+    check("the Status button answers", "Open incidents" in fake.to(111)[-1]["text"], True)
+    check("the press is acknowledged",
+          any(c[0] == "answerCallbackQuery" and c[1]["callback_query_id"] == "q1"
+              for c in fake.calls), True)
+    fake.push({"id": "q2", "from": eve, "data": "status",
+               "message": {"message_id": 6, "chat": {"id": 222, "type": "private"}}},
+              kind="callback_query")
+    time.sleep(1.5)
+    check("a stranger's press gets nothing", len(fake.to(222)), 0)
 
     print("alerts")
     incident._config_cache = {"incident_watcher": {"notify": True}}
@@ -290,7 +319,7 @@ try:
     incident.write_incident("LNX-1011", "process", "worse", "high", "High thing happened")
     got = wait_for(lambda: [m for m in fake.to(111) if "High thing happened" in m["text"]])
     check("a new high incident reaches Sam", bool(got), True)
-    check("it says new and HIGH", bool(got) and "new, HIGH" in got[0]["text"], True)
+    check("it says new and HIGH", bool(got) and "HIGH: new incident" in got[0]["text"], True)
     n_before = len(fake.to(111))
     incident.write_incident("PRC-1001", "process", "other", "high", "Other medium")
     waiting = wait_for(lambda: call("/state")[1]["alerts"]["waiting"])
@@ -300,9 +329,14 @@ try:
     got = wait_for(lambda: [m for m in fake.to(111) if "2 urgent incidents" in m["text"]])
     check("critical does not wait for the gap", bool(got), True)
     check("and takes the waiting one along",
-          bool(got) and "Other medium" in got[0]["text"] and "CRITICAL" in got[0]["text"], True)
+          bool(got) and "Other medium" in got[0]["text"] and "\U0001F534" in got[0]["text"], True)
+    incident.write_incident("PRC-1002", "process", "<b>x</b> & y", "critical", "Title <i>with</i> tags & more")
+    got = wait_for(lambda: [m for m in fake.to(111) if "with" in m["text"] and "tags" in m["text"]], 15)
+    check("outside text is escaped, never markup",
+          bool(got) and "Title &lt;i&gt;with&lt;/i&gt; tags &amp; more" in got[0]["text"]
+          and "&lt;b&gt;x&lt;/b&gt; &amp; y" in got[0]["text"], True)
     check("Kim, not paired, got no alert",
-          any("urgent" in m["text"] for m in fake.to(333)), False)
+          any("incident" in m["text"] for m in fake.to(333)), False)
 
     print("revoke")
     code_, out = call("/revoke", "POST")

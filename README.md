@@ -280,7 +280,8 @@ bot that you make yourself with @BotFather, so the bot belongs to you.
   ones raised to that level. A burst becomes one message, there is a daily
   limit, and you can set quiet hours that only critical gets through.
 - **It answers a few questions.** `/status` says how the computer is doing,
-  `/pending` lists what waits for your decision.
+  `/pending` lists what waits for your decision. Both are in the bot's menu
+  and on two buttons under every alert.
 - **It cannot change anything yet.** This first version only watches. Acting
   from the phone comes next, behind a PIN and an authenticator code, so a
   taken over Telegram account is not enough.
