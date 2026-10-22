@@ -16,7 +16,7 @@ import tempfile
 import _tools
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PY_TARGETS = ["core", "tools", "api", "ebpf", "main.py", "adapters.py"]
+PY_TARGETS = ["core", "tools", "api", "ebpf", "modules", "main.py", "adapters.py"]
 SKIP_DIRS = ("ebpf/.toolchain", "coverage", "__pycache__", ".git", "logs")
 SEMGREP_EXCLUDE = (".toolchain", "coverage", "__pycache__", "logs")
 

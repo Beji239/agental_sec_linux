@@ -3,8 +3,9 @@
 Start AgentalSec from its launcher in your app menu or on your desktop. If
 you have no launcher yet, run `./scripts/install_launchers.sh` once from the
 project folder (step 9 of [SETUP.md](../SETUP.md)). The dashboard opens at
-http://127.0.0.1:5000. It has 16 tabs. This page goes
-through each one: what it shows, how to read it, and what you would do there.
+http://127.0.0.1:5000. It has 16 tabs, plus one for each add-on module you
+switch on, such as Remote. This page goes through each one: what it shows,
+how to read it, and what you would do there.
 
 Every picture on this page was taken from the real dashboard running on
 made-up sample data: a home network at 10.99.0.x with a router, a desktop, a
@@ -751,6 +752,60 @@ Everything silenced, in one place.
   device, so the same open port stops raising a finding.
 
 If the chat and this tab disagree about what is silenced, this tab is right.
+
+## Remote
+
+The tab of the Remote manager module. A module is off until you switch it
+on, and while it is off this tab shows only what it does and the switch.
+
+<p align="center">
+  <img src="../assets/screenshots/remote_off.png" alt="Remote manager switched off" width="800">
+</p>
+
+*Switched off: nothing of it runs, and it uses no memory. Sample data.*
+
+Switched on, it runs as its own process, and the line under the switch says
+how much memory it uses.
+
+- **Telegram.** Whether the bot is connected and which bot it is, how many
+  people are paired, and how many alerts went out today.
+- **Bot token.** Make a bot with @BotFather in Telegram (`/newbot`, a name,
+  and a username ending in `bot`) and paste the token here. It is stored
+  encrypted in `.env`. Saving it restarts the module with the new token.
+
+<p align="center">
+  <img src="../assets/screenshots/remote_people.png" alt="People, a pairing code and the alert choices" width="800">
+</p>
+
+*One person paired, a code for the second one, and the alert choices.
+Sample data.*
+
+- **People.** Enter a name and a phone number and press **Add person**. A
+  code appears, valid for 15 minutes and good once, with a link that opens
+  the bot. The person sends the code and presses **Share my phone number**;
+  the bot checks it is the same number and that the contact is their own,
+  then they are paired. **Pair again** makes a new code, **Remove** takes a
+  person off and tells them.
+- **Alerts.** Which levels go out: critical only, high and critical, or
+  medium and up. Several within ten minutes go out as one message, at most
+  20 a day. Quiet hours hold back everything but critical until they end.
+  **Send a test message** checks that the alerts reach everyone paired.
+
+<p align="center">
+  <img src="../assets/screenshots/remote_history.png" alt="History and Revoke remote" width="800">
+</p>
+
+*Everything the bot did, including a stranger it ignored. Sample data.*
+
+- **History.** Every pairing, removal, alert and refusal, newest first. A
+  stranger who writes to the bot gets no answer and shows up here with their
+  Telegram name.
+- **Revoke remote.** Removes everyone at once and tells them. Use it if a
+  phone is lost. Switch the module off as well if you want the bot silent.
+
+On the phone, `/status` says how the computer is doing and `/pending` lists
+what waits for your decision. Deciding from the phone comes in a later
+version.
 
 ## Settings
 

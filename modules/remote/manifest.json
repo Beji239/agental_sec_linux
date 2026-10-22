@@ -1,0 +1,16 @@
+{
+  "name": "remote",
+  "title": "Remote manager",
+  "tab": "Remote",
+  "version": "0.1.0",
+  "app_min": "2.6.1",
+  "summary": "Urgent alerts on your phone through a Telegram bot you create yourself. Only people you pair here can use it. This first version only sends alerts and answers /status and /pending; it cannot change anything on this computer yet.",
+  "ram_mb": 40,
+  "needs": [
+    "A Telegram bot token from @BotFather",
+    "An outgoing connection to api.telegram.org; nothing is opened to the internet"
+  ],
+  "secrets": ["AGENTAL_REMOTE_BOT_TOKEN"],
+  "entry": "service.py",
+  "ui": "ui.js"
+}

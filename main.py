@@ -2563,6 +2563,12 @@ def main(argv=None):
         except Exception as e:
             logger.warning(f"Could not release open permission cards: {e}")
 
+        try:
+            from core import module_host
+            module_host.stop_all()
+        except Exception as e:
+            logger.warning(f"Add-on modules did not stop cleanly: {e}")
+
         # The enrichment worker holds a write handle between jobs, so it stops
         # before retention touches the file.
         try:
@@ -2775,6 +2781,15 @@ def main(argv=None):
         listener = _bind_listener(host, port)
     except OSError as e:
         return _refuse_busy_port(host, port, _port_holder(host, port), reason=e)
+
+    # Add-on modules left switched on, each in its own process.
+    try:
+        from core import module_host
+        module_host.configure(config)
+        for name in module_host.start_switched_on():
+            logger.info(f"[OK] module {name}")
+    except Exception as e:
+        logger.warning(f"Add-on modules did not start: {e}")
 
     logger.info(f"Dashboard: http://{host}:{port}")
     logger.info("AgentalSec ready.")

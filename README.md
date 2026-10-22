@@ -258,6 +258,45 @@ tab installs it, helpers and sensors included, and restarts it.
 This Computer tab lists the ordinary background programs that nothing depends
 on, and lets you stop them to free memory, with an Undo for each.
 
+## Remote manager, alerts on your phone
+
+<p align="center">
+  <img src="assets/screenshots/remote.png" alt="The Remote tab: switch, Telegram, bot token and people" width="800">
+</p>
+
+*The Remote tab with one person paired and one waiting for a code. Sample
+data.*
+
+When something serious happens while I am away from the computer, I want to
+know. Remote manager sends the urgent alerts to your phone through a Telegram
+bot that you make yourself with @BotFather, so the bot belongs to you.
+
+- **Only people you pair can use it.** You enter a name and a phone number,
+  the person sends the bot a one-time code and shares their number with
+  Telegram's own button. The bot checks it is the same number and their own.
+  Anyone else who writes to it gets no answer and is listed in the tab's
+  history.
+- **The same alerts as the desktop.** New high and critical incidents, and
+  ones raised to that level. A burst becomes one message, there is a daily
+  limit, and you can set quiet hours that only critical gets through.
+- **It answers a few questions.** `/status` says how the computer is doing,
+  `/pending` lists what waits for your decision.
+- **It cannot change anything yet.** This first version only watches. Acting
+  from the phone comes next, behind a PIN and an authenticator code, so a
+  taken over Telegram account is not enough.
+- **Nothing is opened to the internet.** The bot only connects out to
+  Telegram. Telegram can read bot chats, so nothing secret is ever sent;
+  an alert carries the incident's title and the device it is about.
+
+**It is a module, and off means off.** Remote manager is the first add-on
+built on a rule I set for everything new: it is not on unless you switch it
+on, and switched off it is gone, with no process, nothing loaded and no
+memory used. Switched on it runs as its own small process, about 25 MB, and
+can only read what the app shows it. Everything about it lives in its own
+tab: the switch, the bot token, the people, the alert choices, the history
+and a button that removes everyone at once. See the
+[Remote tab](docs/TOUR.md#remote) in the tour.
+
 ## How well it detects malware
 
 Because of my own limits, I could not test AgentalSec against its full
@@ -312,8 +351,9 @@ your results would be very welcome.
 
 ## Where better detection will come from
 
-This is planned, not built yet. Each part will be an optional module in its
-own repository, and AgentalSec keeps working the same without them.
+This is planned, not built yet. Each part will be an optional module, like
+Remote manager: off unless you switch it on, and AgentalSec keeps working the
+same without them.
 
 - **A sandbox.** A throwaway Linux virtual machine, reset to a clean copy
   before every job, with its network off by default. The agent can unpack
@@ -464,7 +504,8 @@ older than the project, with the command that brings it level.
 - Outbound traffic goes to the model provider you configure, the threat feeds
   and lookup services, and a public address lookup that places the threat
   map's home pin. Turn the lookup off with `geoip.locate_online` in
-  `config.json`.
+  `config.json`. With Remote manager switched on, the bot also connects to
+  Telegram, and the alerts it sends pass through Telegram's servers.
 - Whatever you ask is sent to the model you configure, together with the data
   its tools read. With a local model server, nothing the analyst reads leaves
   your network.

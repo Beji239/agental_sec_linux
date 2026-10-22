@@ -35,7 +35,8 @@ def check(label, got, want):
         fails.append(label)
 
 
-ROUTES = (ROOT / "api" / "routes.py").read_text(encoding="utf-8")
+ROUTES = "".join((ROOT / "api" / f).read_text(encoding="utf-8")
+                 for f in ("routes.py", "module_routes.py"))
 UI     = (ROOT / "ui" / "index.html").read_text(encoding="utf-8")
 
 DEFINED = set(re.findall(r'@app\.route\("([^"]+)"', ROUTES))

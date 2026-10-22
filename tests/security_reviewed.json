@@ -744,6 +744,55 @@
  {
   "tool": "bandit",
   "rule": "B608",
+  "path": "core/module_feed.py",
+  "text": "f\"SELECT {', '.join(pick)} FROM device_hold \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/module_feed.py",
+  "text": "f\"SELECT {cols} FROM incident WHERE id <= ? AND severity_rank >= ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
+  "path": "core/module_feed.py",
+  "text": "f\"SELECT {cols} FROM incident WHERE id > ? AND severity_rank >= ? \"",
+  "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B104",
+  "path": "core/module_host.py",
+  "text": "if host in (\"0.0.0.0\", \"::\", \"\"):",
+  "reason": "an address compared with the wildcard, not a bind; the dashboard binds 127.0.0.1"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B105",
+  "path": "core/module_host.py",
+  "text": "TOKEN_HEADER = \"X-Module-Token\"",
+  "reason": "a dictionary key or a detection token, not a password"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B404",
+  "path": "core/module_host.py",
+  "text": "import subprocess",
+  "reason": "imports subprocess"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B603",
+  "path": "core/module_host.py",
+  "text": "proc = subprocess.Popen(",
+  "reason": "an argument list with no shell"
+ },
+ {
+  "tool": "bandit",
+  "rule": "B608",
   "path": "core/own_install.py",
   "text": "f\"SELECT id, detection_id, entity_value, raw_data, dismissed \"",
   "reason": "SQL text from pieces; tests/test_sql_injection.py checks each one"
@@ -2438,6 +2487,13 @@
  {
   "tool": "semgrep",
   "rule": "insecure-file-permissions",
+  "path": "core/module_host.py",
+  "text": "os.chmod(path, 0o700)",
+  "reason": "a module's data folder made private to this account, 0700"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "insecure-file-permissions",
   "path": "main.py",
   "text": "os.chmod(_LOG_DIR, 0o700)",
   "reason": "sets 0o700, owner only"
@@ -2448,6 +2504,13 @@
   "path": "main.py",
   "text": "logger.error(",
   "reason": "the message names the key, it never contains it"
+ },
+ {
+  "tool": "semgrep",
+  "rule": "httpsconnection-detected",
+  "path": "modules/remote/tg_api.py",
+  "text": "conn = http.client.HTTPSConnection(self._host, self._port,",
+  "reason": "certificates are checked: the context is ssl.create_default_context()"
  },
  {
   "tool": "semgrep",

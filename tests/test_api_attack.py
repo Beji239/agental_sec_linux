@@ -5,7 +5,7 @@ Section 4 of the security plan, the part that needs no outside tool. Every
 route is called without credentials, with a wrong key and a forged session,
 with a foreign Host header and a foreign Origin, with the wrong method, with
 malformed bodies and with hostile query strings. Nothing may answer 500 (503, a module not loaded here, is honest),
-nothing but the four public routes may answer without a credential, and no
+nothing but the public routes may answer without a credential, and no
 answer may grant another origin.
 
 The app runs from a throwaway copy of the code, with its own home folder and
@@ -58,7 +58,7 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}}, {}, "attack",
 app.config["PROPAGATE_EXCEPTIONS"] = False
 client = app.test_client()
 LOCAL = {"HTTP_HOST": "127.0.0.1:5000"}
-PUBLIC = {"/", "/open", "/ui/<path:filename>"}
+PUBLIC = {"/", "/open", "/ui/<path:filename>", "/module-ui/<name>/ui.js"}
 
 def url(rule):
     out = []

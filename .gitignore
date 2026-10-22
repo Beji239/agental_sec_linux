@@ -13,6 +13,9 @@ data/mam.csv
 data/mas.csv
 data/lolbas.json
 
+# Add-on module state: paired people, numbers and history
+module_data/
+
 # Build output
 __pycache__/
 *.pyc

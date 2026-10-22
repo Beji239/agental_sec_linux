@@ -3806,4 +3806,7 @@ def register_routes(app):
         result = execute_tool("web_search", {"query": query})
         return jsonify(result)
 
+    from api import module_routes
+    module_routes.register(app, require_api_key, _throttle_record_failure)
+
     logger.info("Routes registered.")

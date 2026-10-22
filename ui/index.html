@@ -241,6 +241,9 @@
     user-select: none;
   }
 
+  /* Module tabs make the row longer; a little less padding keeps Settings in view. */
+  #nav.has-modules .nav-tab { padding: 10px 11px; }
+
   .nav-tab:hover  { color: var(--text); }
   .nav-tab.active { color: var(--green); border-bottom-color: var(--green); }
 
@@ -3966,6 +3969,7 @@ async function init() {
   // reloads. Say what happened to it rather than leaving it out.
   showLostCards();
   loadVersion();
+  loadModuleTabs();
 }
 
 // The number comes from the VERSION file the release shipped, with any
@@ -4380,6 +4384,7 @@ const UI_ACTIONS = new Set([
   'markEnrollmentDone',
   'mergeDevices',
   'mergeSameMac',
+  'moduleSwitch',
   'nameDevice',
   'onAgentTick',
   'openMapChat',
@@ -4650,6 +4655,151 @@ function loadPage(name) {
   if (name === 'review')     { loadBlindingBudget(); loadDismissed(); loadSuppressions();
                                loadIntegrity(); loadExpectedPorts(); }
   if (name === 'settings')   { loadRetention(); loadUpdateStatus(); return loadSettings(); }
+  if (name.startsWith('mod-')) return loadModulePage(name.slice(4));
+}
+
+// ADD-ON MODULES
+//
+// Each installed module gets its own tab, with its switch at the top. While
+// it is off the tab shows only that; the module's own page code is loaded
+// only once it is on. See core/module_host.py.
+const _moduleUiLoaded = {};
+
+async function readModules() {
+  const r = await fetch('/api/module-host/list', { headers: authHeaders(), cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return (await r.json()).modules || [];
+}
+
+async function loadModuleTabs() {
+  let list;
+  try { list = await readModules(); } catch (e) { return; }
+  const nav = document.getElementById('nav');
+  if (list.length) nav.classList.add('has-modules');
+  const before = nav.querySelector('[data-page="settings"]');
+  const pages = document.getElementById('page-settings').parentElement;
+  for (const m of list) {
+    const page = 'mod-' + m.name;
+    if (document.getElementById('page-' + page)) continue;
+    const tab = document.createElement('div');
+    tab.className = 'nav-tab';
+    tab.dataset.page = page;
+    tab.setAttribute('data-onclick', `showPage('${page}')`);
+    tab.textContent = m.tab || m.title;
+    nav.insertBefore(tab, before);
+    const div = document.createElement('div');
+    div.className = 'page';
+    div.id = 'page-' + page;
+    pages.appendChild(div);
+  }
+}
+
+function moduleHeader(m) {
+  let state, color;
+  if (m.problem) {
+    state = m.problem; color = 'var(--red)';
+  } else if (m.running) {
+    state = `On. Running as its own process (${m.pid}), using ${m.ram_mb ?? '?'} MB` +
+            (m.ram_target_mb ? ` of memory; the target is under ${m.ram_target_mb} MB.` : ' of memory.');
+    color = 'var(--green)';
+  } else {
+    state = 'Off. Nothing of it is running or loaded, and it uses no memory.';
+    color = 'var(--text-dim)';
+  }
+  const needs = (m.needs || []).map(n => `<li>${esc(n)}</li>`).join('');
+  const blocked = !m.fits
+    ? `<div class="card-note" style="color:var(--red);">Needs AgentalSec ${esc(m.app_min)} or newer.</div>` : '';
+  const on = m.on && !m.problem;
+  return `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;">
+        <span class="card-title" style="margin:0;">${esc(m.title)}
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-left:6px;">module ${esc(m.version)}</span></span>
+        <span>
+          ${m.problem && m.on ? `<button class="btn" data-onclick="moduleSwitch('${esc(m.name)}', false)">Switch off</button>` : ''}
+          <button class="btn" data-onclick="moduleSwitch('${esc(m.name)}', ${on ? 'false' : 'true'})"
+                  ${m.fits ? '' : 'disabled'}>${on ? 'Switch off' : (m.problem ? 'Start again' : 'Switch on')}</button>
+        </span>
+      </div>
+      <div class="card-note" style="margin-top:8px;">${esc(m.summary)}</div>
+      ${needs ? `<ul class="card-note" style="margin:6px 0 0 18px;">${needs}</ul>` : ''}
+      <div style="font-size:12px;margin-top:10px;color:${color};" id="mod-state-${esc(m.name)}">${esc(state)}</div>
+      ${blocked}
+    </div>`;
+}
+
+function loadModuleUi(name) {
+  if (_moduleUiLoaded[name]) return _moduleUiLoaded[name];
+  _moduleUiLoaded[name] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `/module-ui/${name}/ui.js`;
+    s.onload = resolve;
+    s.onerror = () => { delete _moduleUiLoaded[name]; reject(new Error('could not load')); };
+    document.head.appendChild(s);
+  });
+  return _moduleUiLoaded[name];
+}
+
+function moduleHelpers(name, m) {
+  const base = `/api/module-host/${name}`;
+  const send = async (url, method, body) => {
+    try {
+      const r = await fetch(url, { method, headers: authHeaders(), cache: 'no-store',
+                                   body: method === 'POST' ? JSON.stringify(body || {}) : undefined });
+      let data = {};
+      try { data = await r.json(); } catch (e) {}
+      return { ok: r.ok, status: r.status, data };
+    } catch (e) {
+      return { ok: false, status: 0, data: { error: 'The app did not answer.' } };
+    }
+  };
+  return {
+    module: m,
+    esc,
+    call: (method, path, body) => send(`${base}/call${path}`, method, body),
+    setSecret: (env, value) => send(`${base}/secret`, 'POST', { env, value }),
+    visible: () => currentPage === 'mod-' + name,
+    reload: () => loadModulePage(name),
+  };
+}
+
+async function loadModulePage(name) {
+  const page = document.getElementById('page-mod-' + name);
+  if (!page) return;
+  let m;
+  try { m = (await readModules()).find(x => x.name === name); } catch (e) {}
+  if (!m) {
+    page.innerHTML = '<div class="card"><div class="card-note">The module list could not be read.</div></div>';
+    return;
+  }
+  const ui = (window.AgentalModuleUI || {})[name];
+  if (ui && ui.stop) ui.stop();
+  page.innerHTML = moduleHeader(m) + (m.running ? `<div id="mod-body-${name}"></div>` : '');
+  if (!m.running) return;
+  try {
+    await loadModuleUi(name);
+    window.AgentalModuleUI[name].render(document.getElementById('mod-body-' + name),
+                                        moduleHelpers(name, m));
+  } catch (e) {
+    document.getElementById('mod-body-' + name).innerHTML =
+      '<div class="card"><div class="card-note" style="color:var(--red);">The module page could not be loaded.</div></div>';
+  }
+}
+
+async function moduleSwitch(name, on) {
+  const el = document.getElementById('mod-state-' + name);
+  if (el) el.textContent = on ? 'Starting...' : 'Stopping...';
+  try {
+    const r = await fetch(`/api/module-host/${name}/switch`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ on }) });
+    const d = await r.json();
+    if (!r.ok && el) { el.textContent = d.reason || 'It did not switch.'; el.style.color = 'var(--red)'; return; }
+  } catch (e) {
+    if (el) el.textContent = 'The app did not answer.';
+    return;
+  }
+  if (on) await new Promise(res => setTimeout(res, 800));
+  loadModulePage(name);
 }
 
 // POLLING
