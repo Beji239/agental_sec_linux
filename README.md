@@ -90,6 +90,8 @@ How to enrol a router: [docs/ROUTER.md](docs/ROUTER.md).
   can do, approval, the duty loop
 - [docs/ROUTER.md](docs/ROUTER.md), the router agent, Pi-hole and AdGuard
   Home, other Linux machines over SSH
+- [docs/PRIVACY.md](docs/PRIVACY.md), privacy and security: every measure
+  that protects your data on this machine
 - [SETUP.md](SETUP.md), installation step by step, and
   [updating an install](SETUP.md#updating)
 
@@ -518,24 +520,44 @@ older than the project, with the command that brings it level.
 
 ## Privacy
 
-- Your data stays on this machine. The database, `config.json` and `.env`
-  are in the project folder and only your account can read them. Stored
-  secrets are encrypted with a key derived from this machine. The kernel
-  camera and the names helper write to `/var/lib/agental_sec`, which only
-  root and your account can open.
-- The dashboard listens on 127.0.0.1 only and needs its API key. The page
-  itself carries no key: the browser signs in once and keeps a session for 30
-  days, and the page runs no script but its own. Requests that name any other
-  host are refused. To use it from another machine, use an SSH
-  tunnel (see [SETUP.md](SETUP.md)).
-- Outbound traffic goes to the model provider you configure, the threat feeds
-  and lookup services, and a public address lookup that places the threat
-  map's home pin. Turn the lookup off with `geoip.locate_online` in
-  `config.json`. With Remote manager switched on, the bot also connects to
-  Telegram, and the alerts it sends pass through Telegram's servers.
-- Whatever you ask is sent to the model you configure, together with the data
-  its tools read. With a local model server, nothing the analyst reads leaves
-  your network.
+AgentalSec is hosted only on your own computer, and it still guards your data
+as if every other program, every other account and every web page were a
+stranger. The full list is in [docs/PRIVACY.md](docs/PRIVACY.md). In short:
+
+- **Your data stays on this machine, readable by you only.** The database,
+  `config.json`, `.env`, the logs and each module's data are owner only, and
+  the app narrows them again at every start. `/var/lib/agental_sec`, where the
+  kernel camera and names helper write, is closed to every other account.
+  There is no telemetry.
+- **Secrets are encrypted.** Keys live in `.env`, never in `config.json`,
+  encrypted with a key derived from this machine and your account, so a copy
+  does not open anywhere else.
+- **Loopback only.** The dashboard listens on 127.0.0.1, so nothing on your
+  network can reach it. A request that names any other host is refused, which
+  stops web pages reaching it through your browser. From another computer,
+  use an SSH tunnel (see [SETUP.md](SETUP.md)).
+- **Signed in, not guessable.** Every API call needs the app key, compared in
+  constant time, and repeated wrong keys lock the caller out. The page holds
+  no key: the browser signs in once through a two minute, one time link and
+  keeps a signed 30 day session. The page runs no script but its own.
+- **Hashes that make tampering visible.** High value writes go into a hash
+  chained journal, the files that decide who gets in are hashed and watched,
+  and sessions, links and pairing codes are signed or stored only as hashes.
+- **Every part has only the rights it needs.** The app runs as you. Packet
+  capture, the names helper and the kernel camera are separate services with
+  a few capabilities each, sandboxed by systemd, and two of them have no
+  network at all. Anything done as root goes through two narrow helpers, and
+  a change to your system only after you approve it.
+- **Hostile text stays text.** Names and payloads an attacker can choose are
+  cleaned before they reach the logs, and fenced as evidence before they reach
+  the model.
+- **What leaves the machine:** your questions and the data the analyst's tools
+  read, to the model you configure (none of it leaves your network with a
+  local model); the threat feeds and lookups; a public address lookup for the
+  map's home pin, off with `geoip.locate_online`; the daily update check; and
+  Telegram, only with Remote manager switched on.
+
+**[Read the full privacy explanation](docs/PRIVACY.md)**
 
 ## What it sees, and how to see more
 
