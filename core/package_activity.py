@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 DPKG_LOG = "/var/log/dpkg.log"
 DPKG_INFO = "/var/lib/dpkg/info"
+DPKG_STATUS = "/var/lib/dpkg/status"
 BEFORE = timedelta(minutes=90)     # a monitor can notice late
 AFTER = timedelta(minutes=5)
 ACTIONS = ("install", "upgrade", "configure", "trigproc")
@@ -28,6 +29,11 @@ DPKG_TEMP = (".dpkg-new", ".dpkg-tmp", ".dpkg-old", ".dpkg-dist",
              ".dpkg-bak")
 
 _log_cache = {"at": 0.0, "mtime": None, "rows": []}
+# One dpkg-query loads the whole package database, a few seconds on a busy
+# disk, so owners are asked in batches and kept until dpkg changes.
+OWNER_CACHE_MAX = 5000
+OWNER_QUERY_TIMEOUT = 30
+_owner_cache = {"key": None, "owners": {}, "conffiles": {}}
 
 
 def _spellings(path: str) -> list:
@@ -49,19 +55,74 @@ def dpkg_temp_base(path: str) -> str | None:
     return None
 
 
+def _known_owners() -> dict:
+    """Owners asked so far, emptied when dpkg's database changes."""
+    try:
+        key = (os.stat(DPKG_STATUS).st_mtime, os.stat(DPKG_INFO).st_mtime)
+    except OSError:
+        key = None
+    if key != _owner_cache["key"] or \
+            len(_owner_cache["owners"]) > OWNER_CACHE_MAX:
+        _owner_cache.update(key=key, owners={}, conffiles={})
+    return _owner_cache["owners"]
+
+
+def _conffiles(package: str) -> dict:
+    """{path: md5} of a package's conffiles, asked once per package."""
+    _known_owners()
+    known = _owner_cache["conffiles"]
+    if package in known:
+        return known[package]
+    try:
+        r = subprocess.run(["dpkg-query", "-W", "-f=${Conffiles}\n", package],
+                           capture_output=True, text=True,
+                           timeout=OWNER_QUERY_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    sums = {}
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            sums[parts[0]] = parts[1]
+    known[package] = sums
+    return sums
+
+
+def _query_owners(paths: list) -> dict:
+    """{path: package or None} from one dpkg-query; {} when it fails."""
+    found = dict.fromkeys(paths)
+    try:
+        r = subprocess.run(["dpkg-query", "-S", *paths], capture_output=True,
+                           text=True, timeout=OWNER_QUERY_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    for line in r.stdout.splitlines():
+        pkgs, _, listed = line.partition(": ")
+        listed = listed.strip()
+        if listed in found and found[listed] is None and "," not in pkgs \
+                and not pkgs.startswith("diversion"):
+            found[listed] = pkgs.split(":")[0].strip()
+    return found
+
+
+def _prefetch(paths: list) -> None:
+    """Look up the owners of many paths in one dpkg-query."""
+    known = _known_owners()
+    missing = list(dict.fromkeys(
+        s for p in paths for s in _spellings(p.rstrip("/") or "/")
+        if s not in known))
+    if missing:
+        known.update(_query_owners(missing))
+
+
 def owner(path: str) -> str | None:
     """The package that owns this path, or None."""
-    for p in _spellings(path.rstrip("/") or "/"):
-        try:
-            r = subprocess.run(["dpkg-query", "-S", p], capture_output=True,
-                               text=True, timeout=10)
-        except (OSError, subprocess.SubprocessError):
-            return None
-        for line in r.stdout.splitlines():
-            pkgs, _, listed = line.partition(": ")
-            if listed.strip() == p and "," not in pkgs and not \
-                    pkgs.startswith("diversion"):
-                return pkgs.split(":")[0].strip()
+    spellings = _spellings(path.rstrip("/") or "/")
+    _prefetch(spellings)
+    known = _owner_cache["owners"]
+    for p in spellings:
+        if known.get(p):
+            return known[p]
     return None
 
 
@@ -123,15 +184,10 @@ def _recorded_md5(package: str, path: str) -> str | None:
                     return digest
     except OSError:
         pass
-    try:
-        r = subprocess.run(["dpkg-query", "-W", "-f=${Conffiles}\n", package],
-                           capture_output=True, text=True, timeout=10)
-        for line in r.stdout.splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[0] in _spellings(path):
-                return parts[1]
-    except (OSError, subprocess.SubprocessError):
-        pass
+    sums = _conffiles(package)
+    for p in _spellings(path):
+        if p in sums:
+            return sums[p]
     return None
 
 
@@ -164,6 +220,39 @@ def explains(path: str, at: datetime = None) -> dict | None:
         return None
 
 
+def _newest_entries(path: str) -> list:
+    """The 20 most recently changed entries of a folder."""
+    return sorted(os.scandir(path), key=lambda e: -e.stat(
+        follow_symlinks=False).st_ctime)[:20]
+
+
+def _owner_candidates(path: str, depth: int) -> list:
+    """Every path _explains asks dpkg about under this folder, so one query
+    answers the whole walk."""
+    out = []
+    try:
+        entries = _newest_entries(path)
+    except OSError:
+        return out
+    for e in entries:
+        try:
+            is_dir = e.is_dir(follow_symlinks=False)
+            is_link = e.is_symlink()
+        except OSError:
+            continue
+        if is_dir:
+            if depth < 1:
+                out += _owner_candidates(e.path, depth + 1)
+            continue
+        out.append(e.path)
+        base = dpkg_temp_base(e.path)
+        if base:
+            out.append(base)
+        if is_link and depth < 1:
+            out.append(os.path.realpath(e.path))
+    return out
+
+
 def _explains(path: str, at: datetime = None, depth: int = 0) -> dict | None:
     if not path or depth > 2:
         return None
@@ -176,10 +265,11 @@ def _explains(path: str, at: datetime = None, depth: int = 0) -> dict | None:
         st = None
     if st is not None and os.path.isdir(path) and not os.path.islink(path):
         try:
-            entries = sorted(os.scandir(path), key=lambda e: -e.stat(
-                follow_symlinks=False).st_ctime)[:20]
+            entries = _newest_entries(path)
         except OSError:
             return None
+        if depth == 0:
+            _prefetch(_owner_candidates(path, 0))
         for e in entries:
             hit = _explains(e.path, at, depth + 1)
             if hit:
