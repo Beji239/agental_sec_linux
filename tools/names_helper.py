@@ -149,7 +149,9 @@ def write(path: str, data: dict) -> None:
     tmp = f"{path}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, separators=(",", ":"))
-    os.chmod(tmp, 0o644)
+    # Group-readable once the folder hands new files the app's group; an
+    # older install still has root's group, so it stays readable there.
+    os.chmod(tmp, 0o640 if os.stat(tmp).st_gid else 0o644)
     os.replace(tmp, path)
 
 

@@ -54,6 +54,7 @@ REAL_USER="${SUDO_USER:-}"
 if [[ -z "$REAL_USER" ]]; then
     REAL_USER="$(stat -c '%U' "$PROJECT_ROOT" 2>/dev/null || echo root)"
 fi
+REAL_GROUP="$(id -gn "$REAL_USER" 2>/dev/null || echo "$REAL_USER")"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -175,8 +176,8 @@ show_plan() {
     say "   root-owned, mode 0755, so the service does not run out of a"
     say "   directory the operator can write."
     say ""
-    say "2. create $DATA_DIR (root:root, 0755) for the events file. The"
-    say "   operator can READ it -- the app does -- and cannot write it."
+    say "2. create $DATA_DIR (root:$REAL_GROUP, 2750) for the events file."
+    say "   The app's group can read it, no other account can, only root writes."
     say ""
     say "3. create $UNIT_PATH with this content:"
     say ""
@@ -403,11 +404,13 @@ restart loop in the journal and no events, which reads as a quiet machine."
     install -o root -g root -m 0644 "$OBJECT_SRC" "$OBJECT_DST" || die "could not install the object"
     say "  installed $OBJECT_DST ($(stat -c '%s' "$OBJECT_DST") bytes, root:root, 0644)"
 
-    # THE DATA DIRECTORY IS WORLD-READABLE AND ROOT-WRITABLE, deliberately. The
-    # app runs as the operator and must be able to READ the events; only root
-    # writes them.
-    install -d -o root -g root -m 0755 "$DATA_DIR" || die "could not create $DATA_DIR"
-    say "  created/confirmed $DATA_DIR (root:root, 0755 -- readable by $REAL_USER)"
+    # The app reads the events as $REAL_USER, only root writes them. The setgid
+    # bit gives new files the app's group, so no other account can read them.
+    install -d -o root -g "$REAL_GROUP" -m 2750 "$DATA_DIR" || die "could not create $DATA_DIR"
+    for f in "$EVENTS_DB" "$EVENTS_DB-wal" "$EVENTS_DB-shm"; do
+        [[ -e "$f" ]] && { chgrp "$REAL_GROUP" "$f"; chmod 0640 "$f"; }
+    done
+    say "  created/confirmed $DATA_DIR (root:$REAL_GROUP, 2750, readable by $REAL_USER only)"
 
     install -o root -g root -m 0644 "$tmp" "$UNIT_PATH" || die "could not install the unit"
     rm -f "$tmp"

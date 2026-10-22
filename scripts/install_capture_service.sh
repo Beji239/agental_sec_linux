@@ -89,7 +89,7 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
-UMask=0022
+UMask=0027
 # Not set, on purpose: PrivateNetwork, which would show the helper its own
 # empty network instead of this machine's connections.
 
@@ -168,7 +168,10 @@ do_apply() {
     [[ "$(id -u)" -eq 0 ]] || die "--apply needs root: sudo $0 --apply"
     find "$PROJECT_ROOT" -xdev -user root -exec chown "$REAL_USER:$REAL_GROUP" {} + \
         || die "could not hand the project's files back to $REAL_USER"
-    install -d -o root -g root -m 0755 "$INSTALL_DIR" "$DATA_DIR" || die "mkdir failed"
+    install -d -o root -g root -m 0755 "$INSTALL_DIR" || die "mkdir failed"
+    # The setgid bit gives names.json the app's group; no other account reads it.
+    install -d -o root -g "$REAL_GROUP" -m 2750 "$DATA_DIR" || die "mkdir failed"
+    [[ -e "$NAMES_FILE" ]] && { chgrp "$REAL_GROUP" "$NAMES_FILE"; chmod 0640 "$NAMES_FILE"; }
     install -o root -g root -m 0755 "$NAMES_SRC" "$NAMES_DST" || die "copy failed"
     printf '%s\n' "$NAMES_UNIT_CONTENT" > "$UNIT_DIR/$NAMES_UNIT" || die "unit write failed"
     printf '%s\n' "$CAPTURE_UNIT_CONTENT" > "$UNIT_DIR/$CAPTURE_UNIT" || die "unit write failed"

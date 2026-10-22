@@ -171,6 +171,14 @@ def resolve(config: dict, project_root: Path) -> dict:
     }
 
 
+def _write_private(path: Path, body: str) -> None:
+    """Write .env as owner only before the first byte lands, new file or old."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        os.fchmod(fd, 0o600)
+        f.write(body)
+
+
 def persist_env_value(path: Path, name: str, value: str) -> bool:
     """
     Write NAME=value into .env, creating the file if it is not there yet.
@@ -215,11 +223,7 @@ def persist_env_value(path: Path, name: str, value: str) -> bool:
 
     body = "\n".join(lines) + "\n"
     try:
-        path.write_text(body, encoding="utf-8")
-        # .env holds the provider key too. 0600 regardless of the process
-        # umask, because a world-readable secret file is the whole problem
-        # that putting secrets in a file was supposed to avoid.
-        os.chmod(path, 0o600)
+        _write_private(path, body)
         return True
     except OSError as e:
         logger.warning(f"Could not write {path.name}: {e}")
@@ -333,7 +337,7 @@ def write_env_template(path: Path, app_key: str = "") -> bool:
         logger.warning(f"Could not add the search keys to the template: {e}")
 
     try:
-        path.write_text(body, encoding="utf-8")
+        _write_private(path, body)
         return True
     except OSError as e:
         logger.warning(f"Could not write {path.name}: {e}")

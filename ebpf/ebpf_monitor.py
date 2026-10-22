@@ -283,6 +283,14 @@ class EventSink:
         self.conn = sqlite3.connect(str(path), timeout=15)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
+        # Readable by the app's group only. A file still in root's group is
+        # left alone until the installer hands it over, or the app loses it.
+        for p in (str(path), f"{path}-wal", f"{path}-shm"):
+            try:
+                if os.stat(p).st_gid:
+                    os.chmod(p, 0o640)
+            except OSError:
+                pass
         # E-1, 2026-09-23. WAL AND AN OPEN FOOTPRINT ARE A FILE THE APP CANNOT
         # READ, IN SILENCE. MEASURED on this host, with the write pattern that
         # was here before this round: a live camera file left open by its

@@ -139,8 +139,9 @@ snap["endpoints"]["tcp 203.0.113.77 4444"] = 1
 snap["programs"]["1"] = {"comm": "rootthing", "cmdline": "/usr/sbin/rootthing",
                          "exe": "/usr/sbin/rootthing", "uid": 0}
 names_helper.write(str(names), snap)
-check("the file is written whole, readable", oct(names.stat().st_mode)[-3:]
-      == "644" and json.loads(names.read_text())["endpoints"])
+check("the file is written whole, group-readable only",
+      oct(names.stat().st_mode)[-3:] == ("640" if names.stat().st_gid else "644")
+      and json.loads(names.read_text())["endpoints"])
 sn.NAMES_FILE = str(names)
 index = {}
 added, why = sn._names_from_helper(index)

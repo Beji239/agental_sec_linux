@@ -3,6 +3,7 @@
 # alerts went out. It lives in the module's data folder, apart from the app's.
 
 import hashlib
+import os
 import re
 import secrets
 import sqlite3
@@ -102,6 +103,12 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_DDL)
+        # Paired phones live here: owner only, like the main database.
+        for p in (str(path), f"{path}-wal", f"{path}-shm"):
+            try:
+                os.chmod(p, 0o600)
+            except OSError:
+                pass
 
     def _all(self, sql, params=()):
         with self._lock:
