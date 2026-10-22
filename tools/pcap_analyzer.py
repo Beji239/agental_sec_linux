@@ -2,6 +2,7 @@
 # AgentalSec V2, PCAP file analyzer
 # Python parses, extracts raw records. Model reasons on the result.
 
+import importlib.util
 import logging
 import time
 from collections import defaultdict
@@ -9,10 +10,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# scapy is about 50 MB, so it is only imported when a file is analysed. Here
+# we only ask whether it is installed.
 try:
-    from scapy.all import rdpcap, IP, TCP, UDP, Raw
-    SCAPY_AVAILABLE = True
-except ImportError:
+    SCAPY_AVAILABLE = importlib.util.find_spec("scapy") is not None
+except (ImportError, ValueError):
     SCAPY_AVAILABLE = False
 
 from core import memory_engine as me
@@ -211,6 +213,10 @@ class PcapAnalyzer:
 
         if not SCAPY_AVAILABLE:
             return {"error": "scapy not available"}
+        try:
+            from scapy.all import rdpcap, IP, TCP, UDP, Raw
+        except ImportError as e:
+            return {"error": f"scapy not available: {e}"}
 
         logger.info(f"Analyzing PCAP: {path.name} ({size // 1024} KB, "
                     f"up to {capped} packets)")

@@ -808,8 +808,8 @@
   "tool": "bandit",
   "rule": "B603",
   "path": "core/package_activity.py",
-  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
-  "reason": "a fixed argument list, no shell; the path is passed as one argument"
+  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", *paths], capture_output=True,",
+  "reason": "a fixed argument list, no shell; each path is passed as its own argument"
  },
  {
   "tool": "bandit",
@@ -822,7 +822,7 @@
   "tool": "bandit",
   "rule": "B607",
   "path": "core/package_activity.py",
-  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", p], capture_output=True,",
+  "text": "r = subprocess.run([\"dpkg-query\", \"-S\", *paths], capture_output=True,",
   "reason": "a system program found on PATH"
  },
  {

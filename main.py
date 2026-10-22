@@ -2061,6 +2061,9 @@ def _run_capture() -> int:
 
 def main(argv=None):
     """Main entry point."""
+    # Before any thread starts, or the extra arenas already exist.
+    from core import malloc_tune
+    malloc_tune.limit_arenas()
     args = _parse_args(argv)
     if args.check:
         return _run_check()

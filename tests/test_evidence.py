@@ -80,6 +80,20 @@ sn.set_own_endpoints([("192.0.2.1", 22)])
 check("own traffic", ev.verify("own_traffic", item(
     entity_value="192.0.2.1"))[0])
 sn.set_own_endpoints([])
+# The sniffer's list is empty in the main app, so the router comes from config.
+import json  # noqa: E402
+import tempfile  # noqa: E402
+from core import settings  # noqa: E402
+real_config = settings.CONFIG_PATH
+cfg_file = pathlib.Path(tempfile.mkdtemp(prefix="evcfg.")) / "config.json"
+cfg_file.write_text(json.dumps(
+    {"gateway": {"enabled": True, "host": "192.0.2.5", "port": 22}}))
+settings.CONFIG_PATH = cfg_file
+check("the router login, from config", ev.verify("own_traffic", item(
+    entity_value="192.0.2.5"))[0])
+check("another address is not own traffic", not ev.verify(
+    "own_traffic", item(entity_value="192.0.2.6"))[0])
+settings.CONFIG_PATH = real_config
 real_explains = package_activity.explains
 package_activity.explains = lambda p, at=None: (
     {"how": "owned by example-tools"} if p == "/usr/lib/x.service" else None)

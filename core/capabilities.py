@@ -97,22 +97,33 @@
 # actually reads. A capability row here would have been a second, weaker
 # declaration of the same fact.
 
+import importlib.util
 import logging
 import os
 import socket as _socket
 
 logger = logging.getLogger(__name__)
 
-# Imported at module level, optionally, the same way the sensors do it. Two
-# reasons rather than one: a missing library is answered once at import
-# instead of on every call, and a test can stand a fake in the way, which is
-# how the existing suite drives these code paths.
+# scapy is about 50 MB and the main app never captures, so it is only asked
+# whether it is installed here; sniff is imported on the first capture. A
+# test can still put a fake in _scapy_sniff.
 try:
-    from scapy.all import sniff as _scapy_sniff
-    SCAPY_AVAILABLE = True
-except ImportError:
-    _scapy_sniff = None
+    SCAPY_AVAILABLE = importlib.util.find_spec("scapy") is not None
+except (ImportError, ValueError):
     SCAPY_AVAILABLE = False
+_scapy_sniff = None
+
+
+def _sniff():
+    """scapy's sniff, imported on first use, or None."""
+    global _scapy_sniff
+    if _scapy_sniff is None and SCAPY_AVAILABLE:
+        try:
+            from scapy.all import sniff
+            _scapy_sniff = sniff
+        except ImportError:
+            return None
+    return _scapy_sniff
 
 try:
     import psutil
@@ -453,7 +464,8 @@ class Capabilities:
         argument to pass it down to. It is in the signature so the call sites
         do not have to change again later.
         """
-        if _scapy_sniff is None:
+        sniff = _sniff()
+        if sniff is None:
             raise CapabilityUnavailable(
                 "scapy is not installed, so no adapter can be opened")
 
@@ -461,7 +473,7 @@ class Capabilities:
                   "filter": bpf}
         if iface:
             kwargs["iface"] = iface
-        _scapy_sniff(**kwargs)
+        sniff(**kwargs)
 
     # 2. KILL A PROCESS
 

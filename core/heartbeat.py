@@ -161,6 +161,9 @@ def start(interval_minutes=DEFAULT_INTERVAL_MINUTES):
         while True:
             time.sleep(interval)
             try:
+                # Freed memory goes back first, so the line shows what is held.
+                from core import malloc_tune
+                malloc_tune.trim()
                 for line in beat(state):
                     logger.info(line)
             except Exception as e:

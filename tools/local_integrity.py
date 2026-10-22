@@ -903,72 +903,63 @@ def dpkg_package_for_path(path: str) -> str:
     and nothing else, so a finding attributed to a package needs this lookup,
     and the lookup has to be right rather than plausible: a finding that names
     the wrong package sends the operator to the wrong upgrade.
-
-    WALKS UP THE PATH rather than scanning the map. The map holds every path
-    every package owns (about half a million entries over 2755 control files),
-    so a scan per reported file would be quadratic. Walking the path's own
-    parents is the depth of the path instead, and it lands on the LONGEST
-    matching prefix by construction -- which is the right answer, because a
-    package owns a directory and every file under it, and when two packages
-    own nested directories the deeper one is the owner.
     """
-    owning = _dpkg_owning_map()
-    if not owning:
-        return ""
+    return dpkg_owners_for_paths([path]).get(path, "")
+
+
+def _path_and_parents(path: str) -> list:
+    """The path, then each parent folder, deepest first."""
+    out = []
     probe = path.rstrip("/")
-    while True:
-        hit = owning.get(probe)
-        if hit:
-            return hit
-        if probe == "/" or not probe:
-            return ""
+    while probe and probe != "/":
+        out.append(probe)
         nxt = probe.rsplit("/", 1)[0] or "/"
         if nxt == probe:
-            return ""
+            break
         probe = nxt
+    return out
 
 
-_DPKG_OWNERS = {"built_at": 0.0, "by_root": {}}
-
-
-def _dpkg_owning_map() -> dict:
+def dpkg_owners_for_paths(paths) -> dict:
     """
-    path-prefix -> package name, cached.
+    {path: package or ""} from one read of dpkg's file lists.
 
-    Cached because a pass asks this question once per reported file and the
-    map is a second of I/O. The cache is per-process and never invalidated on
-    purpose: within one pass the package database does not change underneath
-    us, and a pass that runs across an apt transaction would be reporting on
-    two different dpkg states anyway, which is exactly what
-    dpkg_verification_pass refuses to do (see its lock check).
+    Only the asked paths and their parents are kept, so memory follows the
+    question instead of the 800,000 paths dpkg knows (that table was 155 MB).
+    The first package in name order wins a shared path, and the deepest owned
+    parent answers for a path no package lists.
     """
-    if _DPKG_OWNERS["by_root"] and (time.monotonic() - _DPKG_OWNERS["built_at"]) < 300:
-        return _DPKG_OWNERS["by_root"]
-
+    paths = list(paths)
+    wanted = {p for path in paths for p in _path_and_parents(path)}
+    found = {}
     info = Path("/var/lib/dpkg/info")
-    out = {}
     try:
         listing = sorted(info.glob("*.list"))
     except OSError:
-        return _DPKG_OWNERS["by_root"]
-    for entry in listing:
+        listing = []
+    for entry in listing if wanted else ():
         pkg = entry.name[:-len(".list")]
         # A multiarch package's control files are named 'name:arch.list' and
         # 'name:arch.md5sums' while dpkg's own output uses the bare name. The
         # name is kept as dpkg reports it rather than stripped, because a
         # finding that names a package must name it the way the operator's
         # 'apt install' would.
-        data, reason = _read_bytes(entry, limit=8 * 1024 * 1024)
-        if data is None:
-            continue
-        for line in data.decode("utf-8", errors="replace").splitlines():
-            line = line.strip()
-            if not line or line == "/.":
+        # Line by line, so the biggest list (an icon theme, 7 MB) is never
+        # held whole.
+        try:
+            if entry.stat().st_size > 8 * 1024 * 1024:
                 continue
-            if line not in out:
-                out[line] = pkg
-    _DPKG_OWNERS["by_root"] = out
-    _DPKG_OWNERS["built_at"] = time.monotonic()
+            with open(entry, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line in wanted and line not in found:
+                        found[line] = pkg
+        except OSError:
+            continue
+    out = {}
+    for path in paths:
+        out[path] = next((found[p] for p in _path_and_parents(path)
+                          if p in found), "")
     return out
 
 
@@ -1146,8 +1137,9 @@ def group_dpkg_by_package(paths: dict) -> dict:
     evidence".
     """
     out = {}
+    owners = dpkg_owners_for_paths(paths)
     for path, info in sorted(paths.items()):
-        pkg = dpkg_package_for_path(path) or "unattributed"
+        pkg = owners.get(path) or "unattributed"
         entry = out.setdefault(pkg, {
             "changed": [], "unreadable": [], "gone": [], "conffiles": [],
             "counts": {"changed": 0, "unreadable": 0, "gone": 0},

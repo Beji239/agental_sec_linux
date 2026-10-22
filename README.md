@@ -258,6 +258,29 @@ tab installs it, helpers and sensors included, and restarts it.
 This Computer tab lists the ordinary background programs that nothing depends
 on, and lets you stop them to free memory, with an Undo for each.
 
+The app keeps its own share small too. Most of what the main process holds is
+the libraries it needs, measured on my laptop:
+
+- Python itself, 11 MB
+- Flask, which serves the dashboard, 19 MB
+- requests and httpx, for the feeds and the model, 14 MB
+- paramiko, for reading the router, 16 MB
+- scapy, 49 MB, loaded only by the capture service and when you analyse a
+  capture file
+- the app's own code, 4 MB
+- the dashboard open in a browser tab, about 50 MB more
+
+The rest is the data it works with. The dashboard is the one part you can
+drop any time: close the browser and leave the app running in its terminal,
+it keeps watching without it. To start it that way, set
+`flask.auto_open_browser` to `false` in `config.json`.
+
+The main process used to grow after start and never come back down. After the
+memory fixes, on the same laptop:
+
+- 5 minutes after start: 238 MB before, 177 MB now
+- 10 minutes after start: 399 MB before, 188 MB now
+
 ## Remote manager, alerts on your phone
 
 <p align="center">

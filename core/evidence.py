@@ -149,6 +149,29 @@ def _names(conn, ip: str) -> list:
         "SELECT DISTINCT name FROM dns_answer WHERE value = ? LIMIT 3", (ip,))]
 
 
+def _own_hosts() -> set:
+    """
+    Hosts the app itself connects to on a schedule. The sniffer's list is
+    only filled in the capture service, so the gateway comes from config too,
+    and the sniffer is never imported here: it would load scapy.
+    """
+    import sys
+    hosts = set()
+    sn = sys.modules.get("tools.packet_sniffer_linux")
+    if sn is not None:
+        hosts |= {a for a, _p in getattr(sn, "_own_endpoints", ())}
+    try:
+        from core import settings
+        cfg = json.loads(settings.CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception as e:                              # noqa: BLE001
+        logger.debug(f"own hosts: config unreadable: {e}")
+        return hosts
+    gw = cfg.get("gateway") or {}
+    if gw.get("enabled") and gw.get("host"):
+        hosts.add(str(gw["host"]))
+    return hosts
+
+
 def verify(kind: str, item: dict) -> tuple[bool, str]:
     """(confirmed, what Python found). Never raises."""
     if kind not in REASONS:
@@ -177,8 +200,7 @@ def _verify(kind, item):
         return False, "no reserved name in this alert"
 
     if kind == "own_traffic":
-        from tools import packet_sniffer_linux as sn
-        own_hosts = {a for a, _p in sn._own_endpoints}
+        own_hosts = _own_hosts()
         for ip in ips:
             if ip in own_hosts:
                 return True, f"{ip} is this app's own scheduled endpoint"
