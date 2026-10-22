@@ -495,8 +495,11 @@ older than the project, with the command that brings it level.
 
 ## Privacy
 
-- Your data stays in the project folder: the database, `config.json` and
-  `.env`. Stored secrets are encrypted with a key derived from this machine.
+- Your data stays on this machine. The database, `config.json` and `.env`
+  are in the project folder and only your account can read them. Stored
+  secrets are encrypted with a key derived from this machine. The kernel
+  camera and the names helper write to `/var/lib/agental_sec`, which only
+  root and your account can open.
 - The dashboard listens on 127.0.0.1 only and needs its API key. The page
   itself carries no key: the browser signs in once and keeps a session for 30
   days, and the page runs no script but its own. Requests that name any other
