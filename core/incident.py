@@ -332,7 +332,8 @@ def _notify_new_device(inc: dict) -> dict:
 def write_incident(detection_id: str, entity_type: str, entity_value: str,
                    severity: str, title: str, source: str = None,
                    finding_ids: list = None, first_seen_at=None,
-                   last_seen_at=None, modules: dict = None) -> dict:
+                   last_seen_at=None, modules: dict = None,
+                   reopen: bool = False) -> dict:
     """
     Record or refresh one incident. Returns what it did.
 
@@ -489,6 +490,18 @@ def write_incident(detection_id: str, entity_type: str, entity_value: str,
     # entirely from findings that are themselves journalled. Adding an
     # operation here would put a line in the chain for every tick of a
     # background process, which is how a tamper log becomes unreadable.
+
+    # A closed incident is not a mute. A new open finding brings it back,
+    # unless a suppression the owner set still covers it. set_status
+    # journals the move.
+    if (reopen and row is not None and row["status"] in ("dismissed", "resolved")
+            and not suppression.get("suppressed")):
+        before = (row["assessment"] or "").strip()
+        note = (f"Reopened: a new finding arrived after it was {row['status']}."
+                + (f" Before: {before[:200]}" if before else ""))
+        if set_status(row["id"], "new", by="watcher", note=note).get("success"):
+            out.update(action="reopened", status="new", assessment=note,
+                       reopened_from=row["status"])
     return out
 
 
@@ -748,10 +761,12 @@ def watch_once(session_id: str, modules: dict = None,
                 "first_seen_at": r["found_at"],
                 "last_seen_at":  r["found_at"],
                 "finding_ids":  [r["id"]],
+                "open":         not r["dismissed"],
             }
         else:
             slot["finding_ids"].append(r["id"])
             slot["last_seen_at"] = r["found_at"]
+            slot["open"] = slot["open"] or not r["dismissed"]
             if _severity_rank(severity) > _severity_rank(slot["severity"]):
                 # The worst one wins, and the title follows it, because a
                 # reader scanning the list must see the worst thing in it.
@@ -779,6 +794,7 @@ def watch_once(session_id: str, modules: dict = None,
                 first_seen_at=slot["first_seen_at"],
                 last_seen_at=slot["last_seen_at"],
                 modules=modules,
+                reopen=slot["open"],
             )
         except Exception as e:
             logger.error(f"Could not write incident for {key}: {e}")
@@ -789,6 +805,11 @@ def watch_once(session_id: str, modules: dict = None,
             made_today += 1
             if slot["detection_id"] in NEW_DEVICES:
                 _notify_new_device(out)
+        elif out.get("action") == "reopened":
+            counts["reopened"] = counts.get("reopened", 0) + 1
+            logger.info(f"Incident {out['id']} reopened: a new finding for "
+                        f"{slot['entity_value']} after it was "
+                        f"{out['reopened_from']}.")
         else:
             counts["coalesced"] += 1
         if notify_urgent(out).get("sent"):
