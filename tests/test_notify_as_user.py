@@ -40,6 +40,8 @@ def fake_run(cmd, **kw):
 
 
 actions._notifications_enabled = lambda: True
+real_test_run = actions._test_run
+actions._test_run = lambda: False
 actions.shutil.which = lambda name: "/usr/bin/notify-send"
 actions.subprocess.run = fake_run
 
@@ -76,6 +78,17 @@ check("not root", "user" in send(ME, {"SUDO_UID": str(ME)})[1], False)
 check("root with no sudo user", "user" in send(0, {})[1], False)
 check("sudo from root itself", "user" in send(0, {"SUDO_UID": "0"})[1], False)
 check("a SUDO_UID that is not a number", "user" in send(0, {"SUDO_UID": "x"})[1], False)
+
+print("[3] a test run shows nothing on the desktop")
+actions._test_run = real_test_run
+os.environ["AGENTALSEC_TEST_DB"] = "/tmp/notify_test.db"
+calls.clear()
+out = actions.notify("t", "b")
+check("not sent", out.get("sent"), False)
+check("and it says why", "test run" in out.get("reason", ""), True)
+check("notify-send never ran", calls, [])
+os.environ["AGENTALSEC_TEST_DB"] = "   "
+check("a blank value is not a test run", actions._test_run(), False)
 
 print()
 print("ALL CHECKS PASSED" if not fails else f"FAILED: {fails}")

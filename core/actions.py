@@ -183,6 +183,12 @@ def _notifications_enabled() -> bool:
     return bool(block.get("notify", True))
 
 
+def _test_run() -> bool:
+    # Tests make up devices and findings on a scratch database; their popups
+    # must not reach the real desktop.
+    return bool(os.environ.get("AGENTALSEC_TEST_DB", "").strip())
+
+
 def _expiry_days() -> int:
     """
     Days an unanswered request waits, from config; clamped to at least 1.
@@ -1198,6 +1204,10 @@ def notify(title: str, body: str, urgency: str = "normal") -> dict:
     if not _notifications_enabled():
         return {"sent": False, "reason": "notifications are switched off in "
                                          "config.json (action_queue.notify)"}
+    if _test_run():
+        return {"sent": False, "reason": "AGENTALSEC_TEST_DB is set, so this "
+                                         "is a test run. Nothing was shown "
+                                         "on the desktop."}
 
     binary = shutil.which("notify-send")
     if not binary:
