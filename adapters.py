@@ -374,10 +374,12 @@ class LinuxProcessMonitor(_BaseAdapter):
         super().__init__(session_id, config)
         self._last_result = {}
         self._unregistered_counts = {}
+        self._own_test_runs = 0
 
     def poll(self):
         from tools import process_monitor_linux as pm
         from core import memory_engine as me
+        from core import own_activity
 
         result = pm.monitor_once()
         if result.get("error"):
@@ -390,6 +392,14 @@ class LinuxProcessMonitor(_BaseAdapter):
             ftype = f.get("type") or "unknown"
             pid   = f.get("pid")
             name  = f.get("name") or f"pid {pid}"
+
+            # The tests plant fake tools on purpose. The process tree proves
+            # it; the row is held back and the log says why.
+            own = own_activity.test_run(pid, f.get("ppid"))
+            if own:
+                self._own_test_runs += 1
+                logger.info(f"{ftype} not raised for {name} (pid {pid}): {own}")
+                continue
 
             if ftype == "suspicious_process_name":
                 severity = _fit_severity("PRC-1001", f.get("severity", "medium"),
@@ -516,6 +526,8 @@ class LinuxProcessMonitor(_BaseAdapter):
         out = super().status()
         out["process_count"] = self._last_result.get("process_count")
         out["findings_this_pass"] = self._last_result.get("finding_count")
+        if self._own_test_runs:
+            out["held_back_own_test_runs"] = self._own_test_runs
         if self._unregistered_counts:
             # Surfaced, not buried. These are real observations being dropped
             # for want of a rule number and the count has to be visible or the

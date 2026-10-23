@@ -1302,6 +1302,7 @@ def _staging_findings(rows: list, cfg: dict):
     part (realpath) and because a single pass is the only way to guarantee the
     two rules agree about what they saw.
     """
+    from core import own_activity
     out, seen, counts = [], set(), {}
     for row in rows:
         (eid, pid, tgid, ppid, uid, comm, parent, filename, ts_ns) = row
@@ -1312,6 +1313,12 @@ def _staging_findings(rows: list, cfg: dict):
                 or (uid == 0
                     and is_allowlisted(filename, ROOT_PATH_ALLOWLIST))):
             counts["allowlisted"] = counts.get("allowlisted", 0) + 1
+            continue
+        # A program a test started, proved by the process tree.
+        own = own_activity.test_run(pid, ppid)
+        if own:
+            counts["own_test_run"] = counts.get("own_test_run", 0) + 1
+            logger.info(f"{DID_LOCATION} not raised for {filename}: {own}")
             continue
 
         shell = is_shell(comm, filename)
