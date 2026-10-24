@@ -1,7 +1,7 @@
 # api/module_routes.py
 # Routes for add-on modules. The tab's routes take the dashboard key like the
-# rest of /api; the feed routes take only the token a module got for its run,
-# and they only read.
+# rest of /api; the feed routes take only the token a module got for its run.
+# They only read, except decide, open only to a module whose manifest asks.
 
 import logging
 import re
@@ -123,3 +123,32 @@ def register(app, require_api_key, record_failure):
             return jsonify({"error": "Unauthorized"}), 401
         from core import module_feed
         return jsonify(module_feed.pending(limit=_int("limit", 10)))
+
+    @app.route("/api/module-feed/incident/<int:incident_id>")
+    def module_feed_incident(incident_id):
+        if not _feed_caller():
+            return jsonify({"error": "Unauthorized"}), 401
+        from core import module_feed
+        return jsonify(module_feed.incident(incident_id))
+
+    @app.route("/api/module-feed/decide", methods=["POST"])
+    def module_feed_decide():
+        name = _feed_caller()
+        if not name:
+            return jsonify({"error": "Unauthorized"}), 401
+        body = request.get_json(silent=True) or {}
+        kind = body.get("kind")
+        if not isinstance(kind, str) or not module_host.may_decide(name, kind):
+            logger.warning(f"Module {name} asked to decide {kind!r}, which its "
+                           f"manifest does not allow.")
+            return jsonify({"ok": False, "detail": "This module may not decide that."}), 403
+        ref, choice = body.get("ref"), body.get("choice")
+        person, text = body.get("person"), body.get("text")
+        if not isinstance(ref, (int, str)) or not isinstance(choice, str) \
+                or not isinstance(person, str) or not isinstance(text, (str, type(None))):
+            return jsonify({"ok": False, "detail": "Bad request."}), 400
+        from core import module_feed
+        out = module_feed.decide(kind, ref, choice, person, text)
+        logger.info(f"Module {name}: {person[:40]!r} decided {kind} {str(ref)[:40]} "
+                    f"{choice[:20]}: {'done' if out.get('ok') else 'refused'}")
+        return jsonify(out), (200 if out.get("ok") else 409)

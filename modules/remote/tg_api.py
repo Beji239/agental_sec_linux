@@ -107,3 +107,7 @@ class Telegram:
     def answer_button(self, query_id: str):
         """Stops the spinner on a pressed button."""
         return self.call("answerCallbackQuery", {"callback_query_id": query_id})
+
+    def delete(self, chat_id: int, message_id: int):
+        """Takes a PIN or code out of the chat once it has been read."""
+        return self.call("deleteMessage", {"chat_id": chat_id, "message_id": message_id})

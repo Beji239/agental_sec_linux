@@ -1,7 +1,8 @@
 # modules/remote/service.py
 # The Remote module's process. Started by the app only while its switch is
 # on; it stops by itself when the app closes its stdin. Three threads: the
-# Telegram poll, the alert check, and the tab's routes on a private socket.
+# Telegram poll, the alert and session check, and the tab's routes on a
+# private socket.
 
 import hmac
 import json
@@ -16,6 +17,8 @@ import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
+import control
+import qr
 from bot import Bot, Feed
 from store import Store, phones_match, digits
 from tg_api import Telegram, TelegramError
@@ -76,6 +79,10 @@ def poll_loop(bot: Bot) -> None:
 def alert_loop(bot: Bot) -> None:
     while not stopping.is_set():
         try:
+            bot.tick_sessions()
+        except Exception as e:                          # noqa: BLE001
+            logger.warning(f"session check failed: {e}")
+        try:
             bot.check_alerts()
             bot.state["feed_error"] = None
         except Exception as e:                          # noqa: BLE001
@@ -122,6 +129,10 @@ class Routes(BaseHTTPRequestHandler):
                 "bot": dict(b.state),
                 "settings": b.store.settings(),
                 "people": b.store.people(),
+                "control": {"available": b.box is not None,
+                            "panic": b.store.get("panic") == "1",
+                            "panic_by": b.store.get("panic_by"),
+                            "panic_at": float(b.store.get("panic_at") or 0) or None},
                 "alerts": {"sent_today": int(b.store.get("sent_today") or 0)
                            if b.store.get("day") == time.strftime("%Y-%m-%d") else 0,
                            "last_sent_at": b.last_sent_at,
@@ -203,6 +214,9 @@ class Routes(BaseHTTPRequestHandler):
                               ", ".join(f"{k} {v}" for k, v in changes.items()))
             return self._reply(200, {"ok": True, "settings": b.store.settings()})
 
+        if path.startswith("/control/"):
+            return self._control(path, body)
+
         if path == "/test":
             result = b.send_test()
             return self._reply(200 if result.get("ok") else 400, result)
@@ -221,6 +235,96 @@ class Routes(BaseHTTPRequestHandler):
         return self._reply(404, {"error": "No such route."})
 
 
+    def _control(self, path: str, body: dict):
+        b = self.bot
+        if path == "/control/resume":
+            if b.store.get("panic") != "1":
+                return self._reply(200, {"ok": True})
+            b.store.put("panic", "0")
+            b.store.event("resumed", None, "Control from the phone turned back on at "
+                                           "the computer.")
+            b._to_all(b.store.enrolled(), "\u2705 Control from the phone was turned back "
+                                          "on at the computer.")
+            return self._reply(200, {"ok": True})
+
+        person = b.store.person(body.get("id") or 0)
+        if not person:
+            return self._reply(404, {"ok": False, "reason": "No such person."})
+        chat = person.get("chat_id") if person["state"] == "paired" else None
+
+        if path == "/control/enrol":
+            if not chat:
+                return self._reply(400, {"ok": False,
+                                         "reason": "Pair the person first; control comes after."})
+            if not b.box:
+                return self._reply(400, {"ok": False,
+                                         "reason": "The secrets cannot be encrypted here: the "
+                                                   "cryptography package is missing."})
+            pin, pin2 = str(body.get("pin") or ""), str(body.get("pin2") or "")
+            word = str(body.get("word") or "")
+            why = control.pin_problem(pin)
+            if not why and pin != pin2:
+                why = "The two PINs are not the same."
+            why = why or control.word_problem(word, pin)
+            if why:
+                return self._reply(400, {"ok": False, "reason": why})
+            secret = control.new_totp_secret()
+            b.store.enrol_start(person["id"], control.hash_pin(pin),
+                                control.hash_word(word), b.box.seal(secret))
+            b.challenges.pop(person["tg_user_id"], None)
+            b.store.event("enrol_started", person["name"],
+                          "PIN and panic word set at the computer; waiting for the "
+                          "authenticator's first code.")
+            uri = control.otpauth_uri(person["name"], secret)
+            return self._reply(200, {"ok": True, "key": control.spaced(secret),
+                                     "svg": qr.svg(uri, 5)})
+
+        if path == "/control/confirm":
+            sealed = b.store.person(person["id"]).get("totp_pending")
+            if not sealed or not b.box:
+                return self._reply(400, {"ok": False, "reason": "Start the setup again."})
+            try:
+                secret = b.box.open(sealed)
+            except Exception:                           # noqa: BLE001
+                return self._reply(400, {"ok": False, "reason": "Start the setup again."})
+            step = control.code_step(secret, str(body.get("code") or ""))
+            if step is None:
+                return self._reply(400, {"ok": False,
+                                         "reason": "That code does not match. Check that the "
+                                                   "phone's clock is set automatically, and "
+                                                   "type the code the app shows now."})
+            b.store.enrol_finish(person["id"], step)
+            b.store.event("enrolled", person["name"], "Control from the phone set up.")
+            if chat:
+                b.say(chat, "\U0001F510 <b>Control from the phone is set up</b> for you. "
+                            "When a decision waits, press <b>Take control</b> or send "
+                            "/control; it asks for your PIN and the code from your "
+                            "authenticator app. Your panic word, sent here any time, turns "
+                            "control off for everyone.", {"inline_keyboard": [
+                                [{"text": "Take control", "callback_data": "ctl"}]]})
+            return self._reply(200, {"ok": True})
+
+        if path == "/control/remove":
+            b.store.clear_control(person["id"])
+            b.challenges.pop(person["tg_user_id"], None)
+            b.awaiting.pop(person["tg_user_id"], None)
+            b.store.event("control_removed", person["name"],
+                          "Control from the phone removed at the computer.")
+            if chat:
+                b.say(chat, "\U0001F510 Control from the phone was removed for you at the "
+                            "computer. Alerts still come.")
+            return self._reply(200, {"ok": True})
+
+        if path == "/control/unlock":
+            b.store.unlock(person["id"])
+            b.store.event("unlocked", person["name"], "Control unlocked at the computer.")
+            if chat:
+                b.say(chat, "\U0001F513 Control was unlocked for you at the computer.")
+            return self._reply(200, {"ok": True})
+
+        return self._reply(404, {"error": "No such route."})
+
+
 class UnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
@@ -229,7 +333,12 @@ def main() -> int:
     DATA.mkdir(mode=0o700, parents=True, exist_ok=True)
     store = Store(DATA / "remote.db")
     tg = Telegram(BOT_TOKEN, TG_BASE) if BOT_TOKEN else None
-    bot = Bot(store, tg, Feed(HOST, TOKEN))
+    try:
+        box = control.SecretBox(DATA)
+    except Exception as e:                              # noqa: BLE001
+        logger.warning(f"control secrets cannot be encrypted: {e}")
+        box = None
+    bot = Bot(store, tg, Feed(HOST, TOKEN), box)
     store.event("started", None, "Module started." if tg else
                 "Module started; waiting for a bot token.")
 

@@ -10,7 +10,12 @@
     stranger: 'Stranger ignored', alert_sent: 'Alert sent',
     alert_held: 'Alert not sent', send_failed: 'Send failed',
     test_sent: 'Test message', settings: 'Alert choices', revoked: 'Revoked',
-    error: 'Error',
+    error: 'Error', enrol_started: 'Setup started', enrolled: 'Control set up',
+    control_removed: 'Control removed', control_on: 'Control on',
+    control_off: 'Control off', control_refused: 'Wrong PIN or code',
+    locked: 'Locked', unlocked: 'Unlocked', panic: 'Panic word',
+    resumed: 'Control back on', decision: 'Decision',
+    decision_refused: 'Decision refused',
   };
   const TOKEN_ENV = 'AGENTAL_REMOTE_BOT_TOKEN';
   let timer = null;
@@ -47,6 +52,26 @@
     const secret = (h.module.secrets || []).find(x => x.env === TOKEN_ENV) || {};
     const people = s.people || [];
     const paired = people.filter(p => p.state === 'paired').length;
+    const ctl = s.control || {};
+
+    function controlLine(p) {
+      if (p.state !== 'paired') return '';
+      let text;
+      if (p.locked) text = '<span style="color:var(--red);">Control locked after wrong tries</span>';
+      else if (p.session_until) text = `<span style="color:var(--green);">In control from the phone until ${esc(when(p.session_until))}</span>`;
+      else if (p.enrolled) text = '<span style="color:var(--green);">Can take control</span> with PIN and authenticator';
+      else if (p.enrolling) text = '<span style="color:var(--amber);">Control setup not finished</span>';
+      else text = '<span style="color:var(--text-dim);">Alerts only; no control set up</span>';
+      return `<div style="font-size:12px;margin-top:3px;">${text}</div>`;
+    }
+
+    function controlButtons(p) {
+      if (p.state !== 'paired') return '';
+      let out = `<button class="btn" data-remote-setup="${p.id}">${p.enrolled ? 'Set up control again' : 'Set up control'}</button>`;
+      if (p.locked) out += `<button class="btn" data-remote-unlock="${p.id}">Unlock</button>`;
+      if (p.enrolled || p.enrolling) out += `<button class="btn" data-remote-uncontrol="${p.id}">Remove control</button>`;
+      return out;
+    }
 
     let botLine;
     if (!secret.present) {
@@ -72,8 +97,10 @@
             : (p.code_live
                 ? '<span style="color:var(--amber);">Waiting for the code</span>'
                 : '<span style="color:var(--text-dim);">Not paired; the code ran out or was spent</span>')}</div>
+          ${controlLine(p)}
         </div>
-        <div class="row" style="gap:6px;">
+        <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          ${controlButtons(p)}
           <button class="btn" data-remote-code="${p.id}">${p.state === 'paired' ? 'Pair again' : 'New code'}</button>
           <button class="btn" data-remote-remove="${p.id}">Remove</button>
         </div>
@@ -84,12 +111,23 @@
     const eventRows = events.length ? events.map(e => `
       <div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;">
         <span style="font-family:var(--mono);color:var(--text-dim);white-space:nowrap;min-width:110px;">${esc(when(e.at))}</span>
-        <span style="min-width:120px;color:${/refused|stranger|failed|error|problem|held|revoked/.test(e.kind) ? 'var(--amber)' : 'var(--text)'};">${esc(KIND[e.kind] || e.kind)}</span>
+        <span style="min-width:120px;color:${/refused|stranger|failed|error|problem|held|revoked|locked|panic/.test(e.kind) ? 'var(--amber)' : 'var(--text)'};">${esc(KIND[e.kind] || e.kind)}</span>
         <span>${e.person ? '<b>' + esc(e.person) + '</b> ' : ''}${esc(e.detail || '')}</span>
       </div>`).join('')
       : `<div class="card-note">Nothing has happened yet.</div>`;
 
-    root.innerHTML = `
+    const panicCard = ctl.panic ? `
+      <div class="card" style="border-color:var(--red);">
+        <div class="card-title" style="color:var(--red);">Control from the phone is off</div>
+        <div class="card-note">
+          ${esc(ctl.panic_by || 'Someone')} sent the panic word ${esc(when(ctl.panic_at))}. Nobody can decide from a
+          phone until it is turned back on here. Alerts still go out. If a phone may be in the wrong hands,
+          revoke it below first.
+        </div>
+        <button class="btn" id="remote-resume" style="margin-top:10px;">Turn control back on</button>
+      </div>` : '';
+
+    root.innerHTML = `${panicCard}
       <div class="card">
         <div class="card-title">Telegram</div>
         <div style="font-size:13px;">${botLine}</div>
@@ -131,6 +169,26 @@
           <button class="btn" id="remote-add">Add person</button>
         </div>
         <div id="remote-code"></div>
+        <div id="remote-setup"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Control from the phone</div>
+        <div class="card-note">
+          A paired person can decide from the phone once they set up control here, at this computer: their own
+          PIN, an authenticator app (Aegis, Google Authenticator and the like) and a panic word. Telegram never
+          carries the authenticator key, so even Telegram cannot fake an approval.
+        </div>
+        <div class="card-note" style="margin-top:6px;">
+          On the phone they press <b>Take control</b> (or send /control), then the PIN and the code from the app.
+          For 30 minutes they can approve or deny actions, answer the agent's questions, give verdicts on
+          incidents and let held devices in, one tap each. Each code works once. Three wrong PINs or codes
+          lock that person's control until you unlock it here, and everyone else enrolled is told. Anything
+          that cannot be undone asks for the PIN and a fresh code again. Their panic word, sent to the bot,
+          turns control off for everyone until it is turned back on here.
+        </div>
+        ${ctl.available === false ? `<div class="card-note" style="color:var(--red);margin-top:6px;">
+          Control cannot be set up on this computer: the cryptography package that encrypts the keys is missing.</div>` : ''}
       </div>
 
       <div class="card">
@@ -167,7 +225,7 @@
           <span class="card-title" style="margin:0;">History</span>
           <button class="btn" id="remote-refresh">refresh</button>
         </div>
-        <div class="card-note">Everything the bot did or refused, newest first. From the next stage on, every decision made from a phone is listed here too, with who made it.</div>
+        <div class="card-note">Everything the bot did or refused, newest first, with every decision made from a phone and who made it.</div>
         <div style="margin-top:8px;max-height:420px;overflow-y:auto;">${eventRows}</div>
       </div>
 
@@ -189,6 +247,7 @@
 
     function showCode(d, name) {
       const link = d.username ? `https://t.me/${d.username}?start=${d.code}` : '';
+      $('remote-setup').innerHTML = '';
       $('remote-code').innerHTML = `
         <div class="card" style="margin:12px 0 0;border-color:var(--green);">
           <div style="font-size:13px;">Pairing code for <b>${esc(name)}</b>, valid 15 minutes, works once:</div>
@@ -272,12 +331,96 @@
       render(root, h);
     });
 
+    function showSetup(p) {
+      $('remote-code').innerHTML = '';
+      $('remote-setup').innerHTML = `
+        <div class="card" style="margin:12px 0 0;border-color:var(--green);">
+          <div style="font-size:13px;">Control for <b>${esc(p.name)}</b>. Let them type these themselves.</div>
+          <div class="row" style="margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="input" id="remote-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN, 6 to 12 digits" maxlength="12" style="width:170px;">
+            <input class="input" id="remote-pin2" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN again" maxlength="12" style="width:130px;">
+            <input class="input" id="remote-word" type="password" autocomplete="off" placeholder="panic word" maxlength="40" style="width:160px;">
+            <button class="btn" id="remote-setup-next">Next</button>
+            <button class="btn" id="remote-setup-cancel">Cancel</button>
+          </div>
+          <div class="card-note">The panic word needs letters, and should be something they would not type by accident.
+            Sent to the bot from their phone, it turns control off for everyone.</div>
+          <div id="remote-setup-msg" style="font-family:var(--mono);font-size:11px;margin-top:6px;"></div>
+        </div>`;
+      $('remote-setup-cancel').addEventListener('click', () => { $('remote-setup').innerHTML = ''; render(root, h); });
+      $('remote-setup-next').addEventListener('click', async () => {
+        const r = await h.call('POST', '/control/enrol', {
+          id: p.id, pin: $('remote-pin').value.trim(), pin2: $('remote-pin2').value.trim(),
+          word: $('remote-word').value });
+        if (!r.ok) return say('remote-setup-msg', reason(r), true);
+        $('remote-setup').innerHTML = `
+          <div class="card" style="margin:12px 0 0;border-color:var(--green);">
+            <div style="font-size:13px;">Now <b>${esc(p.name)}</b> adds AgentalSec to their authenticator app: scan this code,
+              or type the key by hand. It is shown only now.</div>
+            <div class="row" style="margin-top:10px;gap:16px;align-items:center;flex-wrap:wrap;">
+              <div id="remote-qr" style="background:#fff;padding:6px;border-radius:4px;line-height:0;"></div>
+              <div>
+                <div class="card-note">Key</div>
+                <div style="font-family:var(--mono);font-size:15px;letter-spacing:1px;margin:4px 0 12px;">${esc(r.data.key)}</div>
+                <div class="card-note">Then type the 6-digit code the app shows:</div>
+                <div class="row" style="gap:8px;margin-top:6px;">
+                  <input class="input" id="remote-otp" inputmode="numeric" autocomplete="off" maxlength="6" style="width:110px;">
+                  <button class="btn" id="remote-otp-ok">Finish</button>
+                  <button class="btn" id="remote-setup-cancel2">Cancel</button>
+                </div>
+                <div id="remote-setup-msg" style="font-family:var(--mono);font-size:11px;margin-top:6px;"></div>
+              </div>
+            </div>
+          </div>`;
+        // The picture comes from the module and holds nothing but squares.
+        const img = new Image();
+        img.alt = 'QR code for the authenticator app';
+        img.src = 'data:image/svg+xml;base64,' + btoa(r.data.svg);
+        $('remote-qr').appendChild(img);
+        $('remote-setup-cancel2').addEventListener('click', () => { $('remote-setup').innerHTML = ''; render(root, h); });
+        $('remote-otp-ok').addEventListener('click', async () => {
+          const c = await h.call('POST', '/control/confirm', { id: p.id, code: $('remote-otp').value.trim() });
+          if (!c.ok) return say('remote-setup-msg', reason(c), true);
+          $('remote-setup').innerHTML = '';
+          render(root, h);
+        });
+      });
+    }
+
+    root.querySelectorAll('[data-remote-setup]').forEach(b => b.addEventListener('click', () => {
+      const p = people.find(x => String(x.id) === b.dataset.remoteSetup);
+      if (!p) return;
+      if (p.enrolled && !confirm(`Set up control for ${p.name} again? The old PIN, panic word and authenticator stop working.`)) return;
+      showSetup(p);
+    }));
+
+    root.querySelectorAll('[data-remote-unlock]').forEach(b => b.addEventListener('click', async () => {
+      const r = await h.call('POST', '/control/unlock', { id: Number(b.dataset.remoteUnlock) });
+      if (!r.ok) return alert(reason(r));
+      render(root, h);
+    }));
+
+    root.querySelectorAll('[data-remote-uncontrol]').forEach(b => b.addEventListener('click', async () => {
+      const p = people.find(x => String(x.id) === b.dataset.remoteUncontrol);
+      if (!confirm(`Remove control for ${p ? p.name : 'this person'}? They keep getting alerts.`)) return;
+      const r = await h.call('POST', '/control/remove', { id: Number(b.dataset.remoteUncontrol) });
+      if (!r.ok) return alert(reason(r));
+      render(root, h);
+    }));
+
+    if ($('remote-resume')) $('remote-resume').addEventListener('click', async () => {
+      if (!confirm('Turn control from the phone back on? Enrolled people can decide again after PIN and code.')) return;
+      const r = await h.call('POST', '/control/resume', {});
+      if (!r.ok) return alert(reason(r));
+      render(root, h);
+    });
+
     // Refreshes the status card while the tab is open; typing is never lost.
     timer = setInterval(() => {
       if (!h.visible()) { clearInterval(timer); timer = null; return; }
       const busy = root.contains(document.activeElement) &&
                    /INPUT|SELECT/.test(document.activeElement.tagName);
-      if (!busy && !$('remote-code').innerHTML) render(root, h);
+      if (!busy && !$('remote-code').innerHTML && !$('remote-setup').innerHTML) render(root, h);
     }, 20000);
   }
 

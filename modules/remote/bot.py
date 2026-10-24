@@ -1,6 +1,7 @@
 # modules/remote/bot.py
 # What the bot does with a message, and how alerts go out. Only paired
 # people get answers; everyone else is ignored and written to the history.
+# Deciding needs a control session: PIN plus authenticator code, 30 minutes.
 
 import html
 import http.client
@@ -10,6 +11,7 @@ import time
 import urllib.parse
 from datetime import datetime, timezone
 
+import control
 from store import clean_code, phones_match, CODE_LEN, CODE_ALPHABET
 from tg_api import TelegramError
 
@@ -19,17 +21,28 @@ RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 STRANGER_LOG_GAP = 3600
 BAD_CODE_LIMIT = 5
 BAD_CODE_BLOCK = 3600
+SESSION_SECONDS = 30 * 60
+WARN_BEFORE = 5 * 60
+CONFIRM_SECONDS = 120
+ANSWER_SECONDS = 10 * 60
+BAD_TRY_LIMIT = 3
 
 DOT = {"critical": "\U0001F534", "high": "\U0001F7E0", "medium": "\U0001F7E1",
        "low": "\u26AA", "info": "\u26AA"}
 SHIELD = "\U0001F6E1"
 
-# Buttons that only show things; deciding comes with the control session.
-VIEW_BUTTONS = {"inline_keyboard": [[{"text": "Status", "callback_data": "status"},
-                                     {"text": "What's waiting", "callback_data": "pending"}]]}
+VIEW_ROW = [{"text": "Status", "callback_data": "status"},
+            {"text": "What's waiting", "callback_data": "pending"}]
+VIEW_BUTTONS = {"inline_keyboard": [VIEW_ROW]}
+CONTROL_BUTTONS = {"inline_keyboard": [VIEW_ROW, [{"text": "Take control",
+                                                   "callback_data": "ctl"}]]}
+SESSION_BUTTONS = {"inline_keyboard": [[{"text": "What's waiting", "callback_data": "pending"},
+                                        {"text": "End session", "callback_data": "end"}]]}
 
 COMMANDS = [{"command": "status", "description": "How the computer is doing"},
             {"command": "pending", "description": "What waits for your decision"},
+            {"command": "control", "description": "Take control for 30 minutes"},
+            {"command": "done", "description": "End the control session"},
             {"command": "help", "description": "What this bot can do"}]
 DESCRIPTION = ("Alerts from AgentalSec, the security app on your computer. "
                "Only people paired at the computer get answers.")
@@ -39,8 +52,11 @@ HELP = (f"{SHIELD} <b>AgentalSec Remote</b>\n"
         "Urgent alerts from your computer come here.\n\n"
         "/status  how the computer is doing\n"
         "/pending  what waits for your decision\n"
+        "/control  take control for 30 minutes (PIN and authenticator code)\n"
+        "/done  end the control session\n"
         "/help  this list\n\n"
-        "<i>Decisions are still made at the computer.</i>")
+        "<i>Deciding needs control, set up at the computer in the Remote tab. "
+        "Your panic word turns control off for everyone.</i>")
 
 
 def e(text) -> str:
@@ -94,12 +110,33 @@ class Feed:
         finally:
             conn.close()
 
+    def post(self, path: str, body: dict) -> tuple:
+        """(status, json). A refusal is an answer, not an error."""
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=30)
+        try:
+            conn.request("POST", f"/api/module-feed/{path}", body=json.dumps(body),
+                         headers={"X-Module-Token": self.token,
+                                  "Content-Type": "application/json"})
+            resp = conn.getresponse()
+            raw = resp.read()
+            try:
+                return resp.status, json.loads(raw or b"{}")
+            except ValueError:
+                return resp.status, {"detail": "the app answered something that is not JSON"}
+        finally:
+            conn.close()
+
 
 class Bot:
-    def __init__(self, store, telegram, feed):
+    def __init__(self, store, telegram, feed, box=None):
         self.store = store
         self.tg = telegram
         self.feed = feed
+        self.box = box
+        # A PIN and code being asked for, and a typed answer being waited
+        # for, by Telegram user id. Kept in memory: a restart just asks again.
+        self.challenges = {}
+        self.awaiting = {}
         self.state = {"connected": False, "username": None, "last_ok_at": None,
                       "last_error": None, "token_present": telegram is not None,
                       "started_at": time.time()}
@@ -137,7 +174,7 @@ class Bot:
 
         person = self.store.by_user(user_id)
         if person:
-            self._command(person, chat["id"], (msg.get("text") or "").strip())
+            self._message(person, msg)
             return
 
         row = self.store.stranger(user_id)
@@ -169,10 +206,17 @@ class Bot:
             if sender.get("id"):
                 self._stranger(sender, "pressed a button and is not paired")
             return
-        if query.get("data") == "status":
-            self.say(chat["id"], self._status_text(), VIEW_BUTTONS)
-        elif query.get("data") == "pending":
-            self.say(chat["id"], self._pending_text(), VIEW_BUTTONS)
+        data = str(query.get("data") or "")
+        if data == "status":
+            self.say(chat["id"], self._status_text(), self._buttons(person))
+        elif data == "pending":
+            self._pending(person, chat["id"])
+        elif data == "ctl":
+            self._take_control(person, chat["id"], "pending")
+        elif data == "end":
+            self._end_session(person, chat["id"])
+        elif data[:2] in ("a:", "q:", "v:", "r:"):
+            self._decision(person, chat["id"], data)
 
     def _name_of(self, sender: dict) -> str:
         name = " ".join(p for p in (sender.get("first_name"), sender.get("last_name")) if p)
@@ -252,16 +296,45 @@ class Bot:
                  "with an SMS code.\n\n" + HELP, remove)
         self.say(chat_id, "Tap a button any time:", VIEW_BUTTONS)
 
-    def _command(self, person: dict, chat_id: int, text: str) -> None:
-        cmd = text.split()[0].lower().split("@")[0] if text else ""
-        if cmd in ("/status",):
-            self.say(chat_id, self._status_text(), VIEW_BUTTONS)
-        elif cmd in ("/pending",):
-            self.say(chat_id, self._pending_text(), VIEW_BUTTONS)
+    def _message(self, person: dict, msg: dict) -> None:
+        chat_id = msg["chat"]["id"]
+        text = (msg.get("text") or "").strip()
+        cmd = text.split()[0].lower().split("@")[0] if text.startswith("/") else ""
+        uid = person["tg_user_id"]
+
+        if not cmd and not text.isdigit() and person.get("word_hash") \
+                and control.word_ok(text, person["word_hash"]):
+            self._forget(chat_id, msg)
+            self._panic(person)
+            return
+        if uid in self.challenges and not cmd:
+            self._forget(chat_id, msg)
+            self._answer_challenge(person, chat_id, text)
+            return
+        self.challenges.pop(uid, None)
+        if uid in self.awaiting and not cmd and text:
+            self._typed_answer(person, chat_id, text)
+            return
+        self.awaiting.pop(uid, None)
+
+        if cmd == "/status":
+            self.say(chat_id, self._status_text(), self._buttons(person))
+        elif cmd == "/pending":
+            self._pending(person, chat_id)
+        elif cmd == "/control":
+            self._take_control(person, chat_id, "pending")
+        elif cmd == "/done":
+            self._end_session(person, chat_id)
+        elif cmd == "/cancel":
+            self.say(chat_id, "Nothing is waiting for you to type now.", self._buttons(person))
         elif cmd in ("/help", "/start"):
-            self.say(chat_id, HELP, VIEW_BUTTONS)
+            self.say(chat_id, HELP, self._buttons(person))
         else:
-            self.say(chat_id, "For now I know /status, /pending and /help.", VIEW_BUTTONS)
+            self.say(chat_id, "I know /status, /pending, /control, /done and /help.",
+                     self._buttons(person))
+
+    def _buttons(self, person: dict) -> dict:
+        return SESSION_BUTTONS if self._in_session(person) else CONTROL_BUTTONS
 
     def _status_text(self) -> str:
         try:
@@ -287,9 +360,9 @@ class Bot:
             lines.append(f"\n<i>Last incident activity {e(_short_time(s['last_incident_at']))}</i>")
         return "\n".join(lines)
 
-    def _pending_text(self) -> str:
+    def _pending_text(self, p: dict = None) -> str:
         try:
-            p = self.feed.get("pending")
+            p = p if p is not None else self.feed.get("pending")
         except Exception as ex:                         # noqa: BLE001
             return f"\u26A0\uFE0F Could not read the open decisions: {e(ex)}"
         parts = []
@@ -306,7 +379,7 @@ class Bot:
         if not parts:
             return "\u2705 Nothing is waiting for a decision."
         return ("\U0001F4CB <b>Waiting for your decision</b>\n\n" + "\n".join(parts)
-                + "\n\n<i>Decide at the computer for now.</i>")
+                + "\n\n<i>Press Decide now; it asks for your PIN and code first.</i>")
 
     # Polling Telegram
 
@@ -424,7 +497,15 @@ class Bot:
                              f"{len(batch)} alert(s) not sent: the daily cap of {cap} was reached.")
             return
         text = self._alert_text(batch)
-        if self._to_all(people, text, VIEW_BUTTONS):
+        if len(batch) == 1:
+            iid = batch[0]["id"]
+            markup = {"inline_keyboard": [
+                [{"text": "False alarm", "callback_data": f"v:{iid}:fa"},
+                 {"text": "Real", "callback_data": f"v:{iid}:real"},
+                 {"text": "Not sure", "callback_data": f"v:{iid}:ns"}], VIEW_ROW]}
+        else:
+            markup = CONTROL_BUTTONS
+        if self._to_all(people, text, markup):
             self.last_sent_at = time.time()
             self.store.put("sent_today", sent_today + 1)
             self.store.event("alert_sent", None,
@@ -469,3 +550,341 @@ class Bot:
         if person.get("state") == "paired" and person.get("chat_id"):
             self.say(person["chat_id"], why, {"remove_keyboard": True})
         self.store.remove_person(person["id"])
+
+    # Control from the phone
+
+    def _in_session(self, person: dict) -> bool:
+        until = person.get("session_until")
+        return bool(until and until > time.time() and not person.get("locked_at")
+                    and self.store.get("panic") != "1")
+
+    def _forget(self, chat_id: int, msg: dict) -> None:
+        """A PIN, code or panic word does not stay in the chat."""
+        if not self.tg or not msg.get("message_id"):
+            return
+        try:
+            self.tg.delete(chat_id, msg["message_id"])
+        except Exception:                               # noqa: BLE001
+            logger.debug("message not deleted")
+
+    def _secret(self, person: dict) -> str | None:
+        if not self.box or not person.get("totp_sealed"):
+            return None
+        try:
+            return self.box.open(person["totp_sealed"])
+        except Exception:                               # noqa: BLE001
+            return None
+
+    def _cannot_control(self, person: dict) -> str | None:
+        if self.store.get("panic") == "1":
+            return ("\U0001F6D1 Control from the phone is off since the panic word. "
+                    "It can be turned back on at the computer, in the Remote tab.")
+        if not person.get("enrolled_at"):
+            return ("\U0001F510 Control needs a PIN and an authenticator app, set up at "
+                    "the computer in the Remote tab. Until then alerts and /status work.")
+        if person.get("locked_at"):
+            return ("\U0001F512 Control is locked for you after wrong tries. It can be "
+                    "unlocked at the computer. Alerts still come.")
+        if not self._secret(person):
+            return ("⚠️ Your authenticator could not be read on this computer. "
+                    "Set control up again in the Remote tab.")
+        return None
+
+    def _take_control(self, person: dict, chat_id: int, then: str = "pending") -> None:
+        why = self._cannot_control(person)
+        if why:
+            self.say(chat_id, why, VIEW_BUTTONS)
+            return
+        if self._in_session(person):
+            self._after_control(person, chat_id, then)
+            return
+        self._ask(person, chat_id, "session", then)
+
+    def _ask(self, person: dict, chat_id: int, purpose: str, then: str) -> None:
+        """Only ever after the person pressed a button or sent a command."""
+        self.awaiting.pop(person["tg_user_id"], None)
+        self.challenges[person["tg_user_id"]] = {
+            "purpose": purpose, "step": "pin", "then": then,
+            "expires": time.time() + CONFIRM_SECONDS}
+        self.say(chat_id, "\U0001F510 Send your <b>PIN</b>. I delete it from the chat "
+                          "once read. This runs out in 2 minutes.")
+
+    def _answer_challenge(self, person: dict, chat_id: int, text: str) -> None:
+        uid = person["tg_user_id"]
+        ch = self.challenges.get(uid)
+        if not ch or ch["expires"] < time.time():
+            self.challenges.pop(uid, None)
+            self.say(chat_id, "⌛ That confirmation ran out. Nothing was decided; "
+                              "press the button again for a fresh one.", self._buttons(person))
+            return
+        why = self._cannot_control(person)
+        if why:
+            self.challenges.pop(uid, None)
+            self.say(chat_id, why, VIEW_BUTTONS)
+            return
+        if ch["step"] == "pin":
+            if not control.pin_ok(text, person["pin_hash"]):
+                self._bad_try(person, chat_id, "PIN")
+                return
+            ch.update(step="code", expires=time.time() + CONFIRM_SECONDS)
+            self.say(chat_id, "Now the <b>6-digit code</b> from your authenticator app.")
+            return
+        secret = self._secret(person)
+        step = control.code_step(secret, text, person.get("last_step") or 0)
+        if step is None:
+            if control.code_step(secret, text, 0) is not None:
+                self.say(chat_id, "That code was already used. Each code works once; "
+                                  "send the next one when your app shows it.")
+                return
+            self._bad_try(person, chat_id, "code")
+            return
+        self.store.used_step(person["id"], step)
+        self.challenges.pop(uid, None)
+        person = self.store.person(person["id"])
+        if ch["purpose"] == "session":
+            until = time.time() + SESSION_SECONDS
+            self.store.open_session(person["id"], until)
+            self.store.event("control_on", person["name"], "Took control from the phone "
+                             f"until {time.strftime('%H:%M', time.localtime(until))}.")
+            self.say(chat_id, f"✅ <b>Control is on</b> until "
+                              f"{time.strftime('%H:%M', time.localtime(until))}. Questions "
+                              f"and decisions work with one tap now.", SESSION_BUTTONS)
+            self._after_control(self.store.person(person["id"]), chat_id, ch["then"])
+        else:
+            self._decide(person, chat_id, ch["then"], confirmed=True)
+
+    def _bad_try(self, person: dict, chat_id: int, what: str) -> None:
+        tries = self.store.bad_try(person["id"])
+        self.store.event("control_refused", person["name"],
+                         f"Wrong {what} from the phone ({tries} of {BAD_TRY_LIMIT}).")
+        if tries < BAD_TRY_LIMIT:
+            left = BAD_TRY_LIMIT - tries
+            self.say(chat_id, f"⛔ Wrong {e(what)}. {left} {'try' if left == 1 else 'tries'} "
+                              f"left before control locks.")
+            return
+        self.challenges.pop(person["tg_user_id"], None)
+        self.awaiting.pop(person["tg_user_id"], None)
+        self.store.lock(person["id"])
+        self.store.event("locked", person["name"],
+                         f"{BAD_TRY_LIMIT} wrong tries; control locked until unlocked "
+                         f"at the computer.")
+        self.say(chat_id, "\U0001F512 <b>Control is locked</b> for you after "
+                          f"{BAD_TRY_LIMIT} wrong tries. Alerts still come. It can be "
+                          "unlocked at the computer.", VIEW_BUTTONS)
+        for p in self.store.enrolled():
+            if p["id"] != person["id"]:
+                self.say(p["chat_id"], f"⚠️ Control for <b>{e(person['name'])}</b> "
+                                       f"was locked after {BAD_TRY_LIMIT} wrong PIN or code "
+                                       f"tries. If that was not them, revoke at the computer.")
+
+    def _end_session(self, person: dict, chat_id: int) -> None:
+        self.challenges.pop(person["tg_user_id"], None)
+        self.awaiting.pop(person["tg_user_id"], None)
+        if not person.get("session_until"):
+            self.say(chat_id, "No control session is open.", self._buttons(person))
+            return
+        self.store.end_session(person["id"])
+        self.store.event("control_off", person["name"], "Ended the control session.")
+        self.say(chat_id, "\U0001F44C Control session ended. Anything undecided stays held.",
+                 CONTROL_BUTTONS)
+
+    def tick_sessions(self) -> None:
+        """Ends sessions that ran out, with a notice 5 minutes before."""
+        now = time.time()
+        for p in self.store.sessions():
+            left = p["session_until"] - now
+            if left <= 0:
+                self.store.end_session(p["id"])
+                self.store.event("control_off", p["name"], "The 30 minute session ran out.")
+                self.say(p["chat_id"], "⏱ Control session ended. Anything undecided "
+                                       "stays held; /pending brings it back.", CONTROL_BUTTONS)
+            elif left <= WARN_BEFORE and not p["session_warned"]:
+                self.store.warned(p["id"])
+                self.say(p["chat_id"], f"⏳ Control ends in {max(1, round(left / 60))} "
+                                       f"minutes.", SESSION_BUTTONS)
+        for uid, ch in list(self.challenges.items()):
+            if ch["expires"] < now - 600:
+                self.challenges.pop(uid, None)
+        for uid, wait in list(self.awaiting.items()):
+            if wait["expires"] < now:
+                self.awaiting.pop(uid, None)
+
+    def _panic(self, person: dict) -> None:
+        self.store.put("panic", "1")
+        self.store.put("panic_by", person["name"])
+        self.store.put("panic_at", time.time())
+        self.challenges.clear()
+        self.awaiting.clear()
+        for p in self.store.sessions():
+            self.store.end_session(p["id"])
+        self.store.event("panic", person["name"],
+                         "Panic word from the phone; control off for everyone until "
+                         "turned back on at the computer.")
+        self._to_all(self.store.paired(),
+                     f"\U0001F6D1 <b>Panic word received</b> from {e(person['name'])}. "
+                     f"Control from the phone is off for everyone; alerts still come. "
+                     f"It can be turned back on at the computer.", VIEW_BUTTONS)
+
+    # Deciding
+
+    def _pending(self, person: dict, chat_id: int) -> None:
+        try:
+            p = self.feed.get("pending")
+        except Exception as ex:                         # noqa: BLE001
+            self.say(chat_id, f"⚠️ Could not read the open decisions: {e(ex)}",
+                     self._buttons(person))
+            return
+        empty = not (p.get("actions") or p.get("questions") or p.get("devices"))
+        if empty or not self._in_session(person):
+            markup = self._buttons(person)
+            if not empty:
+                markup = {"inline_keyboard": [[{"text": "Decide now", "callback_data": "ctl"}],
+                                              VIEW_ROW]}
+            self.say(chat_id, self._pending_text(p), markup)
+            return
+        n = len(p.get("actions", [])) + len(p.get("questions", [])) + len(p.get("devices", []))
+        self.say(chat_id, f"\U0001F4CB <b>{n} waiting for your decision</b>, one message each:")
+        for a in p.get("actions", []):
+            self._show_action(chat_id, a)
+        for q in p.get("questions", []):
+            self._show_question(chat_id, q)
+        for d in p.get("devices", []):
+            self._show_device(chat_id, d)
+
+    def _show_action(self, chat_id: int, a: dict) -> None:
+        yes = "Approve (asks again)" if a.get("asks_again") else "Approve"
+        self.say(chat_id, f"⚙️ <b>Action #{e(a['id'])}</b>\n{e(a['what'])}\n"
+                          f"<i>{e(a.get('reason') or 'no reason given')}</i>",
+                 {"inline_keyboard": [[{"text": yes, "callback_data": f"a:{a['id']}:y"},
+                                       {"text": "Deny", "callback_data": f"a:{a['id']}:n"}]]})
+
+    def _show_question(self, chat_id: int, q: dict) -> None:
+        qid = q["id"]
+        self.say(chat_id, f"❓ <b>Question #{e(qid)}</b>\n{e(q['question'][:600])}",
+                 {"inline_keyboard": [
+                     [{"text": "Yes", "callback_data": f"q:{qid}:y"},
+                      {"text": "No", "callback_data": f"q:{qid}:n"},
+                      {"text": "I don't know", "callback_data": f"q:{qid}:dk"}],
+                     [{"text": "Type an answer", "callback_data": f"q:{qid}:t"}]]})
+
+    def _show_device(self, chat_id: int, d: dict) -> None:
+        name = d.get("hostname") or d.get("vendor") or "A new device"
+        self.say(chat_id, f"\U0001F4F5 <b>Held device</b>\n{e(name)} "
+                          f"<code>{e(d.get('ip') or '')}</code> <code>{e(d.get('mac') or '')}</code>\n"
+                          f"<i>Kept off the network until someone lets it in.</i>",
+                 {"inline_keyboard": [[{"text": "Let it in",
+                                        "callback_data": f"r:{d.get('mac') or ''}"}]]})
+
+    def _after_control(self, person: dict, chat_id: int, then: str) -> None:
+        """After the PIN and code: show again what the person pressed, so the
+        decision itself is still their own tap."""
+        if then.startswith("v:"):
+            iid = then.split(":")[1]
+            try:
+                inc = self.feed.get(f"incident/{int(iid)}")
+            except Exception:                           # noqa: BLE001
+                inc = {}
+            if inc:
+                self.say(chat_id, f"{_dot(inc.get('severity'))} <b>Incident #{e(iid)}</b>\n"
+                                  f"{e(inc.get('title'))}\nWhat was it?",
+                         {"inline_keyboard": [[
+                             {"text": "False alarm", "callback_data": f"v:{iid}:fa"},
+                             {"text": "Real", "callback_data": f"v:{iid}:real"},
+                             {"text": "Not sure", "callback_data": f"v:{iid}:ns"}]]})
+                return
+        self._pending(person, chat_id)
+
+    def _decision(self, person: dict, chat_id: int, data: str) -> None:
+        if not self._in_session(person):
+            self._take_control(person, chat_id, data)
+            return
+        self._decide(person, chat_id, data)
+
+    def _find(self, kind: str, ref: str) -> dict | None:
+        p = self.feed.get("pending", {"limit": 30})
+        if kind == "a":
+            return next((a for a in p.get("actions", []) if str(a["id"]) == ref), None)
+        if kind == "q":
+            return next((q for q in p.get("questions", []) if str(q["id"]) == ref), None)
+        if kind == "r":
+            return next((d for d in p.get("devices", []) if str(d.get("mac")) == ref), None)
+        return None
+
+    def _decide(self, person: dict, chat_id: int, data: str, confirmed: bool = False) -> None:
+        kind, _, rest = data.partition(":")
+        ref, _, choice = rest.rpartition(":") if kind != "r" else (rest, "", "release")
+        try:
+            item = self._find(kind, ref) if kind in ("a", "q", "r") else {}
+        except Exception as ex:                         # noqa: BLE001
+            self.say(chat_id, f"⚠️ Could not read the open decisions: {e(ex)}")
+            return
+        if item is None:
+            self.say(chat_id, "ℹ️ That one is already decided, or gone.",
+                     SESSION_BUTTONS)
+            return
+
+        if kind == "a" and choice == "y" and item.get("asks_again") and not confirmed:
+            d = item.get("detail") or {}
+            lines = [f"⚠️ <b>This cannot be undone.</b> Action #{e(ref)}:",
+                     e(item["what"])]
+            for key, label in (("name", "Name"), ("file_path", "Path"), ("path", "Path"),
+                               ("sha256", "Hash"), ("hash", "Hash")):
+                if d.get(key):
+                    lines.append(f"{label}: <code>{e(d[key])}</code>")
+            lines.append(f"Reason: {e(item.get('reason') or 'none given')}")
+            lines.append("\nTo go ahead, your PIN and a fresh code again.")
+            self.say(chat_id, "\n".join(lines))
+            self._ask(person, chat_id, "again", data)
+            return
+        if kind == "q" and choice == "t":
+            self.awaiting[person["tg_user_id"]] = {"qid": int(ref),
+                                                   "expires": time.time() + ANSWER_SECONDS}
+            self.say(chat_id, f"✍️ Type your answer to question #{e(ref)}. "
+                              f"/cancel to leave it.")
+            return
+
+        body = {"person": person["name"], "text": None}
+        if kind == "a":
+            body.update(kind="action", ref=int(ref), choice="approve" if choice == "y" else "deny")
+            label = f"{'Approved' if choice == 'y' else 'Denied'} action #{ref}: {item['what']}"
+        elif kind == "q":
+            body.update(kind="question", ref=int(ref),
+                        choice={"y": "yes", "n": "no", "dk": "dont_know"}.get(choice, ""))
+            said = {"y": "yes", "n": "no", "dk": "I do not know"}.get(choice, "")
+            label = f"Answered question #{ref}: {said}"
+        elif kind == "v":
+            verdict = {"fa": "false_alarm", "real": "real", "ns": "not_sure"}.get(choice)
+            if not verdict:
+                return
+            body.update(kind="verdict", ref=int(ref), choice=verdict)
+            label = f"Incident #{ref}: {verdict.replace('_', ' ')}"
+        else:
+            body.update(kind="release", ref=ref, choice="release")
+            label = (f"Let in {item.get('hostname') or item.get('vendor') or 'a device'} "
+                     f"{item.get('ip') or ''} ({ref})")
+        self._send_decision(person, chat_id, body, label)
+
+    def _typed_answer(self, person: dict, chat_id: int, text: str) -> None:
+        wait = self.awaiting.pop(person["tg_user_id"])
+        if wait["expires"] < time.time() or not self._in_session(person):
+            self.say(chat_id, "⌛ That ran out, so nothing was sent. Press Type an "
+                              "answer again.", self._buttons(person))
+            return
+        self._send_decision(person, chat_id,
+                            {"kind": "question", "ref": wait["qid"], "choice": "text",
+                             "text": text[:1000], "person": person["name"]},
+                            f"Answered question #{wait['qid']}: {text[:200]}")
+
+    def _send_decision(self, person: dict, chat_id: int, body: dict, label: str) -> None:
+        try:
+            status, out = self.feed.post("decide", body)
+        except Exception as ex:                         # noqa: BLE001
+            self.say(chat_id, f"⚠️ Could not reach the app: {e(ex)}. Nothing changed.")
+            return
+        if status == 200 and out.get("ok"):
+            self.store.event("decision", person["name"], label)
+            self.say(chat_id, f"✅ {e(label)}", SESSION_BUTTONS)
+        else:
+            why = out.get("detail") or f"the app answered {status}"
+            self.store.event("decision_refused", person["name"], f"{label}; refused: {why}")
+            self.say(chat_id, f"⛔ Not done: {e(why)}", SESSION_BUTTONS)

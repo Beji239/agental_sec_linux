@@ -283,7 +283,7 @@ memory fixes, on the same laptop:
 - 5 minutes after start: 238 MB before, 177 MB now
 - 10 minutes after start: 399 MB before, 188 MB now
 
-## Remote manager, alerts on your phone
+## Remote manager, alerts and decisions on your phone
 
 <p align="center">
   <img src="assets/screenshots/remote.png" alt="The Remote tab: switch, Telegram, bot token and people" width="800">
@@ -307,9 +307,16 @@ bot that you make yourself with @BotFather, so the bot belongs to you.
 - **It answers a few questions.** `/status` says how the computer is doing,
   `/pending` lists what waits for your decision. Both are in the bot's menu
   and on two buttons under every alert.
-- **It cannot change anything yet.** This first version only watches. Acting
-  from the phone comes next, behind a PIN and an authenticator code, so a
-  taken over Telegram account is not enough.
+- **Decisions from the phone, behind a PIN and an authenticator code.** A
+  paired person who also set up control at the computer (their own PIN, an
+  authenticator app such as Aegis or Google Authenticator, and a panic word)
+  presses **Take control**, sends the PIN and the code, and for 30 minutes
+  can approve or deny actions, answer the agent's questions, give verdicts on
+  incidents and let held devices in. A taken over Telegram account is not
+  enough, and Telegram never sees the authenticator key, so it cannot fake an
+  approval either. Each code works once, three wrong tries lock that person
+  until you unlock them at the computer, and the panic word turns control off
+  for everyone.
 - **Nothing is opened to the internet.** The bot only connects out to
   Telegram. Telegram can read bot chats, so nothing secret is ever sent;
   an alert carries the incident's title and the device it is about.
@@ -317,10 +324,12 @@ bot that you make yourself with @BotFather, so the bot belongs to you.
 **It is a module, and off means off.** Remote manager is the first add-on
 built on a rule I set for everything new: it is not on unless you switch it
 on, and switched off it is gone, with no process, nothing loaded and no
-memory used. Switched on it runs as its own small process, about 25 MB, and
-can only read what the app shows it. Everything about it lives in its own
-tab: the switch, the bot token, the people, the alert choices, the history
-and a button that removes everyone at once. See the
+memory used. Switched on it runs as its own small process, about 30 MB. It
+reads what the app shows it, and decides only through the same calls the
+console uses. Everything about it lives in its own tab: the switch, the bot
+token, the people and their control, the alert choices, the history with
+every phone decision and who made it, and a button that removes everyone at
+once. See the
 [Remote tab](docs/TOUR.md#remote) in the tour.
 
 ## How well it detects malware

@@ -786,6 +786,13 @@ Sample data.*
   the bot checks it is the same number and that the contact is their own,
   then they are paired. **Pair again** makes a new code, **Remove** takes a
   person off and tells them.
+- **Control from the phone.** **Set up control** next to a paired person
+  opens the setup at the computer: they type their own PIN (6 to 12 digits)
+  and a panic word, then scan the QR code with an authenticator app, or type
+  the key shown next to it, and enter the first code. **Unlock** appears when
+  three wrong tries locked them, **Remove control** sends them back to alerts
+  only. When someone sent the panic word, a red card at the top says who and
+  when, with **Turn control back on**.
 - **Alerts.** Which levels go out: critical only, high and critical, or
   medium and up. Several within ten minutes go out as one message, at most
   20 a day. Quiet hours hold back everything but critical until they end.
@@ -797,7 +804,8 @@ Sample data.*
 
 *Everything the bot did, including a stranger it ignored. Sample data.*
 
-- **History.** Every pairing, removal, alert and refusal, newest first. A
+- **History.** Every pairing, removal, alert, refusal and phone decision with
+  who made it, newest first. A
   stranger who writes to the bot gets no answer and shows up here with their
   Telegram name.
 - **Revoke remote.** Removes everyone at once and tells them. Use it if a
@@ -806,8 +814,16 @@ Sample data.*
 On the phone, `/status` says how the computer is doing and `/pending` lists
 what waits for your decision. Both are in the bot's menu, and every alert has
 **Status** and **What's waiting** buttons under it. Alerts show the severity
-as a coloured dot and the time in your computer's time zone. Deciding from
-the phone comes in a later version.
+as a coloured dot and the time in your computer's time zone.
+
+To decide, press **Take control** or send `/control`, then the PIN and the
+code from the authenticator app. For 30 minutes, with a notice 5 minutes
+before the end, **What's waiting** shows each open item with its own
+buttons: **Approve** or **Deny** for an action, **Yes**, **No**, **I don't
+know** or **Type an answer** for a question, **Let it in** for a held device.
+An alert about one incident carries **False alarm**, **Real** and **Not
+sure**. `/done` ends the session early. Anything that cannot be undone asks
+for the PIN and a fresh code again.
 
 ## Settings
 

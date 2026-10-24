@@ -95,6 +95,21 @@ def _hash(code: str) -> str:
     return hashlib.sha256(clean_code(code).encode()).hexdigest()
 
 
+# Control from the phone, added after the first release, so older databases
+# get the columns on start.
+_CONTROL_COLUMNS = (
+    ("pin_hash", "TEXT"), ("word_hash", "TEXT"), ("totp_sealed", "TEXT"),
+    ("totp_pending", "TEXT"), ("enrolled_at", "REAL"),
+    ("last_step", "INTEGER NOT NULL DEFAULT 0"),
+    ("bad_tries", "INTEGER NOT NULL DEFAULT 0"), ("locked_at", "REAL"),
+    ("session_until", "REAL"), ("session_warned", "INTEGER NOT NULL DEFAULT 0"),
+)
+_CLEAR_CONTROL = ("pin_hash = NULL, word_hash = NULL, totp_sealed = NULL, "
+                  "totp_pending = NULL, enrolled_at = NULL, last_step = 0, "
+                  "bad_tries = 0, locked_at = NULL, session_until = NULL, "
+                  "session_warned = 0")
+
+
 class Store:
     def __init__(self, path):
         self._lock = threading.RLock()
@@ -103,6 +118,10 @@ class Store:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_DDL)
+        have = {r[1] for r in self._db.execute("PRAGMA table_info(people)")}
+        for col, kind in _CONTROL_COLUMNS:
+            if col not in have:
+                self._db.execute(f"ALTER TABLE people ADD COLUMN {col} {kind}")
         # Paired phones live here: owner only, like the main database.
         for p in (str(path), f"{path}-wal", f"{path}-shm"):
             try:
@@ -154,13 +173,20 @@ class Store:
     # People
 
     def people(self) -> list:
+        """For the tab: never the hashes or the secrets."""
         rows = self._all("SELECT id, name, phone, state, code_expires, "
-                         "tg_username, created_at, paired_at FROM people "
-                         "ORDER BY id")
+                         "tg_username, created_at, paired_at, enrolled_at, "
+                         "locked_at, session_until, totp_pending IS NOT NULL "
+                         "AS enrolling FROM people ORDER BY id")
         now = time.time()
         for r in rows:
             r["code_live"] = bool(r["state"] == "waiting" and r["code_expires"]
                                   and r["code_expires"] > now)
+            r["enrolled"] = bool(r["enrolled_at"])
+            r["locked"] = bool(r["locked_at"])
+            r["enrolling"] = bool(r["enrolling"])
+            if not (r["session_until"] and r["session_until"] > now):
+                r["session_until"] = None
         return rows
 
     def paired(self) -> list:
@@ -184,9 +210,12 @@ class Store:
 
     def new_code(self, pid: int) -> str:
         code = self._new_code()
+        # Pairing again may bind another Telegram account, so control is
+        # set up again too.
         self._run("UPDATE people SET state = 'waiting', code_hash = ?, "
                   "code_expires = ?, pairing_user_id = NULL, pairing_until = NULL, "
-                  "tg_user_id = NULL, chat_id = NULL, paired_at = NULL WHERE id = ?",
+                  "tg_user_id = NULL, chat_id = NULL, paired_at = NULL, "
+                  f"{_CLEAR_CONTROL} WHERE id = ?",
                   (_hash(code), time.time() + CODE_TTL, int(pid)))
         return code
 
@@ -256,3 +285,55 @@ class Store:
                   "(?, ?, ?, ?) ON CONFLICT(incident_id) DO UPDATE SET "
                   "rank = excluded.rank, at = excluded.at, silent = excluded.silent",
                   (int(incident_id), int(rank), time.time(), int(silent)))
+
+    # Control from the phone
+
+    def enrol_start(self, pid: int, pin_hash: str, word_hash: str,
+                    sealed_secret: str) -> None:
+        """Waits for the first code from the authenticator before it counts."""
+        self._run(f"UPDATE people SET {_CLEAR_CONTROL}, pin_hash = ?, "
+                  "word_hash = ?, totp_pending = ? WHERE id = ?",
+                  (pin_hash, word_hash, sealed_secret, int(pid)))
+
+    def enrol_finish(self, pid: int, step: int) -> None:
+        self._run("UPDATE people SET totp_sealed = totp_pending, totp_pending = NULL, "
+                  "enrolled_at = ?, last_step = ?, bad_tries = 0, locked_at = NULL "
+                  "WHERE id = ?", (time.time(), int(step), int(pid)))
+
+    def clear_control(self, pid: int) -> None:
+        self._run(f"UPDATE people SET {_CLEAR_CONTROL} WHERE id = ?", (int(pid),))
+
+    def enrolled(self) -> list:
+        return self._all("SELECT * FROM people WHERE state = 'paired' "
+                         "AND enrolled_at IS NOT NULL")
+
+    def used_step(self, pid: int, step: int) -> None:
+        self._run("UPDATE people SET last_step = ?, bad_tries = 0 WHERE id = ?",
+                  (int(step), int(pid)))
+
+    def bad_try(self, pid: int) -> int:
+        self._run("UPDATE people SET bad_tries = bad_tries + 1 WHERE id = ?", (int(pid),))
+        row = self._one("SELECT bad_tries FROM people WHERE id = ?", (int(pid),))
+        return int(row["bad_tries"]) if row else 0
+
+    def lock(self, pid: int) -> None:
+        self._run("UPDATE people SET locked_at = ?, session_until = NULL, "
+                  "session_warned = 0 WHERE id = ?", (time.time(), int(pid)))
+
+    def unlock(self, pid: int) -> None:
+        self._run("UPDATE people SET locked_at = NULL, bad_tries = 0 WHERE id = ?",
+                  (int(pid),))
+
+    def open_session(self, pid: int, until: float) -> None:
+        self._run("UPDATE people SET session_until = ?, session_warned = 0 "
+                  "WHERE id = ?", (until, int(pid)))
+
+    def end_session(self, pid: int) -> None:
+        self._run("UPDATE people SET session_until = NULL, session_warned = 0 "
+                  "WHERE id = ?", (int(pid),))
+
+    def warned(self, pid: int) -> None:
+        self._run("UPDATE people SET session_warned = 1 WHERE id = ?", (int(pid),))
+
+    def sessions(self) -> list:
+        return self._all("SELECT * FROM people WHERE session_until IS NOT NULL")

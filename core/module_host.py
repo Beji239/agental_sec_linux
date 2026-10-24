@@ -28,6 +28,9 @@ _NAME = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 _ENV_NAME = re.compile(r"^AGENTAL_[A-Z0-9_]{3,60}$")
 _SAFE_VALUE = re.compile(r"^[\x21-\x7e]*$")
 _VALUE_MAX = 512
+# What a module may decide through /api/module-feed/decide, when its
+# manifest asks for it. Everything else in the feed only reads.
+DECISION_KINDS = ("action", "question", "verdict", "release")
 LOG_MAX_BYTES = 2 * 1024 * 1024
 STOP_WAIT = 4.0
 CALL_TIMEOUT = 15.0
@@ -85,6 +88,7 @@ def _read_manifest(folder: Path) -> dict | None:
     ui = data.get("ui")
     if ui and ("/" in ui or not (folder / ui).is_file()):
         ui = None
+    decides = [k for k in (data.get("decides") or []) if k in DECISION_KINDS]
     need = str(data.get("app_min") or "0.0.0")
     fits = _version_tuple(_app_version()) >= _version_tuple(need)
     return {
@@ -96,6 +100,7 @@ def _read_manifest(folder: Path) -> dict | None:
         "ram_mb": data.get("ram_mb"),
         "needs": [str(n)[:120] for n in (data.get("needs") or [])][:8],
         "secrets": secrets_,
+        "decides": decides,
         "entry": entry,
         "ui": ui,
         "app_min": need,
@@ -346,6 +351,11 @@ def token_ok(name: str, token: str) -> bool:
         return False
     return hmac.compare_digest(run["token"].encode(),
                                str(token).encode("utf-8", "surrogateescape"))
+
+
+def may_decide(name: str, kind: str) -> bool:
+    man = discover().get(name) or {}
+    return kind in (man.get("decides") or [])
 
 
 def module_for_token(token: str) -> str | None:

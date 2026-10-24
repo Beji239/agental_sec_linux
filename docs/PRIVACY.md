@@ -79,7 +79,9 @@ stranger. This page lists what is in place against each of them.
 - The local integrity sensor hashes the files that decide who gets in, such
   as sudoers, SSH keys and startup files, and tells you when one changes.
 - Remote manager stores pairing codes as SHA-256 hashes only, and a code
-  expires after 15 minutes.
+  expires after 15 minutes. PINs and panic words are kept only as scrypt
+  hashes, and the authenticator keys are encrypted with a key bound to this
+  machine and your account.
 
 ## Every part has only the rights it needs
 
@@ -136,6 +138,10 @@ port.
 - Only people you pair can use it. Anyone else gets no answer.
 - Nothing secret is ever sent, because Telegram can read bot chats. The
   alerts it does send pass through Telegram's servers.
+- Deciding from the phone needs a PIN and an authenticator code. The
+  authenticator key is shown once, at the computer, and never goes through
+  Telegram. The bot deletes a PIN, a code or the panic word from the chat as
+  soon as it has read it.
 
 ## What leaves the machine
 
