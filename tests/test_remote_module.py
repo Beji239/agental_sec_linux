@@ -183,6 +183,22 @@ if _shutil.which("node"):
 else:
     print("  SKIP  node is not installed, the reader page was not run")
 
+print("strangers cannot flood the history")
+_sdb = remote_store.Store(pathlib.Path(tempfile.mkdtemp(prefix="remote-str-")) / "remote.db")
+_sbot = remote_bot.Bot(_sdb, None, None)
+for _i in range(30):
+    _sbot._stranger({"id": 5000 + _i, "first_name": "Spam"}, "sent a message and is not paired")
+_sev = [e for e in _sdb.events(500) if e["kind"] == "stranger"]
+check("at most 20 strangers listed an hour, then one line for the rest", len(_sev), 21)
+check("the line says the rest are not listed",
+      "without being listed" in _sev[0]["detail"], True)
+_sdb._run("INSERT INTO strangers (user_id, last_logged, bad_codes, blocked_until) "
+          "VALUES (1, 0, 0, NULL), (2, 0, 4, ?)", (time.time() + 3600,))
+_sbot._stranger({"id": 6000, "first_name": "Late"}, "sent a message and is not paired")
+_kept = {r["user_id"] for r in _sdb._all("SELECT user_id FROM strangers")}
+check("a stranger not seen for a month is dropped", 1 in _kept, False)
+check("one still blocked is kept", 2 in _kept, True)
+
 print("an older database gets the control columns")
 _old = pathlib.Path(tempfile.mkdtemp(prefix="remote-old-")) / "remote.db"
 import sqlite3                                        # noqa: E402
@@ -207,6 +223,7 @@ class FakeTelegram:
         self.sent = []
         self.calls = []
         self.next_id = 1
+        self.refuse_web_app = False
         self.cond = threading.Condition()
 
     def push(self, message, kind="message"):
@@ -242,6 +259,8 @@ class TgHandler(BaseHTTPRequestHandler):
                                    timeout=0.5)
                 got = [u for u in fake.updates if u["update_id"] >= offset]
             out = {"ok": True, "result": got}
+        elif method == "sendMessage" and fake.refuse_web_app and "web_app" in json.dumps(body):
+            out = {"ok": False, "error_code": 400, "description": "Bad Request: BUTTON_TYPE_INVALID"}
         elif method == "sendMessage":
             fake.sent.append(body)
             out = {"ok": True, "result": {"message_id": len(fake.sent)}}
@@ -805,6 +824,42 @@ try:
           bool(m) and len(m["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"]) <= remote_reader.URL_MAX,
           True)
     reply["answers"] = ["All **quiet**."]
+    fake.refuse_web_app = True
+    n = len(fake.to(111))
+    press(sam, "status")
+    m = next_to_sam(n, "could not be delivered privately")
+    check("a refused private message leaves a notice", bool(m), True)
+    check("and never falls back to plain text", bool(m) and "Open incidents" not in m["text"], True)
+    fake.refuse_web_app = False
+
+    print("chat: control ending while the agent answers")
+    gate = threading.Event()
+
+    def slow_turn(instruction, session_id, allowlist=None, extra_system="",
+                  max_rounds=None, history=None):
+        gate.wait(15)
+        return dict(reply)
+    agent_loop.run_unattended = slow_turn
+    n = len(fake.to(111))
+    say_as(sam, "a slow question")
+    next_to_sam(n, "Asking the agent")
+    say_as(sam, "red balloon")
+    check("the panic word gets through while the agent works",
+          bool(next_to_sam(n, "Panic word received")), True)
+    gate.set()
+    withheld = wait_for(lambda: [e for e in call("/events")[1]["events"] if e["kind"] == "chat_withheld"])
+    check("the answer is withheld", bool(withheld), True)
+    time.sleep(0.5)
+    check("and nothing of it reaches the phone",
+          any("quiet" in m["text"] or "Read" in json.dumps(m.get("reply_markup") or {})
+              for m in fake.to(111)[n:] if "Panic" not in m["text"]), False)
+    check("control back on at the computer", call("/control/resume", "POST")[0], 200)
+    agent_loop.run_unattended = fake_turn
+    rdb0 = sqlite3.connect(module_host.DATA_DIR / "remote" / "remote.db")
+    rdb0.execute("UPDATE people SET session_until = ? WHERE id = ?", (time.time() + 600, sam_id))
+    rdb0.commit()
+    rdb0.close()
+
     n = len(fake.to(111))
     check("plain again at the computer", call("/private/remove", "POST", {"id": sam_id})[0], 200)
     next_to_sam(n, "turned off")
@@ -839,6 +894,11 @@ try:
     n = len(fake.to(111))
     press(sam, "ctlc")
     check("Take control there asks for the PIN", bool(next_to_sam(n, "Send your <b>PIN</b>")), True)
+    n = len(fake.to(111))
+    msg_id[0] += 1
+    fake.push({"message_id": msg_id[0], "from": sam, "chat": chat, "photo": [{"file_id": "x"}]})
+    check("a photo at the PIN prompt is not counted as a wrong PIN",
+          bool(next_to_sam(n, "nothing was counted")), True)
     agent_loop.run_unattended = real_turn
 
     print("control: lockout")

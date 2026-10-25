@@ -113,7 +113,7 @@ class Routes(BaseHTTPRequestHandler):
 
     def _body(self) -> dict:
         try:
-            n = min(int(self.headers.get("Content-Length") or 0), 65536)
+            n = max(0, min(int(self.headers.get("Content-Length") or 0), 65536))
             data = json.loads(self.rfile.read(n) or b"{}")
             return data if isinstance(data, dict) else {}
         except ValueError:

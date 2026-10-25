@@ -18,7 +18,8 @@
     decision_refused: 'Decision refused', chat: 'Chat',
     chat_failed: 'Chat failed', private_started: 'Private setup started',
     private_on: 'Private messages on', private_off: 'Private messages off',
-    reader_checked: 'Reader page checked',
+    reader_checked: 'Reader page checked', chat_withheld: 'Answer withheld',
+    private_failed: 'Private message failed',
   };
   const TOKEN_ENV = 'AGENTAL_REMOTE_BOT_TOKEN';
   let timer = null;

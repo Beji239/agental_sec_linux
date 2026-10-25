@@ -431,7 +431,39 @@ cut is a sentence that stops them believing something untrue."""
 # is deliberately per-turn rather than per-session, "the model read fenced
 # text at some point this session" is too coarse to mean anything, while "the
 # model had just read fenced text when it wrote this" is the actual claim.
-_untrusted_seen: set[str] = set()
+# One set per thread: the console chat, the duty loop and a question from the
+# phone can run at the same time, each on its own thread, and one turn
+# starting must not wipe or mix another's record.
+class _PerThreadSet:
+    def __init__(self):
+        self._local = threading.local()
+
+    def _set(self) -> set:
+        s = getattr(self._local, "seen", None)
+        if s is None:
+            s = self._local.seen = set()
+        return s
+
+    def clear(self):
+        self._set().clear()
+
+    def add(self, item):
+        self._set().add(item)
+
+    def update(self, items):
+        self._set().update(items)
+
+    def __iter__(self):
+        return iter(set(self._set()))
+
+    def __contains__(self, item):
+        return item in self._set()
+
+    def __len__(self):
+        return len(self._set())
+
+
+_untrusted_seen = _PerThreadSet()
 
 # Every pid a kill_process call really came back successful for, this SESSION.
 #

@@ -15,6 +15,7 @@ CODE_LEN = 8
 CODE_TTL = 15 * 60
 PAIRING_TTL = 10 * 60
 EVENTS_KEPT = 1000
+STRANGERS_KEPT = 5000
 
 DEFAULTS = {
     "floor": "high",
@@ -300,6 +301,15 @@ class Store:
                   "excluded.bad_codes, blocked_until = excluded.blocked_until",
                   (int(row["user_id"]), row.get("last_logged"),
                    int(row.get("bad_codes") or 0), row.get("blocked_until")))
+        # Bounded: strangers not seen for a month go, and at most STRANGERS_KEPT
+        # stay; one still blocked is kept until its block runs out.
+        now = time.time()
+        self._run("DELETE FROM strangers WHERE COALESCE(last_logged, 0) < ? "
+                  "AND COALESCE(blocked_until, 0) < ?", (now - 30 * 86400, now))
+        self._run("DELETE FROM strangers WHERE user_id IN (SELECT user_id FROM "
+                  "strangers WHERE COALESCE(blocked_until, 0) < ? ORDER BY "
+                  "COALESCE(last_logged, 0) LIMIT MAX(0, (SELECT COUNT(*) FROM "
+                  "strangers) - ?))", (now, STRANGERS_KEPT))
 
     # Alerts already handled
 

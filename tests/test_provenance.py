@@ -163,6 +163,26 @@ print("\n[9] taint is per TURN, not per session")
 src = (ROOT / "core" / "agent_loop.py").read_text(encoding="utf-8")
 check("cleared at the top of each run", "_untrusted_seen.clear()" in src, True)
 check("and the reasoning is written down", "per-turn rather than" in src, True)
+# The console chat, the duty loop and a phone question run on their own
+# threads; one turn starting must not wipe another's record.
+import threading                                      # noqa: E402
+agent_loop._untrusted_seen.clear()
+agent_loop._untrusted_seen.add("query_packets")
+_other = {}
+
+
+def _another_turn():
+    agent_loop._untrusted_seen.clear()
+    agent_loop._untrusted_seen.add("query_dns")
+    _other["seen"] = agent_loop.untrusted_sources_this_turn()
+
+
+_t = threading.Thread(target=_another_turn)
+_t.start()
+_t.join()
+check("a turn on another thread keeps its own record", _other.get("seen"), ["query_dns"])
+check("and does not wipe this one", agent_loop.untrusted_sources_this_turn(), ["query_packets"])
+agent_loop._untrusted_seen.clear()
 
 print("\n[10] re-filing a row that predates the basis column")
 # TODO 45. Rows written before v26 carry NULL, which reads as unrecorded. The

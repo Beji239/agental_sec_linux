@@ -25,6 +25,7 @@ logger = logging.getLogger("remote")
 
 RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 STRANGER_LOG_GAP = 3600
+STRANGERS_LOGGED_PER_HOUR = 20
 BAD_CODE_LIMIT = 5
 BAD_CODE_BLOCK = 3600
 SESSION_SECONDS = 30 * 60
@@ -262,6 +263,8 @@ class Bot:
         except Exception:                               # noqa: BLE001
             logger.debug("button answer failed")
         person = self.store.by_user(sender.get("id") or 0)
+        if person and not chat.get("id"):
+            return
         if not person or chat.get("type") != "private":
             if sender.get("id"):
                 self._stranger(sender, "pressed a button and is not paired")
@@ -297,8 +300,20 @@ class Bot:
         if not row.get("last_logged") or now - row["last_logged"] > STRANGER_LOG_GAP:
             row["last_logged"] = now
             self.store.save_stranger(row)
-            self.store.event("stranger", self._name_of(sender),
-                             f"Ignored: {what}.")
+            # Many strangers at once must not push real history out of the log.
+            hour = time.strftime("%Y-%m-%d %H")
+            if self.store.get("stranger_hour") != hour:
+                self.store.put("stranger_hour", hour)
+                self.store.put("stranger_count", 0)
+            count = int(self.store.get("stranger_count") or 0) + 1
+            self.store.put("stranger_count", count)
+            if count <= STRANGERS_LOGGED_PER_HOUR:
+                self.store.event("stranger", self._name_of(sender), f"Ignored: {what}.")
+            elif count == STRANGERS_LOGGED_PER_HOUR + 1:
+                self.store.event("stranger", None,
+                                 f"More than {STRANGERS_LOGGED_PER_HOUR} strangers wrote "
+                                 f"to the bot this hour; the rest are ignored without "
+                                 f"being listed one by one.")
 
     def _code(self, sender: dict, chat_id: int, code: str, row: dict) -> None:
         person = self.store.match_code(code)
@@ -377,6 +392,10 @@ class Bot:
             return
         if uid in self.challenges and not cmd:
             self._forget(chat_id, msg)
+            if not text:
+                self.say(chat_id, "Send the PIN or the code as a message; nothing else "
+                                  "counts here, and nothing was counted.")
+                return
             self._answer_challenge(person, chat_id, text)
             return
         self.challenges.pop(uid, None)
@@ -1106,12 +1125,27 @@ class Bot:
                                                       "history": talk["history"]},
                                              timeout=CHAT_TIMEOUT)
             except Exception as ex:                     # noqa: BLE001
-                self.store.event("chat_failed", name, f"{asked[:200]}; the app did not "
-                                                      f"answer: {ex}")
-                self.say(chat_id, f"\u26A0\uFE0F Could not reach the app: {e(ex)}",
+                status, out = None, {"detail": f"the app did not answer: {ex}"}
+            done.set()
+            # The answer can take minutes. If the panic word, a revoke or the
+            # end of control came in meanwhile, nothing more goes to this chat.
+            fresh = self.store.person(person["id"])
+            if not fresh or fresh.get("state") != "paired" or not self._in_session(fresh):
+                self.store.event("chat_withheld", name,
+                                 f"{asked[:200]}; the answer was not sent, because "
+                                 f"control ended before it came back.")
+                if fresh and fresh.get("state") == "paired" and not fresh.get("locked_at") \
+                        and self.store.get("panic") != "1":
+                    self.say(chat_id, "⏱ The agent's answer came back after control "
+                                      "ended, so it was not sent. Take control and ask again.",
+                             CONTROL_BUTTONS)
+                return
+            person = fresh
+            if status is None:
+                self.store.event("chat_failed", name, f"{asked[:200]}; {out['detail']}"[:400])
+                self.say(chat_id, f"\u26A0\uFE0F Could not reach the app: {e(out['detail'])}",
                          self._buttons(person))
                 return
-            done.set()
             if status == 409:
                 self.say(chat_id, "\u23F3 The agent is busy with another question from a "
                                   "phone. Ask again in a minute.", self._buttons(person))
@@ -1129,8 +1163,7 @@ class Bot:
                                                   {"role": "assistant", "content": answer}]
                                )[-CHAT_KEPT:]
             talk["at"] = time.time()
-            if self._in_session(self.store.person(person["id"]) or {}):
-                self.chats[uid] = talk
+            self.chats[uid] = talk
             limit = self.chat_limit()
             foot = (f"\n\n<i>{tokens:,} tokens{' (estimated)' if out.get('estimated') else ''}"
                     f"; {min(used, limit):,} of {limit:,} used today.</i>")
@@ -1188,4 +1221,10 @@ class Bot:
             if self.say(chat_id, f"\U0001F512 {head}",
                         {"inline_keyboard": [[{"text": "Read", "web_app": {"url": url}}]] + rows}):
                 return True
+        # Never fall back to plain text: the person chose private messages.
+        self.store.event("private_failed", person.get("name"),
+                         f"A private message ({kind or 'message'}) could not be delivered.")
+        self.say(chat_id, f"\U0001F512 {head}\n<i>This message could not be delivered "
+                          f"privately. It is on the computer, in the Remote tab's history.</i>",
+                 markup if rows else None)
         return False
