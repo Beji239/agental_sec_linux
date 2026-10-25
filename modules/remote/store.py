@@ -25,6 +25,7 @@ DEFAULTS = {
     "daily_cap": "20",
     "chat_on": "0",
     "chat_limit": "100000",
+    "reader_url": "",
 }
 
 _DDL = """
@@ -106,6 +107,10 @@ _CONTROL_COLUMNS = (
     ("bad_tries", "INTEGER NOT NULL DEFAULT 0"), ("locked_at", "REAL"),
     ("session_until", "REAL"), ("session_warned", "INTEGER NOT NULL DEFAULT 0"),
 )
+# Private messages: the person's reader key, sealed, and one waiting for the
+# phone's check code.
+_READER_COLUMNS = (("reader_sealed", "TEXT"), ("reader_pending", "TEXT"),
+                   ("reader_at", "REAL"))
 _CLEAR_CONTROL = ("pin_hash = NULL, word_hash = NULL, totp_sealed = NULL, "
                   "totp_pending = NULL, enrolled_at = NULL, last_step = 0, "
                   "bad_tries = 0, locked_at = NULL, session_until = NULL, "
@@ -121,7 +126,7 @@ class Store:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_DDL)
         have = {r[1] for r in self._db.execute("PRAGMA table_info(people)")}
-        for col, kind in _CONTROL_COLUMNS:
+        for col, kind in _CONTROL_COLUMNS + _READER_COLUMNS:
             if col not in have:
                 self._db.execute(f"ALTER TABLE people ADD COLUMN {col} {kind}")
         # Paired phones live here: owner only, like the main database.
@@ -196,7 +201,8 @@ class Store:
         rows = self._all("SELECT id, name, phone, state, code_expires, "
                          "tg_username, created_at, paired_at, enrolled_at, "
                          "locked_at, session_until, totp_pending IS NOT NULL "
-                         "AS enrolling FROM people ORDER BY id")
+                         "AS enrolling, reader_at, reader_pending IS NOT NULL "
+                         "AS private_pending FROM people ORDER BY id")
         now = time.time()
         for r in rows:
             r["code_live"] = bool(r["state"] == "waiting" and r["code_expires"]
@@ -204,6 +210,8 @@ class Store:
             r["enrolled"] = bool(r["enrolled_at"])
             r["locked"] = bool(r["locked_at"])
             r["enrolling"] = bool(r["enrolling"])
+            r["private"] = bool(r["reader_at"])
+            r["private_pending"] = bool(r["private_pending"])
             if not (r["session_until"] and r["session_until"] > now):
                 r["session_until"] = None
         return rows
@@ -229,11 +237,12 @@ class Store:
 
     def new_code(self, pid: int) -> str:
         code = self._new_code()
-        # Pairing again may bind another Telegram account, so control is
-        # set up again too.
+        # Pairing again may bind another Telegram account, so control and
+        # private messages are set up again too.
         self._run("UPDATE people SET state = 'waiting', code_hash = ?, "
                   "code_expires = ?, pairing_user_id = NULL, pairing_until = NULL, "
                   "tg_user_id = NULL, chat_id = NULL, paired_at = NULL, "
+                  "reader_sealed = NULL, reader_pending = NULL, reader_at = NULL, "
                   f"{_CLEAR_CONTROL} WHERE id = ?",
                   (_hash(code), time.time() + CODE_TTL, int(pid)))
         return code
@@ -353,6 +362,18 @@ class Store:
 
     def warned(self, pid: int) -> None:
         self._run("UPDATE people SET session_warned = 1 WHERE id = ?", (int(pid),))
+
+    def reader_start(self, pid: int, sealed_key: str) -> None:
+        self._run("UPDATE people SET reader_pending = ? WHERE id = ?",
+                  (sealed_key, int(pid)))
+
+    def reader_finish(self, pid: int) -> None:
+        self._run("UPDATE people SET reader_sealed = reader_pending, reader_pending = NULL, "
+                  "reader_at = ? WHERE id = ?", (time.time(), int(pid)))
+
+    def reader_clear(self, pid: int) -> None:
+        self._run("UPDATE people SET reader_sealed = NULL, reader_pending = NULL, "
+                  "reader_at = NULL WHERE id = ?", (int(pid),))
 
     def sessions(self) -> list:
         return self._all("SELECT * FROM people WHERE session_until IS NOT NULL")

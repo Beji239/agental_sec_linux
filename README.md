@@ -324,9 +324,18 @@ bot that you make yourself with @BotFather, so the bot belongs to you.
   something should be done, it files a request that waits for your PIN and
   code like any other. Chat is off until you turn it on in the tab, and since
   every question uses the model's tokens, you set a daily allowance there.
+- **Private messages Telegram cannot read.** Bot chats are not end to end
+  encrypted, so you can set up a key for each person: the Remote tab shows
+  it as a QR code, they scan it inside Telegram and it stays in the phone's
+  secure storage. From then on the alerts, the status, the open decisions
+  and the agent's answers go to them sealed, and a **Read** button opens
+  them on the phone in a small page that loads nothing and sends nothing
+  out. Telegram only carries scrambled text. What you type to the bot is
+  not sealed.
 - **Nothing is opened to the internet.** The bot only connects out to
-  Telegram. Telegram can read bot chats, so nothing secret is ever sent;
-  an alert carries the incident's title and the device it is about.
+  Telegram. Telegram can read bot chats, so nothing secret is ever sent in
+  plain; an alert carries the incident's title and the device it is about,
+  or only how urgent it is when private messages are on.
 
 **It is a module, and off means off.** Remote manager is the first add-on
 built on a rule I set for everything new: it is not on unless you switch it
@@ -334,7 +343,8 @@ on, and switched off it is gone, with no process, nothing loaded and no
 memory used. Switched on it runs as its own small process, about 30 MB. It
 reads what the app shows it, and decides only through the same calls the
 console uses. Everything about it lives in its own tab: the switch, the bot
-token, the people and their control, the alert choices, the chat allowance,
+token, the people with their control and private messages, the alert
+choices, the chat allowance,
 the history with every phone decision and question and who made it, and a button that removes everyone at
 once. See the
 [Remote tab](docs/TOUR.md#remote) in the tour.

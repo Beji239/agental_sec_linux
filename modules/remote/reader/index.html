@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>AgentalSec private reader</title>
+<link rel="stylesheet" href="reader.css">
+</head>
+<body>
+<main>
+  <h1>AgentalSec</h1>
+  <p id="note" class="note">Opening...</p>
+
+  <section id="message" hidden>
+    <h2 id="msg-title"></h2>
+    <p id="msg-when" class="note"></p>
+    <div id="msg-body" class="body"></div>
+  </section>
+
+  <section id="enrol" hidden>
+    <h2>Private messages on this phone</h2>
+    <p class="note">At the computer, in the Remote tab, press <b>Set up private messages</b> next to your
+      name. A code appears there. Press <b>Scan the key</b> here and point the phone at it.</p>
+    <button id="scan" type="button">Scan the key</button>
+    <p id="check" class="check" hidden></p>
+  </section>
+
+  <section id="keytools" hidden>
+    <button id="forget" type="button" class="quiet">Remove the key from this phone</button>
+  </section>
+
+  <p class="foot">This page opens messages with a key kept in this phone's secure storage. It loads
+    nothing from anywhere and sends nothing out.</p>
+</main>
+<script src="reader.js"></script>
+</body>
+</html>

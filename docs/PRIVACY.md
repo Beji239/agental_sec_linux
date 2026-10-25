@@ -136,8 +136,16 @@ port.
 - The Remote tab talks to it over a private socket file that only your
   account can open.
 - Only people you pair can use it. Anyone else gets no answer.
-- Nothing secret is ever sent, because Telegram can read bot chats. The
-  alerts it does send pass through Telegram's servers.
+- Nothing secret is ever sent in plain, because Telegram can read bot chats.
+  The alerts it does send pass through Telegram's servers.
+- With private messages set up for a person, what goes to them is sealed
+  with AES-256-GCM and a key only this computer and their phone hold. The
+  key goes from the screen to the phone by QR code, never through Telegram,
+  and is kept in the phone's secure storage (Keychain or Keystore) and here
+  encrypted like the authenticator keys. Telegram sees scrambled text and
+  how urgent the message is. The reader page that opens it loads nothing
+  from anywhere and cannot send anything out. What the person types to the
+  bot is not sealed.
 - Deciding from the phone needs a PIN and an authenticator code. The
   authenticator key is shown once, at the computer, and never goes through
   Telegram. The bot deletes a PIN, a code or the panic word from the chat as
@@ -161,6 +169,8 @@ port.
 - **The update check**, once a day to GitHub's release page. You can switch
   it off on the Settings tab.
 - **Telegram**, only with Remote manager switched on.
+- **The reader page**, fetched only when you press **Check the page** in
+  the Remote tab, to compare it with the copy that came with the module.
 
 ## What no local tool can promise
 

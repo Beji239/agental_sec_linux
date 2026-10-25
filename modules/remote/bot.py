@@ -2,8 +2,10 @@
 # What the bot does with a message, and how alerts go out. Only paired
 # people get answers; everyone else is ignored and written to the history.
 # Deciding and chatting with the agent need a control session: PIN plus
-# authenticator code, 30 minutes.
+# authenticator code, 30 minutes. With private messages set up, details go
+# sealed behind a Read button (reader.py).
 
+import hashlib
 import html
 import http.client
 import json
@@ -15,6 +17,7 @@ import urllib.parse
 from datetime import datetime, timezone
 
 import control
+import reader
 from store import clean_code, phones_match, CODE_LEN, CODE_ALPHABET
 from tg_api import TelegramError
 
@@ -115,6 +118,15 @@ def _short_time(stamp) -> str:
 
 def _dot(severity) -> str:
     return DOT.get(str(severity or "").lower(), "\u26AA")
+
+
+def _mac_ref(mac: str) -> str:
+    return hashlib.sha256(str(mac).lower().encode()).hexdigest()[:12]
+
+
+def _plain(text: str) -> str:
+    """Telegram HTML back to plain text, for sealing."""
+    return html.unescape(re.sub(r"<[^>]+>", "", str(text or "")))
 
 
 def phone_html(text: str) -> str:
@@ -256,7 +268,8 @@ class Bot:
             return
         data = str(query.get("data") or "")
         if data == "status":
-            self.say(chat["id"], self._status_text(), self._buttons(person))
+            self.private(person, chat["id"], self._status_text(), "<b>Status</b>",
+                         "Status", self._buttons(person), "status")
         elif data == "pending":
             self._pending(person, chat["id"])
         elif data == "ctl":
@@ -373,7 +386,8 @@ class Bot:
         self.awaiting.pop(uid, None)
 
         if cmd == "/status":
-            self.say(chat_id, self._status_text(), self._buttons(person))
+            self.private(person, chat_id, self._status_text(), "<b>Status</b>",
+                         "Status", self._buttons(person), "status")
         elif cmd == "/pending":
             self._pending(person, chat_id)
         elif cmd == "/control":
@@ -573,12 +587,26 @@ class Bot:
                  {"text": "Not sure", "callback_data": f"v:{iid}:ns"}], VIEW_ROW]}
         else:
             markup = CONTROL_BUTTONS
-        if self._to_all(people, text, markup):
+        head = self._alert_head(batch)
+        sent = False
+        for p in people:
+            sent = self.private(p, p["chat_id"], text, head, _plain(head), markup,
+                                "alert") or sent
+        if sent:
             self.last_sent_at = time.time()
             self.store.put("sent_today", sent_today + 1)
             self.store.event("alert_sent", None,
                              f"{len(batch)} alert(s) to {len(people)} person(s): "
                              f"{batch[0].get('title')}"[:400])
+
+    def _alert_head(self, batch: list) -> str:
+        """What a sealed alert shows in the clear: how urgent, not what."""
+        if len(batch) == 1:
+            i = batch[0]
+            sev = str(i.get("severity") or "").upper()
+            head = f"Raised to {sev}" if i.get("raised") else f"{sev}: new incident"
+            return f"{_dot(i.get('severity'))} <b>{e(head)}</b>"
+        return f"\U0001F6A8 <b>{len(batch)} urgent incidents</b>"
 
     def _alert_text(self, batch: list) -> str:
         if len(batch) == 1:
@@ -818,40 +846,55 @@ class Bot:
             if not empty:
                 markup = {"inline_keyboard": [[{"text": "Decide now", "callback_data": "ctl"}],
                                               VIEW_ROW]}
-            self.say(chat_id, self._pending_text(p), markup)
+            if empty:
+                self.say(chat_id, self._pending_text(p), markup)
+            else:
+                self.private(person, chat_id, self._pending_text(p),
+                             "<b>Waiting for your decision</b>", "Waiting for your decision",
+                             markup, "pending")
             return
         n = len(p.get("actions", [])) + len(p.get("questions", [])) + len(p.get("devices", []))
         self.say(chat_id, f"\U0001F4CB <b>{n} waiting for your decision</b>, one message each:")
         for a in p.get("actions", []):
-            self._show_action(chat_id, a)
+            self._show_action(person, chat_id, a)
         for q in p.get("questions", []):
-            self._show_question(chat_id, q)
+            self._show_question(person, chat_id, q)
         for d in p.get("devices", []):
-            self._show_device(chat_id, d)
+            self._show_device(person, chat_id, d)
 
-    def _show_action(self, chat_id: int, a: dict) -> None:
+    def _show_action(self, person: dict, chat_id: int, a: dict) -> None:
         yes = "Approve (asks again)" if a.get("asks_again") else "Approve"
-        self.say(chat_id, f"⚙️ <b>Action #{e(a['id'])}</b>\n{e(a['what'])}\n"
-                          f"<i>{e(a.get('reason') or 'no reason given')}</i>",
-                 {"inline_keyboard": [[{"text": yes, "callback_data": f"a:{a['id']}:y"},
-                                       {"text": "Deny", "callback_data": f"a:{a['id']}:n"}]]})
+        head = f"⚙️ <b>Action #{e(a['id'])}</b>"
+        self.private(person, chat_id, f"{head}\n{e(a['what'])}\n"
+                                      f"<i>{e(a.get('reason') or 'no reason given')}</i>",
+                     head, f"Action #{a['id']}",
+                     {"inline_keyboard": [[{"text": yes, "callback_data": f"a:{a['id']}:y"},
+                                           {"text": "Deny", "callback_data": f"a:{a['id']}:n"}]]},
+                     "action")
 
-    def _show_question(self, chat_id: int, q: dict) -> None:
+    def _show_question(self, person: dict, chat_id: int, q: dict) -> None:
         qid = q["id"]
-        self.say(chat_id, f"❓ <b>Question #{e(qid)}</b>\n{e(q['question'][:600])}",
-                 {"inline_keyboard": [
-                     [{"text": "Yes", "callback_data": f"q:{qid}:y"},
-                      {"text": "No", "callback_data": f"q:{qid}:n"},
-                      {"text": "I don't know", "callback_data": f"q:{qid}:dk"}],
-                     [{"text": "Type an answer", "callback_data": f"q:{qid}:t"}]]})
+        head = f"❓ <b>Question #{e(qid)}</b>"
+        self.private(person, chat_id, f"{head}\n{e(q['question'][:600])}", head,
+                     f"Question #{qid}", {"inline_keyboard": [
+                         [{"text": "Yes", "callback_data": f"q:{qid}:y"},
+                          {"text": "No", "callback_data": f"q:{qid}:n"},
+                          {"text": "I don't know", "callback_data": f"q:{qid}:dk"}],
+                         [{"text": "Type an answer", "callback_data": f"q:{qid}:t"}]]},
+                     "question")
 
-    def _show_device(self, chat_id: int, d: dict) -> None:
+    def _show_device(self, person: dict, chat_id: int, d: dict) -> None:
         name = d.get("hostname") or d.get("vendor") or "A new device"
-        self.say(chat_id, f"\U0001F4F5 <b>Held device</b>\n{e(name)} "
-                          f"<code>{e(d.get('ip') or '')}</code> <code>{e(d.get('mac') or '')}</code>\n"
-                          f"<i>Kept off the network until someone lets it in.</i>",
-                 {"inline_keyboard": [[{"text": "Let it in",
-                                        "callback_data": f"r:{d.get('mac') or ''}"}]]})
+        mac = d.get("mac") or ""
+        # Button data is seen by Telegram, so a private one carries a stand-in.
+        ref = _mac_ref(mac) if self._reader_key(person) else mac
+        head = "\U0001F4F5 <b>Held device</b>"
+        self.private(person, chat_id, f"{head}\n{e(name)} "
+                                      f"<code>{e(d.get('ip') or '')}</code> <code>{e(mac)}</code>\n"
+                                      f"<i>Kept off the network until someone lets it in.</i>",
+                     head, "Held device",
+                     {"inline_keyboard": [[{"text": "Let it in", "callback_data": f"r:{ref}"}]]},
+                     "device")
 
     def _after_control(self, person: dict, chat_id: int, then: str) -> None:
         """After the PIN and code: show again what the person pressed, so the
@@ -869,12 +912,14 @@ class Bot:
             except Exception:                           # noqa: BLE001
                 inc = {}
             if inc:
-                self.say(chat_id, f"{_dot(inc.get('severity'))} <b>Incident #{e(iid)}</b>\n"
-                                  f"{e(inc.get('title'))}\nWhat was it?",
-                         {"inline_keyboard": [[
-                             {"text": "False alarm", "callback_data": f"v:{iid}:fa"},
-                             {"text": "Real", "callback_data": f"v:{iid}:real"},
-                             {"text": "Not sure", "callback_data": f"v:{iid}:ns"}]]})
+                head = f"{_dot(inc.get('severity'))} <b>Incident #{e(iid)}</b>"
+                self.private(person, chat_id, f"{head}\n{e(inc.get('title'))}\nWhat was it?",
+                             head + "\nWhat was it?", f"Incident #{iid}",
+                             {"inline_keyboard": [[
+                                 {"text": "False alarm", "callback_data": f"v:{iid}:fa"},
+                                 {"text": "Real", "callback_data": f"v:{iid}:real"},
+                                 {"text": "Not sure", "callback_data": f"v:{iid}:ns"}]]},
+                             "incident")
                 return
         self._pending(person, chat_id)
 
@@ -891,7 +936,8 @@ class Bot:
         if kind == "q":
             return next((q for q in p.get("questions", []) if str(q["id"]) == ref), None)
         if kind == "r":
-            return next((d for d in p.get("devices", []) if str(d.get("mac")) == ref), None)
+            return next((d for d in p.get("devices", [])
+                         if ref in (str(d.get("mac")), _mac_ref(d.get("mac")))), None)
         return None
 
     def _decide(self, person: dict, chat_id: int, data: str, confirmed: bool = False) -> None:
@@ -917,7 +963,9 @@ class Bot:
                     lines.append(f"{label}: <code>{e(d[key])}</code>")
             lines.append(f"Reason: {e(item.get('reason') or 'none given')}")
             lines.append("\nTo go ahead, your PIN and a fresh code again.")
-            self.say(chat_id, "\n".join(lines))
+            self.private(person, chat_id, "\n".join(lines),
+                         f"⚠️ <b>This cannot be undone.</b> Action #{e(ref)}",
+                         f"Action #{ref} cannot be undone", None, "action")
             self._ask(person, chat_id, "again", data)
             return
         if kind == "q" and choice == "t":
@@ -943,9 +991,9 @@ class Bot:
             body.update(kind="verdict", ref=int(ref), choice=verdict)
             label = f"Incident #{ref}: {verdict.replace('_', ' ')}"
         else:
-            body.update(kind="release", ref=ref, choice="release")
+            body.update(kind="release", ref=item["mac"], choice="release")
             label = (f"Let in {item.get('hostname') or item.get('vendor') or 'a device'} "
-                     f"{item.get('ip') or ''} ({ref})")
+                     f"{item.get('ip') or ''} ({item['mac']})")
         self._send_decision(person, chat_id, body, label)
 
     def _typed_answer(self, person: dict, chat_id: int, text: str) -> None:
@@ -967,11 +1015,13 @@ class Bot:
             return
         if status == 200 and out.get("ok"):
             self.store.event("decision", person["name"], label)
-            self.say(chat_id, f"✅ {e(label)}", SESSION_BUTTONS)
+            self.private(person, chat_id, f"✅ {e(label)}", "✅ <b>Done</b>", "Done",
+                         SESSION_BUTTONS, "decision")
         else:
             why = out.get("detail") or f"the app answered {status}"
             self.store.event("decision_refused", person["name"], f"{label}; refused: {why}")
-            self.say(chat_id, f"⛔ Not done: {e(why)}", SESSION_BUTTONS)
+            self.private(person, chat_id, f"⛔ Not done: {e(why)}", "⛔ <b>Not done</b>",
+                         "Not done", SESSION_BUTTONS, "decision")
 
     # Chat with the agent
 
@@ -1088,15 +1138,54 @@ class Bot:
             if out.get("filed"):
                 foot = ("\n\n\U0001F4CB The agent filed a request; <b>What's waiting</b> "
                         "shows it." + foot)
-            body = phone_html(answer)
-            cut = len(answer)
-            while len(body) > 3800:
-                # Cut the plain text, never the markup, so no tag is left open.
-                cut = cut * 3 // 4
-                body = e(answer[:cut]) + "\n[cut short]"
-            self.say(chat_id, body + foot, markup)
+            if self._reader_key(person):
+                self.private(person, chat_id, phone_html(answer),
+                             "\U0001F4AC <b>The agent answered</b>" + foot,
+                             label or "The agent's answer", markup, "chat")
+            else:
+                body = phone_html(answer)
+                cut = len(answer)
+                while len(body) > 3800:
+                    # Cut the plain text, never the markup, so no tag is left open.
+                    cut = cut * 3 // 4
+                    body = e(answer[:cut]) + "\n[cut short]"
+                self.say(chat_id, body + foot, markup)
             self.store.event("chat", name, f"Asked: {asked[:200]} ({tokens:,} tokens"
                                            f"{', filed a request' if out.get('filed') else ''})")
         finally:
             done.set()
             self.chat_busy.release()
+
+    # Private messages
+
+    def reader_base(self) -> str:
+        return self.store.get("reader_url") or reader.DEFAULT_URL
+
+    def _reader_key(self, person: dict) -> bytes | None:
+        if not self.box or not person.get("reader_sealed"):
+            return None
+        try:
+            return reader._unb64(self.box.open(person["reader_sealed"]))
+        except Exception:                               # noqa: BLE001
+            return None
+
+    def private(self, person: dict, chat_id: int, text: str, head: str, title: str,
+                markup: dict = None, kind: str = "") -> bool:
+        """text as it is, or, for someone with private messages, sealed behind
+        a Read button with only head in the clear."""
+        key = self._reader_key(person)
+        if not key:
+            return self.say(chat_id, text, markup)
+        body = _plain(text)
+        rows = list((markup or {}).get("inline_keyboard") or [])
+        base = self.reader_base()
+        for cap in (None, 1500, 500):
+            part = body if cap is None or len(body) <= cap else \
+                body[:cap].rstrip() + "\n[cut short; the rest is on the computer]"
+            url = reader.link(base, reader.seal(key, title, part, kind))
+            if len(url) > reader.URL_MAX:
+                continue
+            if self.say(chat_id, f"\U0001F512 {head}",
+                        {"inline_keyboard": [[{"text": "Read", "web_app": {"url": url}}]] + rows}):
+                return True
+        return False

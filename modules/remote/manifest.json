@@ -2,15 +2,16 @@
   "name": "remote",
   "title": "Remote manager",
   "tab": "Remote",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "app_min": "2.6.1",
-  "summary": "Urgent alerts on your phone through a Telegram bot you create yourself, decisions from the phone and a chat with the agent. Only people you pair here can use it, and only those who also set a PIN and an authenticator app here can decide and chat: approve or deny actions, answer the agent's questions, give verdicts, let held devices in, and ask the agent to look into things.",
+  "summary": "Urgent alerts on your phone through a Telegram bot you create yourself, decisions from the phone, a chat with the agent and private messages Telegram cannot read. Only people you pair here can use it, and only those who also set a PIN and an authenticator app here can decide and chat: approve or deny actions, answer the agent's questions, give verdicts, let held devices in, and ask the agent to look into things.",
   "ram_mb": 40,
   "needs": [
     "A Telegram bot token from @BotFather",
     "An outgoing connection to api.telegram.org; nothing is opened to the internet",
     "An authenticator app on the phone (Aegis, Google Authenticator or the like) to decide from it",
-    "A model set up in the app to chat; questions use its tokens, up to a daily allowance you set"
+    "A model set up in the app to chat; questions use its tokens, up to a daily allowance you set",
+    "For private messages, a recent Telegram on Android or iOS"
   ],
   "secrets": ["AGENTAL_REMOTE_BOT_TOKEN"],
   "decides": ["action", "question", "verdict", "release"],

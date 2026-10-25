@@ -1,7 +1,8 @@
 # tests/test_remote_module.py
 # The Remote module end to end: its real process against the app's routes and
 # a fake Telegram. Off means no process, pairing needs the person's own number,
-# deciding and chatting need the PIN and an authenticator code.
+# deciding and chatting need the PIN and an authenticator code, private
+# messages open only with the phone's key.
 
 import json
 import os
@@ -28,6 +29,7 @@ from core import actions, device_hold, incident, module_feed, module_host, quest
 from core import memory_engine as me                  # noqa: E402
 import control as remote_control                      # noqa: E402
 import qr as remote_qr                                # noqa: E402
+import reader as remote_reader                        # noqa: E402
 import store as remote_store                          # noqa: E402
 
 fails = []
@@ -87,6 +89,97 @@ _h = remote_control.hash_word("Red Balloon")
 check("the panic word ignores case and spaces", remote_control.word_ok("  red   balloon ", _h), True)
 check("QR codes grow with the text", (len(remote_qr.matrix("hi")), len(remote_qr.matrix("x" * 100))),
       (21, 41))
+
+print("private messages")
+_k = remote_reader.new_key()
+_blob = remote_reader.seal(_k, "Title", "Body \u00e9 " * 200, "alert", now=1000)
+check("a sealed message opens with its key",
+      remote_reader.open_sealed(_k, _blob), {"v": 1, "k": "alert", "t": "Title",
+                                             "b": "Body \u00e9 " * 200, "at": 1000})
+check("long text is packed small", len(_blob) < 400, True)
+try:
+    remote_reader.open_sealed(remote_reader.new_key(), _blob)
+    check("another key cannot open it", "opened", "refused")
+except Exception:
+    check("another key cannot open it", "refused", "refused")
+_raw = bytearray(remote_reader._unb64(_blob))
+_raw[2] ^= 1
+try:
+    remote_reader.open_sealed(_k, remote_reader._b64(bytes(_raw)))
+    check("a changed header is refused", "opened", "refused")
+except Exception:
+    check("a changed header is refused", "refused", "refused")
+check("the check code is six characters", len(remote_reader.check_code(_k)), 6)
+check("an http reader page is refused", bool(remote_reader.url_problem("http://example.org/r/")), True)
+check("an https one is fine", remote_reader.url_problem("https://example.org/r/"), None)
+check("the page files come with the module", all(remote_reader.page_hashes().values()), True)
+
+# The real reader page in node, with a fake Telegram bridge and a fake page.
+_harness = r"""
+const fs = require('fs'), vm = require('vm');
+const [src, url, keyB64, qrText] = process.argv.slice(2);
+const els = {};
+const el = id => els[id] || (els[id] = { id, hidden: true, textContent: '', className: '', onclick: null });
+const store = {};
+const out = { posts: [] };
+let ctx;
+function reply(type, data) { setTimeout(() => ctx.window.Telegram.WebView.receiveEvent(type, data), 0); }
+const proxy = { postEvent(name, json) {
+  const p = JSON.parse(json); out.posts.push(name);
+  if (name === 'web_app_secure_storage_get_key') reply('secure_storage_key_received', { req_id: p.req_id, value: store[p.key] || null });
+  if (name === 'web_app_secure_storage_save_key') { store[p.key] = p.value; reply('secure_storage_key_saved', { req_id: p.req_id }); }
+  if (name === 'web_app_open_scan_qr_popup') reply('qr_text_received', { data: qrText });
+} };
+if (keyB64) store.agentalsec_reader_key = keyB64;
+const u = new URL(url);
+const window = { TelegramWebviewProxy: proxy, addEventListener() {}, parent: { postMessage() {} } };
+ctx = { window, document: { getElementById: el, documentElement: { style: { setProperty() {} } } },
+        location: { hash: u.hash, search: u.search }, crypto: globalThis.crypto, TextEncoder, TextDecoder,
+        URLSearchParams, Blob, Response, DecompressionStream, atob, btoa, setTimeout, clearTimeout,
+        Uint8Array, Date, JSON, Math, Number, String, Object, Error, Promise };
+window.window = window;
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(src, 'utf8'), ctx);
+setTimeout(() => { if (el('scan').onclick) el('scan').onclick(); }, 50);
+setTimeout(() => {
+  out.note = el('note').textContent; out.title = el('msg-title').textContent;
+  out.body = el('msg-body').textContent; out.check = el('check').textContent;
+  out.saved = store.agentalsec_reader_key || null;
+  console.log(JSON.stringify(out));
+}, 400);
+"""
+import shutil as _shutil, subprocess as _sp      # noqa: E402
+if _shutil.which("node"):
+    _hfile = pathlib.Path(tempfile.mkdtemp(prefix="reader-")) / "harness.js"
+    _hfile.write_text(_harness)
+    _page = str(ROOT / "modules" / "remote" / "reader" / "reader.js")
+    _base = "https://example.org/reader/"
+    _tg = "#tgWebAppVersion=9.1&tgWebAppPlatform=android"
+
+    def _run_page(url, key=b"", qr=""):
+        got = _sp.run(["node", str(_hfile), _page, url,
+                       remote_reader._b64(key) if key else "", qr],
+                      capture_output=True, text=True, timeout=30)
+        try:
+            return json.loads(got.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            print(got.stderr[-800:])
+            return {}
+
+    _sealed = remote_reader.seal(_k, "HIGH: new incident", "Line one <b>\nLine two & more", "alert")
+    page = _run_page(remote_reader.link(_base, _sealed) + _tg, _k)
+    check("the page opens a sealed message", (page.get("title"), page.get("body")),
+          ("HIGH: new incident", "Line one <b>\nLine two & more"))
+    check("it tells the phone it is ready", "web_app_ready" in page.get("posts", []), True)
+    page = _run_page(remote_reader.link(_base, _sealed) + _tg, remote_reader.new_key())
+    check("with another key it says so", "different key" in page.get("note", ""), True)
+    page = _run_page(remote_reader.link(_base, _sealed) + "#tgWebAppVersion=7.0", _k)
+    check("an old Telegram is told to update", "too old" in page.get("note", ""), True)
+    page = _run_page(remote_reader.enrol_link(_base) + _tg, b"", remote_reader.qr_text(_k))
+    check("scanning the key saves it in secure storage", page.get("saved"), remote_reader._b64(_k))
+    check("and shows the check code", page.get("check"), remote_reader.check_code(_k))
+else:
+    print("  SKIP  node is not installed, the reader page was not run")
 
 print("an older database gets the control columns")
 _old = pathlib.Path(tempfile.mkdtemp(prefix="remote-old-")) / "remote.db"
@@ -648,6 +741,74 @@ try:
           {e["person"] for e in events if e["kind"] == "chat"}, {"Sam"})
     check("and the failed one too", any(e["kind"] == "chat_failed" for e in events), True)
     reply.update(answers=["All **quiet**."], usage={"total_tokens": 100}, error=None)
+
+    print("private messages: setup")
+    check("an http reader page is refused in the tab",
+          call("/reader/url", "POST", {"url": "http://example.org/r/"})[0], 400)
+    check("a page of your own can be set",
+          call("/reader/url", "POST", {"url": "https://example.org/r/"})[1].get("url"),
+          "https://example.org/r/")
+    check("empty goes back to the default", call("/reader/url", "POST", {"url": ""})[1]["url"],
+          remote_reader.DEFAULT_URL)
+    check("someone not paired cannot get it", call("/private/start", "POST", {"id": kim_id})[0], 400)
+    n = len(fake.to(111))
+    code_, out = call("/private/start", "POST", {"id": sam_id})
+    check("setup starts with a QR picture", (code_, out["svg"].startswith("<svg")), (200, True))
+    m = next_to_sam(n, "Private messages")
+    check("Sam gets the reader to scan with",
+          bool(m) and m["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"],
+          remote_reader.enrol_link(remote_reader.DEFAULT_URL))
+    box = remote_control.SecretBox(module_host.DATA_DIR / "remote")
+    pend = sqlite3.connect(module_host.DATA_DIR / "remote" / "remote.db").execute(
+        "SELECT reader_pending FROM people WHERE id = ?", (sam_id,)).fetchone()[0]
+    pkey = remote_reader._unb64(box.open(pend))
+    check("the key is not stored in plain",
+          remote_reader._b64(pkey).encode() in (module_host.DATA_DIR / "remote" / "remote.db").read_bytes(),
+          False)
+    check("a wrong check code is refused", call("/private/confirm", "POST", {"id": sam_id, "code": "AAAAAA"})[0], 400)
+    n = len(fake.to(111))
+    check("the phone's check code finishes it",
+          call("/private/confirm", "POST", {"id": sam_id,
+                                            "code": remote_reader.check_code(pkey).lower()})[0], 200)
+    check("the tab shows it", next(p for p in call("/state")[1]["people"] if p["id"] == sam_id)["private"], True)
+
+    def opened(msg):
+        url = msg["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"]
+        return remote_reader.open_sealed(pkey, url.split("?m=", 1)[1])
+
+    m = next_to_sam(n, "Private messages are on")
+    check("the first sealed message opens with the phone's key",
+          bool(m) and "Private messages work" in opened(m)["b"], True)
+
+    print("private messages: sealed")
+    n = len(fake.to(111))
+    press(sam, "status")
+    m = next_to_sam(n, "<b>Status</b>")
+    check("status comes sealed, nothing of it in the clear",
+          bool(m) and m["text"].startswith("\U0001F512") and "Open incidents" not in m["text"], True)
+    check("and opens to the status", bool(m) and "Open incidents" in opened(m)["b"], True)
+    check("its buttons stay under it",
+          bool(m) and [b.get("callback_data") for b in m["reply_markup"]["inline_keyboard"][1]],
+          ["pending", "end"])
+    n = len(fake.to(111))
+    say_as(sam, "secret question")
+    m = next_to_sam(n, "The agent answered")
+    check("the agent's answer comes sealed", bool(m) and "quiet" not in m["text"], True)
+    check("and opens to the answer", bool(m) and opened(m)["b"], "All quiet.")
+    reply["answers"] = ["word " * 2000]
+    n = len(fake.to(111))
+    say_as(sam, "a long one")
+    m = next_to_sam(n, "The agent answered")
+    check("a long answer still fits the button",
+          bool(m) and len(m["reply_markup"]["inline_keyboard"][0][0]["web_app"]["url"]) <= remote_reader.URL_MAX,
+          True)
+    reply["answers"] = ["All **quiet**."]
+    n = len(fake.to(111))
+    check("plain again at the computer", call("/private/remove", "POST", {"id": sam_id})[0], 200)
+    next_to_sam(n, "turned off")
+    n = len(fake.to(111))
+    press(sam, "status")
+    check("then status is in plain", bool(next_to_sam(n, "Open incidents")), True)
 
     print("control: the session ends")
     rdb = sqlite3.connect(module_host.DATA_DIR / "remote" / "remote.db")

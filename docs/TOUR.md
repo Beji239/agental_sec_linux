@@ -793,6 +793,12 @@ Sample data.*
   three wrong tries locked them, **Remove control** sends them back to alerts
   only. When someone sent the panic word, a red card at the top says who and
   when, with **Turn control back on**.
+- **Private messages.** **Set up private messages** next to a paired person
+  shows a QR code with their key and sends them **Open the reader**. On the
+  phone they press **Scan the key** and point it at the code; the phone then
+  shows six characters to type here. **Plain messages** turns it off again.
+  The card also holds the reader page's address and **Check the page**,
+  which compares the hosted page with the copy that came with the module.
 - **Chat with the agent.** Turns chat from the phone on or off and sets the
   daily allowance of model tokens, shared by everyone, with how much is used
   today. A question started under the allowance is answered in full.
@@ -835,6 +841,10 @@ listening ports and the router. The agent only reads from here; when it
 files a request, the answer says so and **What's waiting** shows it.
 `/new` starts a fresh chat, and the conversation is forgotten when control
 ends.
+
+With private messages on, those messages arrive as a lock, how urgent it
+is, and a **Read** button above the usual buttons. Read opens the message
+inside Telegram, unsealed on the phone.
 
 ## Settings
 

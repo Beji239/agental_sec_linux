@@ -16,7 +16,9 @@
     locked: 'Locked', unlocked: 'Unlocked', panic: 'Panic word',
     resumed: 'Control back on', decision: 'Decision',
     decision_refused: 'Decision refused', chat: 'Chat',
-    chat_failed: 'Chat failed',
+    chat_failed: 'Chat failed', private_started: 'Private setup started',
+    private_on: 'Private messages on', private_off: 'Private messages off',
+    reader_checked: 'Reader page checked',
   };
   const TOKEN_ENV = 'AGENTAL_REMOTE_BOT_TOKEN';
   let timer = null;
@@ -66,11 +68,22 @@
       return `<div style="font-size:12px;margin-top:3px;">${text}</div>`;
     }
 
+    function privateLine(p) {
+      if (p.state !== 'paired') return '';
+      let text;
+      if (p.private) text = '<span style="color:var(--green);">Private messages on</span>, sealed for their phone';
+      else if (p.private_pending) text = '<span style="color:var(--amber);">Private messages setup not finished</span>';
+      else text = '<span style="color:var(--text-dim);">Messages in plain; Telegram can read them</span>';
+      return `<div style="font-size:12px;margin-top:3px;">${text}</div>`;
+    }
+
     function controlButtons(p) {
       if (p.state !== 'paired') return '';
       let out = `<button class="btn" data-remote-setup="${p.id}">${p.enrolled ? 'Set up control again' : 'Set up control'}</button>`;
       if (p.locked) out += `<button class="btn" data-remote-unlock="${p.id}">Unlock</button>`;
       if (p.enrolled || p.enrolling) out += `<button class="btn" data-remote-uncontrol="${p.id}">Remove control</button>`;
+      out += `<button class="btn" data-remote-private="${p.id}">${p.private ? 'New private key' : 'Set up private messages'}</button>`;
+      if (p.private || p.private_pending) out += `<button class="btn" data-remote-unprivate="${p.id}">Plain messages</button>`;
       return out;
     }
 
@@ -88,6 +101,7 @@
       ? `<div class="card-note" style="color:var(--red);">${esc(bot.feed_error)}</div>` : '';
     const al = s.alerts || {};
     const chat = s.chat || {};
+    const rd = s.reader || {};
 
     const peopleRows = people.length ? people.map(p => `
       <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
@@ -100,6 +114,7 @@
                 ? '<span style="color:var(--amber);">Waiting for the code</span>'
                 : '<span style="color:var(--text-dim);">Not paired; the code ran out or was spent</span>')}</div>
           ${controlLine(p)}
+          ${privateLine(p)}
         </div>
         <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;">
           ${controlButtons(p)}
@@ -191,6 +206,36 @@
         </div>
         ${ctl.available === false ? `<div class="card-note" style="color:var(--red);margin-top:6px;">
           Control cannot be set up on this computer: the cryptography package that encrypts the keys is missing.</div>` : ''}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Private messages</div>
+        <div class="card-note">
+          Telegram can read bot chats. With private messages set up for a person, the alerts, the status, the open
+          decisions and the agent's answers go to them sealed with a key only this computer and their phone hold.
+          Telegram carries scrambled text and a <b>Read</b> button; the message itself shows only how urgent it is.
+          Read opens a small page inside Telegram that unseals it on the phone. What the person types to the bot is
+          not sealed.
+        </div>
+        <div class="card-note" style="margin-top:6px;">
+          <b>Set up private messages</b> next to a paired person shows a code here and sends them the reader. On the
+          phone they press <b>Scan the key</b> and point it at the code; the key goes into the phone's secure storage
+          (Keychain or Keystore), never through Telegram. The phone then shows a short code to type here. It needs
+          Telegram on Android or iOS, a recent version.
+        </div>
+        <div class="card-note" style="margin-top:6px;">
+          The reader page loads nothing from anywhere and sends nothing out. A copy of it comes with this module;
+          <b>Check the page</b> fetches the hosted one and compares the two byte for byte, so a changed page is noticed.
+        </div>
+        <div class="row" style="margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:12px;">Reader page
+            <input class="input" id="remote-reader-url" value="${esc(rd.url || '')}" style="width:420px;margin-left:6px;"></label>
+          <button class="btn" id="remote-reader-save">Save</button>
+          <button class="btn" id="remote-reader-check">Check the page</button>
+          <span id="remote-reader-msg" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+        </div>
+        ${rd.available === false ? `<div class="card-note" style="color:var(--red);margin-top:6px;">
+          Private messages cannot be set up on this computer: the cryptography package is missing.</div>` : ''}
       </div>
 
       <div class="card">
@@ -345,6 +390,21 @@
       say('remote-alert-msg', 'Saved.');
     });
 
+    $('remote-reader-save').addEventListener('click', async () => {
+      const r = await h.call('POST', '/reader/url', { url: $('remote-reader-url').value.trim() });
+      if (!r.ok) return say('remote-reader-msg', reason(r), true);
+      $('remote-reader-url').value = r.data.url;
+      say('remote-reader-msg', 'Saved.');
+    });
+
+    $('remote-reader-check').addEventListener('click', async () => {
+      say('remote-reader-msg', 'Fetching the hosted page...');
+      const r = await h.call('POST', '/reader/check', {});
+      if (!r.ok) return say('remote-reader-msg', reason(r), true);
+      if (r.data.ok) return say('remote-reader-msg', 'The hosted page is the same as the copy here.');
+      say('remote-reader-msg', 'Not the same: ' + Object.entries(r.data.files).map(([k, v]) => k + ' ' + v).join(', '), true);
+    });
+
     $('remote-chat-save').addEventListener('click', async () => {
       const limit = Number($('remote-chat-limit').value.replace(/[\s,.]/g, ''));
       const r = await h.call('POST', '/settings', { chat_on: $('remote-chat-on').checked, chat_limit: limit });
@@ -441,6 +501,55 @@
       const p = people.find(x => String(x.id) === b.dataset.remoteUncontrol);
       if (!confirm(`Remove control for ${p ? p.name : 'this person'}? They keep getting alerts.`)) return;
       const r = await h.call('POST', '/control/remove', { id: Number(b.dataset.remoteUncontrol) });
+      if (!r.ok) return alert(reason(r));
+      render(root, h);
+    }));
+
+    function showPrivate(p, svg) {
+      $('remote-code').innerHTML = '';
+      $('remote-setup').innerHTML = `
+        <div class="card" style="margin:12px 0 0;border-color:var(--green);">
+          <div style="font-size:13px;">Private messages for <b>${esc(p.name)}</b>. The bot sent them <b>Open the reader</b>;
+            on the phone they press <b>Scan the key</b> and point it at this code. It is shown only now.</div>
+          <div class="row" style="margin-top:10px;gap:16px;align-items:center;flex-wrap:wrap;">
+            <div id="remote-pqr" style="background:#fff;padding:6px;border-radius:4px;line-height:0;"></div>
+            <div>
+              <div class="card-note">Then type the code the phone shows:</div>
+              <div class="row" style="gap:8px;margin-top:6px;">
+                <input class="input" id="remote-pcheck" autocomplete="off" maxlength="6" style="width:110px;text-transform:uppercase;">
+                <button class="btn" id="remote-pcheck-ok">Finish</button>
+                <button class="btn" id="remote-pcancel">Cancel</button>
+              </div>
+              <div id="remote-setup-msg" style="font-family:var(--mono);font-size:11px;margin-top:6px;"></div>
+            </div>
+          </div>
+        </div>`;
+      const img = new Image();
+      img.alt = 'QR code with the private message key';
+      img.src = 'data:image/svg+xml;base64,' + btoa(svg);
+      $('remote-pqr').appendChild(img);
+      $('remote-pcancel').addEventListener('click', () => { $('remote-setup').innerHTML = ''; render(root, h); });
+      $('remote-pcheck-ok').addEventListener('click', async () => {
+        const c = await h.call('POST', '/private/confirm', { id: p.id, code: $('remote-pcheck').value.trim() });
+        if (!c.ok) return say('remote-setup-msg', reason(c), true);
+        $('remote-setup').innerHTML = '';
+        render(root, h);
+      });
+    }
+
+    root.querySelectorAll('[data-remote-private]').forEach(b => b.addEventListener('click', async () => {
+      const p = people.find(x => String(x.id) === b.dataset.remotePrivate);
+      if (!p) return;
+      if (p.private && !confirm(`Make a new private key for ${p.name}? Messages sealed with the old one cannot be opened any more.`)) return;
+      const r = await h.call('POST', '/private/start', { id: p.id });
+      if (!r.ok) return alert(reason(r));
+      showPrivate(p, r.data.svg);
+    }));
+
+    root.querySelectorAll('[data-remote-unprivate]').forEach(b => b.addEventListener('click', async () => {
+      const p = people.find(x => String(x.id) === b.dataset.remoteUnprivate);
+      if (!confirm(`Send messages to ${p ? p.name : 'this person'} in plain again? Telegram can read those.`)) return;
+      const r = await h.call('POST', '/private/remove', { id: Number(b.dataset.remoteUnprivate) });
       if (!r.ok) return alert(reason(r));
       render(root, h);
     }));

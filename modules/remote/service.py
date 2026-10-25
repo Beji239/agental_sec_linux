@@ -19,6 +19,7 @@ from pathlib import Path
 
 import control
 import qr
+import reader
 from bot import Bot, Feed
 from store import Store, phones_match, digits
 from tg_api import Telegram, TelegramError
@@ -138,6 +139,9 @@ class Routes(BaseHTTPRequestHandler):
                            "last_sent_at": b.last_sent_at,
                            "waiting": len(b.held),
                            "quiet_now": b._in_quiet()},
+                "reader": {"url": b.reader_base(), "default": reader.DEFAULT_URL,
+                           "available": b.box is not None,
+                           "hashes": reader.page_hashes()},
                 "chat": {"on": b.store.get("chat_on") == "1",
                          "limit": b.chat_limit(),
                          "used_today": b.store.chat_used(),
@@ -236,6 +240,9 @@ class Routes(BaseHTTPRequestHandler):
 
         if path.startswith("/control/"):
             return self._control(path, body)
+
+        if path.startswith("/private/") or path.startswith("/reader/"):
+            return self._private(path, body)
 
         if path == "/test":
             result = b.send_test()
@@ -340,6 +347,91 @@ class Routes(BaseHTTPRequestHandler):
             b.store.event("unlocked", person["name"], "Control unlocked at the computer.")
             if chat:
                 b.say(chat, "\U0001F513 Control was unlocked for you at the computer.")
+            return self._reply(200, {"ok": True})
+
+        return self._reply(404, {"error": "No such route."})
+
+
+    def _private(self, path: str, body: dict):
+        b = self.bot
+        if path == "/reader/url":
+            url = str(body.get("url") or "").strip()
+            if url and url != reader.DEFAULT_URL:
+                why = reader.url_problem(url)
+                if why:
+                    return self._reply(400, {"ok": False, "reason": why})
+                b.store.put("reader_url", url)
+            else:
+                b.store.put("reader_url", "")
+            b.store.event("settings", None, f"Reader page set to {b.reader_base()}")
+            return self._reply(200, {"ok": True, "url": b.reader_base()})
+        if path == "/reader/check":
+            out = reader.check_hosted(b.reader_base(), timeout=4)
+            b.store.event("reader_checked", None,
+                          ("The hosted reader page matches the copy here."
+                           if out["ok"] else "The hosted reader page does not match: " +
+                           ", ".join(f"{k} {v}" for k, v in out["files"].items()))[:400])
+            return self._reply(200, out)
+
+        person = b.store.person(body.get("id") or 0)
+        if not person:
+            return self._reply(404, {"ok": False, "reason": "No such person."})
+        chat = person.get("chat_id") if person["state"] == "paired" else None
+
+        if path == "/private/start":
+            if not chat:
+                return self._reply(400, {"ok": False, "reason": "Pair the person first."})
+            if not b.box:
+                return self._reply(400, {"ok": False,
+                                         "reason": "Keys cannot be encrypted here: the "
+                                                   "cryptography package is missing."})
+            key = reader.new_key()
+            b.store.reader_start(person["id"], b.box.seal(reader._b64(key)))
+            sent = b.say(chat, "\U0001F512 <b>Private messages</b>: press <b>Open the "
+                               "reader</b>, then <b>Scan the key</b>, and point the phone at "
+                               "the code shown at the computer. Then type the code the phone "
+                               "shows into the Remote tab.",
+                         {"inline_keyboard": [[{"text": "Open the reader",
+                                                "web_app": {"url": reader.enrol_link(
+                                                    b.reader_base())}}]]})
+            b.store.event("private_started", person["name"],
+                          "Private messages setup started at the computer.")
+            return self._reply(200, {"ok": True, "sent": sent,
+                                     "svg": qr.svg(reader.qr_text(key), 5)})
+
+        if path == "/private/confirm":
+            sealed = person.get("reader_pending")
+            if not sealed or not b.box:
+                return self._reply(400, {"ok": False, "reason": "Start the setup again."})
+            try:
+                key = reader._unb64(b.box.open(sealed))
+            except Exception:                           # noqa: BLE001
+                return self._reply(400, {"ok": False, "reason": "Start the setup again."})
+            got = re.sub(r"\s", "", str(body.get("code") or "")).upper()
+            if not hmac.compare_digest(got.encode(), reader.check_code(key).encode()):
+                return self._reply(400, {"ok": False,
+                                         "reason": "That code does not match. Scan the key "
+                                                   "again on the phone and type the code it "
+                                                   "shows then."})
+            b.store.reader_finish(person["id"])
+            b.store.event("private_on", person["name"], "Private messages on.")
+            if chat:
+                b.private(b.store.person(person["id"]), chat,
+                          "Private messages work. From now on alerts, status, the open "
+                          "decisions and the agent's answers come sealed like this one. "
+                          "What you type to the bot is not sealed.",
+                          "<b>Private messages are on.</b> Press Read to open each one.",
+                          "Private messages are on", None, "setup")
+            return self._reply(200, {"ok": True})
+
+        if path == "/private/remove":
+            b.store.reader_clear(person["id"])
+            b.store.event("private_off", person["name"],
+                          "Private messages turned off at the computer.")
+            if chat:
+                b.say(chat, "\U0001F513 Private messages were turned off for you at the "
+                            "computer. Messages come in plain again. The reader page has a "
+                            "button to remove the old key from the phone.")
             return self._reply(200, {"ok": True})
 
         return self._reply(404, {"error": "No such route."})
