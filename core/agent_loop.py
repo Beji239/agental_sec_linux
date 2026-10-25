@@ -2486,12 +2486,16 @@ def complete_once(system: str, prompt: str) -> dict:
     out = {"text": "", "error": None}
 
     async def _one():
-        async for chunk in _stream_model(messages, (), usage):
-            if chunk["type"] == "text":
-                out["text"] += chunk["token"]
-            elif chunk["type"] == "error":
-                out["error"] = chunk["message"]
-                return
+        stream = _stream_model(messages, (), usage)
+        try:
+            async for chunk in stream:
+                if chunk["type"] == "text":
+                    out["text"] += chunk["token"]
+                elif chunk["type"] == "error":
+                    out["error"] = chunk["message"]
+                    return
+        finally:
+            await stream.aclose()
 
     loop = asyncio.new_event_loop()
     try:
@@ -2500,6 +2504,12 @@ def complete_once(system: str, prompt: str) -> dict:
     except Exception as e:                              # noqa: BLE001
         out["error"] = f"{type(e).__name__}: {e}"
     finally:
+        # The stream's own inner generators are closed here, on this loop,
+        # before it goes; left to later they end in "Task was destroyed".
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception as e:                          # noqa: BLE001
+            logger.debug(f"complete_once: asyncgen shutdown: {e}")
         loop.close()
     usage["total_tokens"] = (int(usage.get("prompt_tokens") or 0)
                              + int(usage.get("completion_tokens") or 0))
