@@ -6,6 +6,7 @@
 import json
 import logging
 import re
+import threading
 
 from core import memory_engine as me
 
@@ -211,3 +212,68 @@ def decide(kind: str, ref, choice: str, person: str, text: str = None) -> dict:
     except (TypeError, ValueError) as e:
         return {"ok": False, "detail": f"bad reference: {e}"}
     return {"ok": False, "detail": f"unknown kind {kind}"}
+
+
+# Chat from the phone. The agent gets the duty loop's read tools and
+# file_action_request; what it files waits in /pending like anything else.
+# It does not learn quiet rules or ask questions from here.
+PHONE_LEAVES_OUT = frozenset({"learn_quiet_rule", "undo_learned_rule", "ask_operator"})
+PHONE_ROUNDS = 6
+PHONE_HISTORY = 8
+PHONE_ANSWER_CHARS = 3500
+PHONE_ADDENDUM = """
+
+THIS TURN COMES FROM A PHONE. {who} is enrolled in the Remote module and has
+a control session open; they are writing to you through a Telegram bot.
+Answer in plain text, short enough to read on a phone: a few lines, no
+tables, no headings. Telegram is not end to end encrypted, so never put a
+key, password, token or the contents of a file in the answer. You cannot
+change anything from here. If something should be done, file it with
+file_action_request and say so; they can approve it from the phone with
+/pending. Say plainly what you did not get to check."""
+
+_phone_lock = threading.Lock()
+
+
+def chat(person, text: str, history=None) -> dict:
+    """One question from a phone, through the unattended turn. One at a
+    time: a second question while one runs is turned away, not queued."""
+    who = _who(person)
+    text = (text or "").strip()
+    if not text:
+        return {"ok": False, "detail": "an empty question"}
+    if not _phone_lock.acquire(blocking=False):
+        return {"ok": False, "busy": True,
+                "detail": "the agent is still answering another question from a phone"}
+    try:
+        from core import agent_loop, duty
+        allow = tuple(n for n in duty._tool_allowlist() if n not in PHONE_LEAVES_OUT)
+        earlier = []
+        for m in (history or [])[-PHONE_HISTORY:]:
+            if isinstance(m, dict) and m.get("role") in ("user", "assistant") \
+                    and isinstance(m.get("content"), str):
+                earlier.append({"role": m["role"], "content": m["content"][:4000]})
+        out = agent_loop.run_unattended(
+            text[:2000], agent_loop.get_session_id(), allow,
+            extra_system=PHONE_ADDENDUM.format(who=who),
+            max_rounds=PHONE_ROUNDS, history=earlier)
+    except Exception as e:                              # noqa: BLE001
+        logger.error(f"phone chat failed: {e}", exc_info=True)
+        return {"ok": False, "detail": f"{type(e).__name__}: {e}"}
+    finally:
+        _phone_lock.release()
+    answers = [a.strip() for a in out.get("answers") or [] if a.strip()]
+    answer = answers[-1] if answers else ""
+    if len(answer) > PHONE_ANSWER_CHARS:
+        answer = answer[:PHONE_ANSWER_CHARS].rstrip() + "\n[cut short; the rest is too long for the phone]"
+    usage = out.get("usage") or {}
+    tools = out.get("tool_calls") or []
+    logger.info(f"Phone chat for {who}: {len(tools)} tool call(s), "
+                f"{usage.get('total_tokens', 0)} tokens"
+                f"{', error: ' + out['error'] if out.get('error') else ''}")
+    return {"ok": bool(answer), "answer": answer,
+            "detail": out.get("error") or (None if answer else "the agent gave no answer"),
+            "tokens": int(usage.get("total_tokens") or 0),
+            "estimated": bool(usage.get("estimated", True)),
+            "tools": tools[:40],
+            "filed": tools.count("file_action_request")}

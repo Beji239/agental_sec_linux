@@ -138,6 +138,10 @@ class Routes(BaseHTTPRequestHandler):
                            "last_sent_at": b.last_sent_at,
                            "waiting": len(b.held),
                            "quiet_now": b._in_quiet()},
+                "chat": {"on": b.store.get("chat_on") == "1",
+                         "limit": b.chat_limit(),
+                         "used_today": b.store.chat_used(),
+                         "busy": b.chat_busy.locked()},
             })
         if path == "/events":
             try:
@@ -207,11 +211,27 @@ class Routes(BaseHTTPRequestHandler):
                         return self._reply(400, {"ok": False,
                                                  "reason": "Times are written like 23:00."})
                     changes[key] = val
-            for key, val in changes.items():
+            chat = {}
+            if "chat_on" in body:
+                chat["chat_on"] = "1" if body.get("chat_on") else "0"
+            if "chat_limit" in body:
+                try:
+                    limit = int(body.get("chat_limit"))
+                except (TypeError, ValueError):
+                    limit = -1
+                if not 1000 <= limit <= 5000000:
+                    return self._reply(400, {"ok": False, "reason": "The daily allowance "
+                                             "is 1,000 to 5,000,000 tokens."})
+                chat["chat_limit"] = str(limit)
+            for key, val in {**changes, **chat}.items():
                 b.store.put(key, val)
             if changes:
                 b.store.event("settings", None, "Alert choices changed: " +
                               ", ".join(f"{k} {v}" for k, v in changes.items()))
+            if chat:
+                b.store.event("settings", None, "Chat choices changed: " + ", ".join(
+                    f"{'on' if v == '1' else 'off'}" if k == "chat_on"
+                    else f"{int(v):,} tokens a day" for k, v in chat.items()))
             return self._reply(200, {"ok": True, "settings": b.store.settings()})
 
         if path.startswith("/control/"):

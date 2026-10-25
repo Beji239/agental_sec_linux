@@ -2507,7 +2507,8 @@ def complete_once(system: str, prompt: str) -> dict:
 
 
 def run_unattended(instruction: str, session_id: str, allowlist=None,
-                   extra_system: str = "", max_rounds: int = None) -> dict:
+                   extra_system: str = "", max_rounds: int = None,
+                   history: list = None) -> dict:
     """
     One unattended turn. Synchronous, self-contained, and it never blocks.
 
@@ -2542,8 +2543,15 @@ def run_unattended(instruction: str, session_id: str, allowlist=None,
     if sanitize.FENCE_OPEN in (instruction or ""):
         _untrusted_seen.add("duty_prompt_sensor_blocks")
 
+    # history is earlier plain turns of the same conversation, oldest first,
+    # for a chat from the phone. The duty loop passes none.
+    earlier = [{"role": m["role"], "content": str(m["content"])}
+               for m in (history or [])
+               if isinstance(m, dict) and m.get("role") in ("user", "assistant")
+               and m.get("content")]
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT + extra_system},
+        *earlier,
         {"role": "user", "content": instruction},
     ]
     aged = []   # (message index, round it arrived in, result), for shortening

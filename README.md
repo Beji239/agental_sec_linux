@@ -283,7 +283,7 @@ memory fixes, on the same laptop:
 - 5 minutes after start: 238 MB before, 177 MB now
 - 10 minutes after start: 399 MB before, 188 MB now
 
-## Remote manager, alerts and decisions on your phone
+## Remote manager, alerts, decisions and chat on your phone
 
 <p align="center">
   <img src="assets/screenshots/remote.png" alt="The Remote tab: switch, Telegram, bot token and people" width="800">
@@ -317,6 +317,13 @@ bot that you make yourself with @BotFather, so the bot belongs to you.
   approval either. Each code works once, three wrong tries lock that person
   until you unlock them at the computer, and the panic word turns control off
   for everyone.
+- **Chat with the agent.** Inside a control session, whatever you write to
+  the bot goes to the agent, which looks things up and answers on the phone.
+  `/check` offers ready-made checks: sensors, open incidents, devices,
+  listening ports and the router. From the phone the agent only reads; if
+  something should be done, it files a request that waits for your PIN and
+  code like any other. Chat is off until you turn it on in the tab, and since
+  every question uses the model's tokens, you set a daily allowance there.
 - **Nothing is opened to the internet.** The bot only connects out to
   Telegram. Telegram can read bot chats, so nothing secret is ever sent;
   an alert carries the incident's title and the device it is about.
@@ -327,8 +334,8 @@ on, and switched off it is gone, with no process, nothing loaded and no
 memory used. Switched on it runs as its own small process, about 30 MB. It
 reads what the app shows it, and decides only through the same calls the
 console uses. Everything about it lives in its own tab: the switch, the bot
-token, the people and their control, the alert choices, the history with
-every phone decision and who made it, and a button that removes everyone at
+token, the people and their control, the alert choices, the chat allowance,
+the history with every phone decision and question and who made it, and a button that removes everyone at
 once. See the
 [Remote tab](docs/TOUR.md#remote) in the tour.
 

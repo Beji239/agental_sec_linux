@@ -1,7 +1,7 @@
 # tests/test_remote_module.py
 # The Remote module end to end: its real process against the app's routes and
 # a fake Telegram. Off means no process, pairing needs the person's own number,
-# deciding needs the PIN and an authenticator code.
+# deciding and chatting need the PIN and an authenticator code.
 
 import json
 import os
@@ -151,7 +151,7 @@ class TgHandler(BaseHTTPRequestHandler):
             fake.sent.append(body)
             out = {"ok": True, "result": {"message_id": len(fake.sent)}}
         elif method in ("setMyCommands", "setMyDescription", "setMyShortDescription",
-                        "answerCallbackQuery", "deleteMessage"):
+                        "answerCallbackQuery", "deleteMessage", "sendChatAction"):
             fake.calls.append((method, body))
             out = {"ok": True, "result": True}
         else:
@@ -255,7 +255,7 @@ try:
     menu = [c[1] for c in fake.calls if c[0] == "setMyCommands"]
     check("the command menu is set",
           bool(menu) and [m["command"] for m in menu[-1]["commands"]],
-          ["status", "pending", "control", "done", "help"])
+          ["status", "pending", "control", "done", "check", "new", "help"])
     check("the description is set", any(c[0] == "setMyDescription" for c in fake.calls), True)
 
     print("pairing")
@@ -286,6 +286,7 @@ try:
     check("Sam is paired", [p["name"] for p in paired], ["Sam"])
     told = wait_for(lambda: [m for m in fake.to(111) if "Two-Step Verification" in m["text"]])
     check("told about Two-Step Verification", bool(told), True)
+    wait_for(lambda: [m for m in fake.to(111) if "Tap a button" in m["text"]])
 
     print("strangers")
     before = len(fake.sent)
@@ -552,6 +553,102 @@ try:
     check("every phone decision is in the history", len(decisions), 5)
     check("each with who made it", {e["person"] for e in decisions}, {"Sam"})
 
+    print("chat with the agent")
+    from core import agent_loop
+    asked = []
+    reply = {"answers": ["All **quiet**. <none> & `ok`"], "tool_calls": ["query_sensor_health"],
+             "usage": {"total_tokens": 1200, "estimated": False}, "error": None}
+
+    def fake_turn(instruction, session_id, allowlist=None, extra_system="",
+                  max_rounds=None, history=None):
+        asked.append({"text": instruction, "allow": allowlist, "system": extra_system,
+                      "rounds": max_rounds, "history": list(history or [])})
+        return dict(reply)
+    real_turn = agent_loop.run_unattended
+    agent_loop.run_unattended = fake_turn
+
+    n = len(fake.to(111))
+    say_as(sam, "how are things at home?")
+    check("chat starts off", bool(next_to_sam(n, "Chat with the agent is off")), True)
+    check("and nothing reached the agent", asked, [])
+    check("a silly allowance is refused",
+          call("/settings", "POST", {"chat_on": True, "chat_limit": 10})[0], 400)
+    check("chat turned on in the tab",
+          call("/settings", "POST", {"chat_on": True, "chat_limit": 5000})[0], 200)
+    check("the module may chat", module_host.may_chat("remote"), True)
+    check("the chat feed needs a token",
+          client.post("/api/module-feed/chat", json={"person": "x", "text": "y"}).status_code, 401)
+
+    n = len(fake.to(111))
+    say_as(sam, "how are things at home?")
+    m = next_to_sam(n, "quiet")
+    check("the agent's answer comes back", bool(m), True)
+    check("its bold and code are kept, the rest escaped",
+          bool(m) and "<b>quiet</b>" in m["text"] and "&lt;none&gt; &amp; <code>ok</code>" in m["text"], True)
+    check("with the tokens it used", bool(m) and "1,200 tokens; 1,200 of 5,000 used today" in m["text"], True)
+    check("the question reached the agent", asked and asked[0]["text"], "how are things at home?")
+    check("read tools only, plus filing a request",
+          bool(asked) and "file_action_request" in asked[0]["allow"]
+          and not {"learn_quiet_rule", "undo_learned_rule", "ask_operator", "kill_process"}
+          & set(asked[0]["allow"]), True)
+    check("the agent is told who asks and that it is a phone",
+          bool(asked) and "Sam" in asked[0]["system"] and "PHONE" in asked[0]["system"], True)
+    check("a few rounds only", bool(asked) and asked[0]["rounds"], 6)
+    check("the first question has no history", bool(asked) and asked[0]["history"], [])
+
+    n = len(fake.to(111))
+    say_as(sam, "and the router?")
+    next_to_sam(n, "quiet")
+    check("the next one carries the conversation",
+          [h["role"] for h in asked[-1]["history"]], ["user", "assistant"])
+
+    n, before = len(fake.to(111)), len(asked)
+    pin_msg = say_as(sam, "480 215")
+    check("digits alone never reach the agent", bool(next_to_sam(n, "looked like a PIN")), True)
+    check("and are deleted",
+          any(c[0] == "deleteMessage" and c[1]["message_id"] == pin_msg for c in fake.calls), True)
+    check("nothing asked", len(asked), before)
+
+    n = len(fake.to(111))
+    press(sam, "checks")
+    m = next_to_sam(n, "Checks")
+    check("Checks offers ready-made questions",
+          bool(m) and m["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "k:sensors")
+    reply["tool_calls"] = ["query_incidents", "file_action_request"]
+    n = len(fake.to(111))
+    press(sam, "k:sensors")
+    check("a check says what it checks", bool(next_to_sam(n, "Checking: <b>Sensors</b>")), True)
+    m = next_to_sam(n, "filed a request")
+    check("a filed request is pointed out", bool(m), True)
+    check("the check's question went to the agent", "sensors running" in asked[-1]["text"], True)
+    check("the tab counts the tokens", call("/state")[1]["chat"]["used_today"], 3600)
+
+    for q in ("one more?", "and one more?"):
+        n = len(fake.to(111))
+        say_as(sam, q)
+        next_to_sam(n, "quiet")
+    n = len(fake.to(111))
+    say_as(sam, "and another?")
+    check("over the allowance chat stops for the day", bool(next_to_sam(n, "allowance of 5,000 tokens is used up")), True)
+    call("/settings", "POST", {"chat_limit": 100000})
+    n = len(fake.to(111))
+    say_as(sam, "/new")
+    check("/new starts fresh", bool(next_to_sam(n, "Fresh chat")), True)
+    n = len(fake.to(111))
+    say_as(sam, "fresh question")
+    next_to_sam(n, "quiet")
+    check("without the earlier messages", asked[-1]["history"], [])
+
+    reply.update(answers=[], usage={"total_tokens": 300}, error="no API key is configured")
+    n = len(fake.to(111))
+    say_as(sam, "will this work?")
+    check("a failed turn says why", bool(next_to_sam(n, "could not answer: no API key")), True)
+    events = call("/events")[1]["events"]
+    check("chats are in the history with who asked",
+          {e["person"] for e in events if e["kind"] == "chat"}, {"Sam"})
+    check("and the failed one too", any(e["kind"] == "chat_failed" for e in events), True)
+    reply.update(answers=["All **quiet**."], usage={"total_tokens": 100}, error=None)
+
     print("control: the session ends")
     rdb = sqlite3.connect(module_host.DATA_DIR / "remote" / "remote.db")
     n = len(fake.to(111))
@@ -567,6 +664,19 @@ try:
     press(sam, f"a:{a3}:n")
     check("after the end a button asks for the PIN again", bool(next_to_sam(n, "Send your <b>PIN</b>")), True)
     check("and decides nothing", actions.query_requests(request_id=a3, limit=1)[0]["state"], "pending")
+    n = len(fake.to(111))
+    say_as(sam, "/new")
+    next_to_sam(n, "Fresh chat")
+    n, before = len(fake.to(111)), len(asked)
+    say_as(sam, "anything new?")
+    m = next_to_sam(n, "Chatting with the agent needs control")
+    check("chat outside a session asks to take control",
+          bool(m) and m["reply_markup"]["inline_keyboard"][0][0]["callback_data"], "ctlc")
+    check("and asks the agent nothing yet", len(asked), before)
+    n = len(fake.to(111))
+    press(sam, "ctlc")
+    check("Take control there asks for the PIN", bool(next_to_sam(n, "Send your <b>PIN</b>")), True)
+    agent_loop.run_unattended = real_turn
 
     print("control: lockout")
     for _ in range(2):

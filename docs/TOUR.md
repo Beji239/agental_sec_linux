@@ -793,6 +793,9 @@ Sample data.*
   three wrong tries locked them, **Remove control** sends them back to alerts
   only. When someone sent the panic word, a red card at the top says who and
   when, with **Turn control back on**.
+- **Chat with the agent.** Turns chat from the phone on or off and sets the
+  daily allowance of model tokens, shared by everyone, with how much is used
+  today. A question started under the allowance is answered in full.
 - **Alerts.** Which levels go out: critical only, high and critical, or
   medium and up. Several within ten minutes go out as one message, at most
   20 a day. Quiet hours hold back everything but critical until they end.
@@ -804,8 +807,8 @@ Sample data.*
 
 *Everything the bot did, including a stranger it ignored. Sample data.*
 
-- **History.** Every pairing, removal, alert, refusal and phone decision with
-  who made it, newest first. A
+- **History.** Every pairing, removal, alert, refusal, phone decision and
+  question with who made it, newest first. A
   stranger who writes to the bot gets no answer and shows up here with their
   Telegram name.
 - **Revoke remote.** Removes everyone at once and tells them. Use it if a
@@ -824,6 +827,14 @@ know** or **Type an answer** for a question, **Let it in** for a held device.
 An alert about one incident carries **False alarm**, **Real** and **Not
 sure**. `/done` ends the session early. Anything that cannot be undone asks
 for the PIN and a fresh code again.
+
+With chat turned on, anything you write in a control session goes to the
+agent, and the answer comes back with the tokens it used. **Checks** (or
+`/check`) offers ready-made questions: sensors, open incidents, devices,
+listening ports and the router. The agent only reads from here; when it
+files a request, the answer says so and **What's waiting** shows it.
+`/new` starts a fresh chat, and the conversation is forgotten when control
+ends.
 
 ## Settings
 

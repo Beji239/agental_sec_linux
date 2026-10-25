@@ -15,7 +15,8 @@
     control_off: 'Control off', control_refused: 'Wrong PIN or code',
     locked: 'Locked', unlocked: 'Unlocked', panic: 'Panic word',
     resumed: 'Control back on', decision: 'Decision',
-    decision_refused: 'Decision refused',
+    decision_refused: 'Decision refused', chat: 'Chat',
+    chat_failed: 'Chat failed',
   };
   const TOKEN_ENV = 'AGENTAL_REMOTE_BOT_TOKEN';
   let timer = null;
@@ -86,6 +87,7 @@
     const feedLine = bot.feed_error
       ? `<div class="card-note" style="color:var(--red);">${esc(bot.feed_error)}</div>` : '';
     const al = s.alerts || {};
+    const chat = s.chat || {};
 
     const peopleRows = people.length ? people.map(p => `
       <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
@@ -189,6 +191,34 @@
         </div>
         ${ctl.available === false ? `<div class="card-note" style="color:var(--red);margin-top:6px;">
           Control cannot be set up on this computer: the cryptography package that encrypts the keys is missing.</div>` : ''}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Chat with the agent</div>
+        <div class="card-note">
+          Inside a control session, whatever a person writes to the bot goes to the agent, which looks
+          things up and answers on the phone. <b>Checks</b> (or /check) offers ready-made questions: sensors,
+          open incidents, devices, listening ports and the router. From the phone the agent only reads; if
+          something should be done it files a request, which waits in What's waiting for a PIN and code like
+          any other. It never puts keys, passwords or file contents in an answer, because Telegram can read
+          bot chats. /new starts a fresh chat; the conversation is forgotten when control ends.
+        </div>
+        <div class="card-note" style="margin-top:6px;">
+          Every question uses the model's tokens, so there is a daily allowance shared by everyone. A question
+          started under it is answered in full, even if that goes a little over.
+        </div>
+        <div class="row" style="margin-top:10px;gap:10px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:12px;"><input type="checkbox" id="remote-chat-on" ${chat.on ? 'checked' : ''}>
+            Chat from the phone</label>
+          <label style="font-size:12px;">Daily allowance
+            <input class="input" id="remote-chat-limit" inputmode="numeric" value="${esc(String(chat.limit || 100000))}" style="width:110px;margin-left:6px;">
+            tokens</label>
+          <button class="btn" id="remote-chat-save">Save</button>
+          <span id="remote-chat-msg" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+        </div>
+        <div class="card-note" style="margin-top:8px;">
+          Used today: ${esc(Number(chat.used_today || 0).toLocaleString())} of ${esc(Number(chat.limit || 0).toLocaleString())} tokens${chat.busy ? '; the agent is answering a question now' : ''}.
+        </div>
       </div>
 
       <div class="card">
@@ -313,6 +343,13 @@
       });
       if (!r.ok) return say('remote-alert-msg', reason(r), true);
       say('remote-alert-msg', 'Saved.');
+    });
+
+    $('remote-chat-save').addEventListener('click', async () => {
+      const limit = Number($('remote-chat-limit').value.replace(/[\s,.]/g, ''));
+      const r = await h.call('POST', '/settings', { chat_on: $('remote-chat-on').checked, chat_limit: limit });
+      if (!r.ok) return say('remote-chat-msg', reason(r), true);
+      say('remote-chat-msg', 'Saved.');
     });
 
     $('remote-test').addEventListener('click', async () => {

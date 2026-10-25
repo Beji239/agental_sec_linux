@@ -1,7 +1,8 @@
 # api/module_routes.py
 # Routes for add-on modules. The tab's routes take the dashboard key like the
 # rest of /api; the feed routes take only the token a module got for its run.
-# They only read, except decide, open only to a module whose manifest asks.
+# They only read, except decide and chat, open only to a module whose
+# manifest asks.
 
 import logging
 import re
@@ -152,3 +153,25 @@ def register(app, require_api_key, record_failure):
         logger.info(f"Module {name}: {person[:40]!r} decided {kind} {str(ref)[:40]} "
                     f"{choice[:20]}: {'done' if out.get('ok') else 'refused'}")
         return jsonify(out), (200 if out.get("ok") else 409)
+
+    @app.route("/api/module-feed/chat", methods=["POST"])
+    def module_feed_chat():
+        name = _feed_caller()
+        if not name:
+            return jsonify({"error": "Unauthorized"}), 401
+        if not module_host.may_chat(name):
+            logger.warning(f"Module {name} asked the agent a question, which its "
+                           f"manifest does not allow.")
+            return jsonify({"ok": False, "detail": "This module may not chat."}), 403
+        body = request.get_json(silent=True) or {}
+        person, text, history = body.get("person"), body.get("text"), body.get("history")
+        if not isinstance(person, str) or not isinstance(text, str) or not text.strip() \
+                or not isinstance(history, (list, type(None))):
+            return jsonify({"ok": False, "detail": "Bad request."}), 400
+        from core import module_feed
+        out = module_feed.chat(person, text, history)
+        logger.info(f"Module {name}: {person[:40]!r} asked the agent from the phone: "
+                    f"{'answered' if out.get('ok') else out.get('detail')}")
+        if out.get("busy"):
+            return jsonify(out), 409
+        return jsonify(out), (200 if out.get("ok") else 502)

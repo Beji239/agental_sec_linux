@@ -23,6 +23,8 @@ DEFAULTS = {
     "quiet_end": "07:00",
     "gap_minutes": "10",
     "daily_cap": "20",
+    "chat_on": "0",
+    "chat_limit": "100000",
 }
 
 _DDL = """
@@ -157,6 +159,23 @@ class Store:
 
     def settings(self) -> dict:
         return {k: self.get(k) for k in DEFAULTS}
+
+    # Chat tokens, counted per local day
+
+    def chat_used(self) -> int:
+        if self.get("chat_day") != time.strftime("%Y-%m-%d"):
+            return 0
+        try:
+            return int(self.get("chat_used") or 0)
+        except ValueError:
+            return 0
+
+    def add_chat_used(self, tokens: int) -> int:
+        with self._lock:
+            used = self.chat_used() + max(0, int(tokens or 0))
+            self.put("chat_day", time.strftime("%Y-%m-%d"))
+            self.put("chat_used", used)
+        return used
 
     # History
 

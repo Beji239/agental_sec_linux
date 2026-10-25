@@ -142,6 +142,13 @@ port.
   authenticator key is shown once, at the computer, and never goes through
   Telegram. The bot deletes a PIN, a code or the panic word from the chat as
   soon as it has read it.
+- Chat from the phone is off until you turn it on. A question goes to the
+  model like one typed at the computer, and the answer comes back through
+  Telegram, so the agent is told never to put a key, a password or the
+  contents of a file in it. From the phone it can only read and file
+  requests. The conversation is kept in memory only and forgotten when
+  control ends. Numbers alone, typed when nothing asked for a PIN, are
+  deleted and never reach the model.
 
 ## What leaves the machine
 

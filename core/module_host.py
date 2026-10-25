@@ -101,6 +101,7 @@ def _read_manifest(folder: Path) -> dict | None:
         "needs": [str(n)[:120] for n in (data.get("needs") or [])][:8],
         "secrets": secrets_,
         "decides": decides,
+        "agent_chat": data.get("agent_chat") is True,
         "entry": entry,
         "ui": ui,
         "app_min": need,
@@ -356,6 +357,11 @@ def token_ok(name: str, token: str) -> bool:
 def may_decide(name: str, kind: str) -> bool:
     man = discover().get(name) or {}
     return kind in (man.get("decides") or [])
+
+
+def may_chat(name: str) -> bool:
+    """Only a module whose manifest asks for it may put questions to the agent."""
+    return bool((discover().get(name) or {}).get("agent_chat"))
 
 
 def module_for_token(token: str) -> str | None:

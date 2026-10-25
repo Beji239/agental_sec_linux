@@ -1,12 +1,15 @@
 # modules/remote/bot.py
 # What the bot does with a message, and how alerts go out. Only paired
 # people get answers; everyone else is ignored and written to the history.
-# Deciding needs a control session: PIN plus authenticator code, 30 minutes.
+# Deciding and chatting with the agent need a control session: PIN plus
+# authenticator code, 30 minutes.
 
 import html
 import http.client
 import json
 import logging
+import re
+import threading
 import time
 import urllib.parse
 from datetime import datetime, timezone
@@ -26,6 +29,9 @@ WARN_BEFORE = 5 * 60
 CONFIRM_SECONDS = 120
 ANSWER_SECONDS = 10 * 60
 BAD_TRY_LIMIT = 3
+CHAT_TIMEOUT = 360
+CHAT_IDLE = 30 * 60
+CHAT_KEPT = 8
 
 DOT = {"critical": "\U0001F534", "high": "\U0001F7E0", "medium": "\U0001F7E1",
        "low": "\u26AA", "info": "\u26AA"}
@@ -37,12 +43,36 @@ VIEW_BUTTONS = {"inline_keyboard": [VIEW_ROW]}
 CONTROL_BUTTONS = {"inline_keyboard": [VIEW_ROW, [{"text": "Take control",
                                                    "callback_data": "ctl"}]]}
 SESSION_BUTTONS = {"inline_keyboard": [[{"text": "What's waiting", "callback_data": "pending"},
-                                        {"text": "End session", "callback_data": "end"}]]}
+                                        {"text": "End session", "callback_data": "end"}],
+                                       [{"text": "Checks", "callback_data": "checks"}]]}
+
+# Ready-made questions for the agent. Each one is a chat turn and uses tokens.
+CHECKS = {
+    "sensors": ("Sensors", "Are all the sensors running and healthy? Name any that "
+                           "are not, and why, in a few lines."),
+    "incidents": ("Open incidents", "Go through the open incidents, worst first. One "
+                                    "line each: what it is and whether it needs me."),
+    "devices": ("Devices", "Are there devices on the network nobody has named, or new "
+                           "ones since yesterday? List them briefly."),
+    "ports": ("Listening ports", "What on this computer listens for connections, and "
+                                 "which program holds each port? Point out anything "
+                                 "unusual."),
+    "router": ("Router", "How is the router doing, and did it see anything today that "
+                         "needs my attention?"),
+}
+CHECK_BUTTONS = {"inline_keyboard": [
+    [{"text": CHECKS["sensors"][0], "callback_data": "k:sensors"},
+     {"text": CHECKS["incidents"][0], "callback_data": "k:incidents"}],
+    [{"text": CHECKS["devices"][0], "callback_data": "k:devices"},
+     {"text": CHECKS["ports"][0], "callback_data": "k:ports"}],
+    [{"text": CHECKS["router"][0], "callback_data": "k:router"}]]}
 
 COMMANDS = [{"command": "status", "description": "How the computer is doing"},
             {"command": "pending", "description": "What waits for your decision"},
             {"command": "control", "description": "Take control for 30 minutes"},
             {"command": "done", "description": "End the control session"},
+            {"command": "check", "description": "Ready-made checks by the agent"},
+            {"command": "new", "description": "Start a fresh chat with the agent"},
             {"command": "help", "description": "What this bot can do"}]
 DESCRIPTION = ("Alerts from AgentalSec, the security app on your computer. "
                "Only people paired at the computer get answers.")
@@ -54,9 +84,13 @@ HELP = (f"{SHIELD} <b>AgentalSec Remote</b>\n"
         "/pending  what waits for your decision\n"
         "/control  take control for 30 minutes (PIN and authenticator code)\n"
         "/done  end the control session\n"
+        "/check  ready-made checks by the agent\n"
+        "/new  start a fresh chat with the agent\n"
         "/help  this list\n\n"
-        "<i>Deciding needs control, set up at the computer in the Remote tab. "
-        "Your panic word turns control off for everyone.</i>")
+        "Inside a control session, anything you write goes to the agent, "
+        "if chat is turned on at the computer.\n\n"
+        "<i>Deciding and chatting need control, set up at the computer in the "
+        "Remote tab. Your panic word turns control off for everyone.</i>")
 
 
 def e(text) -> str:
@@ -81,6 +115,15 @@ def _short_time(stamp) -> str:
 
 def _dot(severity) -> str:
     return DOT.get(str(severity or "").lower(), "\u26AA")
+
+
+def phone_html(text: str) -> str:
+    """The agent's answer for Telegram: escaped, with its **bold** and
+    `code` kept."""
+    out = e(text)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    out = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", out)
+    return out
 
 
 class Feed:
@@ -110,9 +153,9 @@ class Feed:
         finally:
             conn.close()
 
-    def post(self, path: str, body: dict) -> tuple:
+    def post(self, path: str, body: dict, timeout: float = 30) -> tuple:
         """(status, json). A refusal is an answer, not an error."""
-        conn = http.client.HTTPConnection(self.host, self.port, timeout=30)
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=timeout)
         try:
             conn.request("POST", f"/api/module-feed/{path}", body=json.dumps(body),
                          headers={"X-Module-Token": self.token,
@@ -137,6 +180,11 @@ class Bot:
         # for, by Telegram user id. Kept in memory: a restart just asks again.
         self.challenges = {}
         self.awaiting = {}
+        # Chat with the agent: recent turns by Telegram user id, a question
+        # waiting for control to open, and one turn at a time.
+        self.chats = {}
+        self.chat_waiting = {}
+        self.chat_busy = threading.Lock()
         self.state = {"connected": False, "username": None, "last_ok_at": None,
                       "last_error": None, "token_present": telegram is not None,
                       "started_at": time.time()}
@@ -213,6 +261,13 @@ class Bot:
             self._pending(person, chat["id"])
         elif data == "ctl":
             self._take_control(person, chat["id"], "pending")
+        elif data == "ctlc":
+            self._take_control(person, chat["id"], "chat")
+        elif data == "checks":
+            self._checks_menu(person, chat["id"])
+        elif data.startswith("k:") and data[2:] in CHECKS:
+            label, question = CHECKS[data[2:]]
+            self._chat(person, chat["id"], question, label)
         elif data == "end":
             self._end_session(person, chat["id"])
         elif data[:2] in ("a:", "q:", "v:", "r:"):
@@ -325,13 +380,26 @@ class Bot:
             self._take_control(person, chat_id, "pending")
         elif cmd == "/done":
             self._end_session(person, chat_id)
+        elif cmd == "/check":
+            self._checks_menu(person, chat_id)
+        elif cmd == "/new":
+            self.chats.pop(uid, None)
+            self.say(chat_id, "\U0001F4AC Fresh chat. The agent no longer sees the earlier "
+                              "messages.", self._buttons(person))
         elif cmd == "/cancel":
             self.say(chat_id, "Nothing is waiting for you to type now.", self._buttons(person))
         elif cmd in ("/help", "/start"):
             self.say(chat_id, HELP, self._buttons(person))
+        elif cmd or not text:
+            self.say(chat_id, "I know /status, /pending, /control, /done, /check, /new "
+                              "and /help.", self._buttons(person))
+        elif re.fullmatch(r"[\d\s]{4,16}", text):
+            # A PIN or code typed when nothing asked for one never reaches the model.
+            self._forget(chat_id, msg)
+            self.say(chat_id, "That looked like a PIN or a code, and nothing was asking "
+                              "for one, so I deleted it.", self._buttons(person))
         else:
-            self.say(chat_id, "I know /status, /pending, /control, /done and /help.",
-                     self._buttons(person))
+            self._chat(person, chat_id, text)
 
     def _buttons(self, person: dict) -> dict:
         return SESSION_BUTTONS if self._in_session(person) else CONTROL_BUTTONS
@@ -684,6 +752,7 @@ class Bot:
             self.say(chat_id, "No control session is open.", self._buttons(person))
             return
         self.store.end_session(person["id"])
+        self._forget_chat(person["tg_user_id"])
         self.store.event("control_off", person["name"], "Ended the control session.")
         self.say(chat_id, "\U0001F44C Control session ended. Anything undecided stays held.",
                  CONTROL_BUTTONS)
@@ -695,6 +764,7 @@ class Bot:
             left = p["session_until"] - now
             if left <= 0:
                 self.store.end_session(p["id"])
+                self._forget_chat(p["tg_user_id"])
                 self.store.event("control_off", p["name"], "The 30 minute session ran out.")
                 self.say(p["chat_id"], "⏱ Control session ended. Anything undecided "
                                        "stays held; /pending brings it back.", CONTROL_BUTTONS)
@@ -708,6 +778,12 @@ class Bot:
         for uid, wait in list(self.awaiting.items()):
             if wait["expires"] < now:
                 self.awaiting.pop(uid, None)
+        for uid, talk in list(self.chats.items()):
+            if talk["at"] < now - CHAT_IDLE:
+                self.chats.pop(uid, None)
+        for uid, wait in list(self.chat_waiting.items()):
+            if wait["at"] < now - CONFIRM_SECONDS * 2:
+                self.chat_waiting.pop(uid, None)
 
     def _panic(self, person: dict) -> None:
         self.store.put("panic", "1")
@@ -715,6 +791,8 @@ class Bot:
         self.store.put("panic_at", time.time())
         self.challenges.clear()
         self.awaiting.clear()
+        self.chats.clear()
+        self.chat_waiting.clear()
         for p in self.store.sessions():
             self.store.end_session(p["id"])
         self.store.event("panic", person["name"],
@@ -777,7 +855,13 @@ class Bot:
 
     def _after_control(self, person: dict, chat_id: int, then: str) -> None:
         """After the PIN and code: show again what the person pressed, so the
-        decision itself is still their own tap."""
+        decision itself is still their own tap. A question they wrote before
+        control goes to the agent now."""
+        if then == "chat":
+            wait = self.chat_waiting.pop(person["tg_user_id"], None)
+            if wait:
+                self._chat(person, chat_id, wait["text"], wait["label"])
+            return
         if then.startswith("v:"):
             iid = then.split(":")[1]
             try:
@@ -888,3 +972,131 @@ class Bot:
             why = out.get("detail") or f"the app answered {status}"
             self.store.event("decision_refused", person["name"], f"{label}; refused: {why}")
             self.say(chat_id, f"⛔ Not done: {e(why)}", SESSION_BUTTONS)
+
+    # Chat with the agent
+
+    def _forget_chat(self, uid) -> None:
+        self.chats.pop(uid, None)
+        self.chat_waiting.pop(uid, None)
+
+    def chat_limit(self) -> int:
+        try:
+            return max(0, int(self.store.get("chat_limit") or 0))
+        except ValueError:
+            return 0
+
+    def _cannot_chat(self) -> str | None:
+        if self.store.get("chat_on") != "1":
+            return ("\U0001F4AC Chat with the agent is off. It can be turned on at the "
+                    "computer, in the Remote tab.")
+        limit = self.chat_limit()
+        if self.store.chat_used() >= limit:
+            return (f"\u23F8 Today's chat allowance of {limit:,} tokens is used up. It "
+                    f"starts again tomorrow, or can be raised at the computer.")
+        return None
+
+    def _checks_menu(self, person: dict, chat_id: int) -> None:
+        why = self._cannot_chat()
+        if why:
+            self.say(chat_id, why, self._buttons(person))
+            return
+        self.say(chat_id, "\U0001F50E <b>Checks</b>\nEach one asks the agent, which looks "
+                          "and answers here. It uses chat tokens like any question.",
+                 CHECK_BUTTONS)
+
+    def _chat(self, person: dict, chat_id: int, text: str, label: str = None) -> None:
+        why = self._cannot_chat()
+        if why:
+            self.say(chat_id, why, self._buttons(person))
+            return
+        if not self._in_session(person):
+            why = self._cannot_control(person)
+            if why:
+                self.say(chat_id, why, VIEW_BUTTONS)
+                return
+            self.chat_waiting[person["tg_user_id"]] = {"text": text[:2000], "label": label,
+                                                       "at": time.time()}
+            self.say(chat_id, "\U0001F510 Chatting with the agent needs control. Press "
+                              "<b>Take control</b>; your question goes to the agent "
+                              "right after.", {"inline_keyboard": [
+                                  [{"text": "Take control", "callback_data": "ctlc"}]]})
+            return
+        if not self.chat_busy.acquire(blocking=False):
+            self.say(chat_id, "\u23F3 The agent is still on the last question. One at a "
+                              "time; ask again when it has answered.")
+            return
+        try:
+            self.say(chat_id, f"\U0001F50E Checking: <b>{e(label)}</b>. This can take a "
+                              f"minute." if label else
+                              "\U0001F914 Asking the agent. This can take a minute.")
+            threading.Thread(target=self._run_chat, args=(person, chat_id, text, label),
+                             name="chat", daemon=True).start()
+        except Exception:                               # noqa: BLE001
+            self.chat_busy.release()
+            raise
+
+    def _typing(self, chat_id: int, done: threading.Event) -> None:
+        while not done.is_set():
+            try:
+                self.tg.call("sendChatAction", {"chat_id": chat_id, "action": "typing"})
+            except Exception:                           # noqa: BLE001
+                return
+            done.wait(4.5)
+
+    def _run_chat(self, person: dict, chat_id: int, text: str, label: str) -> None:
+        uid, name = person["tg_user_id"], person["name"]
+        asked = label or text
+        done = threading.Event()
+        if self.tg:
+            threading.Thread(target=self._typing, args=(chat_id, done), daemon=True).start()
+        try:
+            talk = self.chats.get(uid) or {"history": [], "at": time.time()}
+            try:
+                status, out = self.feed.post("chat", {"person": name, "text": text,
+                                                      "history": talk["history"]},
+                                             timeout=CHAT_TIMEOUT)
+            except Exception as ex:                     # noqa: BLE001
+                self.store.event("chat_failed", name, f"{asked[:200]}; the app did not "
+                                                      f"answer: {ex}")
+                self.say(chat_id, f"\u26A0\uFE0F Could not reach the app: {e(ex)}",
+                         self._buttons(person))
+                return
+            done.set()
+            if status == 409:
+                self.say(chat_id, "\u23F3 The agent is busy with another question from a "
+                                  "phone. Ask again in a minute.", self._buttons(person))
+                return
+            tokens = int(out.get("tokens") or 0)
+            used = self.store.add_chat_used(tokens)
+            if status != 200 or not out.get("ok"):
+                why = out.get("detail") or f"the app answered {status}"
+                self.store.event("chat_failed", name, f"{asked[:200]}; {why}"[:400])
+                self.say(chat_id, f"\u26A0\uFE0F The agent could not answer: {e(why)}",
+                         self._buttons(person))
+                return
+            answer = out["answer"]
+            talk["history"] = (talk["history"] + [{"role": "user", "content": text},
+                                                  {"role": "assistant", "content": answer}]
+                               )[-CHAT_KEPT:]
+            talk["at"] = time.time()
+            if self._in_session(self.store.person(person["id"]) or {}):
+                self.chats[uid] = talk
+            limit = self.chat_limit()
+            foot = (f"\n\n<i>{tokens:,} tokens{' (estimated)' if out.get('estimated') else ''}"
+                    f"; {min(used, limit):,} of {limit:,} used today.</i>")
+            markup = SESSION_BUTTONS
+            if out.get("filed"):
+                foot = ("\n\n\U0001F4CB The agent filed a request; <b>What's waiting</b> "
+                        "shows it." + foot)
+            body = phone_html(answer)
+            cut = len(answer)
+            while len(body) > 3800:
+                # Cut the plain text, never the markup, so no tag is left open.
+                cut = cut * 3 // 4
+                body = e(answer[:cut]) + "\n[cut short]"
+            self.say(chat_id, body + foot, markup)
+            self.store.event("chat", name, f"Asked: {asked[:200]} ({tokens:,} tokens"
+                                           f"{', filed a request' if out.get('filed') else ''})")
+        finally:
+            done.set()
+            self.chat_busy.release()
