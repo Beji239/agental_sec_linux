@@ -2513,6 +2513,32 @@ def register_routes(app):
                 "same_gateway").get("success", False)
         return jsonify(out), (200 if out.get("accepted") else 400)
 
+    # The same after a router swap for the IPv6 router, which otherwise stays
+    # the old box. Its hardware address comes from the finding that named it.
+
+    @app.route("/api/lan/ipv6-router/accept/<router_ip>", methods=["POST"])
+    @require_api_key
+    def lan_ipv6_router_accept(router_ip):
+        from core import expectations
+        from tools import lan_watch
+        mac = ""
+        try:
+            with me._get_readonly_conn() as conn:
+                row = conn.execute(
+                    "SELECT raw_data FROM findings WHERE detection_id = 'LAN-1006' "
+                    "AND entity_value = ? ORDER BY id DESC LIMIT 1",
+                    (str(router_ip).lower(),)).fetchone()
+            if row and row["raw_data"]:
+                mac = str(json.loads(row["raw_data"]).get("router_mac") or "")
+        except Exception as e:                          # noqa: BLE001
+            logger.debug(f"IPv6 router MAC not found in its finding: {e}")
+        watcher = lan_watch.active() or lan_watch.LanWatch(load_baselines=True)
+        out = watcher.accept_ipv6_router(str(router_ip), mac, replace=True)
+        if out.get("accepted"):
+            out["expectation_seen"] = expectations.acknowledge_kind(
+                "same_gateway").get("success", False)
+        return jsonify(out), (200 if out.get("accepted") else 400)
+
     # Rule trials: a written fix for a noisy rule, tried for two weeks.
 
     @app.route("/api/expectations/trials")

@@ -698,6 +698,24 @@ def test_accepting_a_dhcp_server_that_is_not_an_address_is_refused():
     assert _w().accept_dhcp_server("192.0.2.1; id")["accepted"] is False
 
 
+def test_a_swapped_router_replaces_the_old_ipv6_router(monkeypatch):
+    """The old router stops being trusted once the new one is accepted."""
+    w = _w()
+    monkeypatch.setattr(lw, "save_baseline", lambda *a, **k: True)
+    assert w.observe_router_advert("fe80::1", "00:00:5e:00:53:01", 1800, [], now=0) == []
+    assert w.observe_router_advert("fe80::2", "00:00:5e:00:53:02", 1800, [], now=10)
+    res = w.accept_ipv6_router("FE80::2", "00:00:5e:00:53:02", replace=True)
+    assert res["accepted"] is True and res["forgotten"] == ["fe80::1"]
+    assert w.status()["ipv6_routers"] == ["fe80::2"]
+    assert w.observe_router_advert("fe80::2", "00:00:5e:00:53:02", 1800, [], now=20) == []
+    assert w.observe_router_advert("fe80::1", "00:00:5e:00:53:01", 1800, [], now=30)
+
+
+def test_accepting_an_ipv6_router_that_is_not_one_is_refused():
+    assert _w().accept_ipv6_router("fe80::1; id")["accepted"] is False
+    assert _w().accept_ipv6_router("192.0.2.1")["accepted"] is False
+
+
 def test_a_first_dhcp_server_that_is_not_the_gateway_is_flagged(monkeypatch):
     """
     The first-run hole. If the app starts while a rogue is answering, that

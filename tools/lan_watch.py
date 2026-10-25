@@ -970,15 +970,27 @@ class LanWatch:
                          "is_first_seen": first_ever},
         }]
 
-    def accept_ipv6_router(self, router_ip: str, router_mac: str = "") -> dict:
-        """Add an IPv6 router to the known set, the only way the set grows."""
-        ip = (router_ip or "").strip().lower()
-        if not ip:
-            return {"accepted": False, "reason": "no address given"}
+    def accept_ipv6_router(self, router_ip: str, router_mac: str = "",
+                           replace: bool = False) -> dict:
+        """Add an IPv6 router to the known set, the only way the set grows.
+        replace=True is for a router that was swapped: the new one becomes
+        the only known router."""
+        try:
+            addr = ipaddress.ip_address((router_ip or "").strip())
+        except ValueError:
+            return {"accepted": False, "reason": f"{router_ip!r} is not an address"}
+        if addr.version != 6:
+            return {"accepted": False, "reason": f"{addr} is not an IPv6 address"}
+        ip = str(addr)
+        forgotten = sorted(set(self._v6_routers) - {ip}) if replace else []
+        if replace:
+            self._v6_routers = {}
         self._v6_routers[ip] = _normalise_mac(router_mac)
         self._v6_router_reported.discard(ip)
         persisted = save_baseline(_BASELINE_V6_ROUTERS, self._v6_routers)
-        return {"accepted": True, "router_ip": ip,
+        logger.info(f"IPv6 router {ip} accepted as known good"
+                    + (f", replacing {', '.join(forgotten)}." if forgotten else "."))
+        return {"accepted": True, "router_ip": ip, "forgotten": forgotten,
                 "known_routers": sorted(self._v6_routers),
                 "persisted": persisted}
 

@@ -546,7 +546,8 @@ def run_rollup(session_id: str, trigger_reason: str = "manual", scope: str = "fu
     """See _run_rollup. The thresholds read once for the pass are always
     released afterwards, error or not."""
     try:
-        return _run_rollup(session_id, trigger_reason, scope)
+        with me.one_connection():
+            return _run_rollup(session_id, trigger_reason, scope)
     finally:
         me._thresholds_scope = None
 

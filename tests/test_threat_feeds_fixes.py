@@ -728,7 +728,7 @@ check_true("[T13] the example config no longer calls threatfox keyed",
 check_true("[T13] and the correction is dated in place",
            "corrected 2026-09-27" in _cfg)
 check_true("[T13] .env.example stops promising the key to threatfox",
-           "NOT THREATFOX, since 2026-09-27" in _env)
+           "Not used for ThreatFox" in _env)
 check_true("[T13] and says what still uses it",
            "Feodo and URLhaus lists" in _env)
 check_true("[T13] the runbook's status note names the count it read",

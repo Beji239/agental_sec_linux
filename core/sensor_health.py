@@ -634,7 +634,7 @@ def _capability_trouble(cap_name: str) -> str | None:
     """One privileged capability, or None when the machine allows it."""
     try:
         from core import capabilities
-        row = capabilities.get().availability().get(cap_name)
+        row = capabilities.get().availability(only=(cap_name,)).get(cap_name)
     except Exception as e:                              # pragma: no cover
         logger.debug(f"capability {cap_name} unreadable: {e}")
         return None

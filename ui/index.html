@@ -10424,6 +10424,9 @@ function renderExpTickets(list) {
       ? [...new Set(((e.evidence || {}).findings || [])
           .filter(f => f.detection_id === 'LAN-1003').map(f => String(f.entity_value)))]
         .map(ip => `<button class="btn" style="margin-top:8px;" data-dhcp="${esc(ip)}">This is my router, trust ${esc(ip)}</button>`).join(' ')
+        + [...new Set(((e.evidence || {}).findings || [])
+          .filter(f => f.detection_id === 'LAN-1006').map(f => String(f.entity_value)))]
+        .map(ip => `<button class="btn" style="margin-top:8px;" data-v6router="${esc(ip)}">This is my IPv6 router, trust ${esc(ip)}</button>`).join(' ')
       : '';
     const held = (e.history || []).length
       ? Math.round(f * 100) + '% of checks held in the last week. ' : '';
@@ -10438,7 +10441,23 @@ function renderExpTickets(list) {
   box.onclick = ev => {
     const ip = ev.target.getAttribute && ev.target.getAttribute('data-dhcp');
     if (ip) acceptDhcpServer(ip);
+    const v6 = ev.target.getAttribute && ev.target.getAttribute('data-v6router');
+    if (v6) acceptIpv6Router(v6);
   };
+}
+
+async function acceptIpv6Router(ip) {
+  if (!confirm(`Trust ${ip} as the only IPv6 router on this network? Do this only if `
+      + `it is your own router, for example after you replaced the old one. The old `
+      + `one is forgotten, and any other IPv6 router will raise an alarm again.`)) return;
+  try {
+    const r = await fetch('/api/lan/ipv6-router/accept/' + encodeURIComponent(ip),
+                          { method: 'POST', headers: authHeaders() }).then(x => x.json());
+    if (!r.accepted) alert('Not changed: ' + (r.reason || r.error || 'no answer'));
+  } catch (e) {
+    alert('That did not reach the app, so nothing changed.');
+  }
+  loadExpectations();
 }
 
 async function acceptDhcpServer(ip) {

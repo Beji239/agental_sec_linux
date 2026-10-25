@@ -391,7 +391,7 @@ def _check_dns(conn, exp, ctx):
 
 
 def _check_gateway(conn, exp, ctx):
-    rows = _findings(conn, ("LAN-1002", "LAN-1003"), ctx["start"])
+    rows = _findings(conn, ("LAN-1002", "LAN-1003", "LAN-1006"), ctx["start"])
     if rows:
         return ("broken", rows[-1]["title"] + ".",
                 {"findings": [dict(r) for r in rows[-5:]]})
@@ -401,7 +401,7 @@ def _check_gateway(conn, exp, ctx):
     if base is None:
         return "unknown", "The gateway's hardware address has not been " \
             "learned yet, so a change could not be seen.", {}
-    return "holding", "The gateway and the DHCP server did not change.", {}
+    return "holding", "The gateway, the DHCP server and the IPv6 router did not change.", {}
 
 
 def _night_bytes(conn, night_end_local: datetime, cfg) -> tuple:

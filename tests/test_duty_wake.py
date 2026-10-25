@@ -69,7 +69,11 @@ def fake_model(prompt, session_id, allowlist=None, extra_system="",
 duty._run_unattended = fake_model
 
 HOST = "192.0.2.207"
-now = duty._now()
+# Kept clear of the top of the hour, so "a minute later" never lands in a
+# new wake hour, where a regular run is rightly due.
+now = duty._now().replace(second=0, microsecond=0)
+if now.astimezone().minute > 50:
+    now -= timedelta(minutes=15)
 ts = duty._sql_ts(now)
 
 

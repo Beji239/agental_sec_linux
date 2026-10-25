@@ -267,6 +267,10 @@ def _int_arg(name, value, low, high):
     return out
 
 
+class _NotAsked(Exception):
+    """The firewall rows were not asked for, so the firewall is not probed."""
+
+
 class Capabilities:
     """
     The whole privileged surface. One instance, from get().
@@ -278,9 +282,11 @@ class Capabilities:
 
     # WHAT IS ACTUALLY AVAILABLE
 
-    def availability(self) -> dict:
+    def availability(self, only=None) -> dict:
         """
         Per capability: can this run here, and if not, what is missing.
+        only names the rows wanted; the firewall is asked (ufw and friends,
+        seconds) only when one of its rows is among them.
 
         Written for the readiness card. A capability that is unavailable has
         to be able to SAY so, in words, or the app degrades quietly, which is
@@ -310,8 +316,11 @@ class Capabilities:
         # tool's own answer on the same screen.
         out["firewall_write"] = (True, None)
         out["firewall_read"] = (True, None)
+        want = None if only is None else set(only)
 
         try:
+            if want is not None and not want & {"firewall_write", "firewall_read"}:
+                raise _NotAsked
             from tools import iptables_manager as _fw
             _detail = _fw.detect_backend_detail()
             _listing = _fw.list_agental_rules_status()
@@ -371,6 +380,8 @@ class Capabilities:
                 f"the ruleset could not be read ({_listing['reason']}). "
                 f"Reading the rule list needs root here, so an empty list "
                 f"from this app is no information about what is blocked")
+        except _NotAsked:
+            del out["firewall_write"], out["firewall_read"]
         except Exception as e:              # pragma: no cover
             # THE ROWS STAY, SAYING THEY COULD NOT BE DERIVED. The version
             # before this left the optimistic `True` rows standing when the
@@ -390,7 +401,7 @@ class Capabilities:
                        f"here is no information about what is blocked")
 
         rows = {k: {"available": v[0], "why_not": v[1], "limited": None}
-                for k, v in out.items()}
+                for k, v in out.items() if want is None or k in want}
 
         # IS THE LIBRARY THERE is only half the question. The other half is
         # whether this machine will let us, and the first version of this

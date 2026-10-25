@@ -8,6 +8,7 @@ import sqlite3
 import json
 import logging
 import os
+import threading as _threading
 import time as _time
 import re
 from pathlib import Path
@@ -341,24 +342,72 @@ def _long_write(started: float) -> None:
                    f"writers waited: {' < '.join(reversed(frames[-4:]))}")
 
 
+# Opening a connection reads the whole schema, about 7 ms on a full
+# database, and a rollup opens thousands. Inside one_connection() a thread
+# reuses one write and one read-only connection; each block still commits or
+# rolls back on its own, and a block nested in another opens its own as before.
+_shared = _threading.local()
+
+
 @contextmanager
-def _get_conn():
-    """Context manager, always returns dicts, always closes cleanly."""
+def one_connection():
+    if getattr(_shared, "conns", None) is not None:
+        yield
+        return
+    _shared.conns, _shared.busy = {}, set()
+    try:
+        yield
+    finally:
+        conns, _shared.conns, _shared.busy = _shared.conns, None, None
+        for conn in conns.values():
+            try:
+                conn.close()
+            except Exception:                           # noqa: BLE001
+                pass
+
+
+def _borrow(kind: str, open_new):
+    """(connection, borrowed) from the thread's shared set, or a new one."""
+    conns = getattr(_shared, "conns", None)
+    if conns is None or kind in _shared.busy:
+        return open_new(), False
+    if kind not in conns:
+        conns[kind] = open_new()
+    _shared.busy.add(kind)
+    return conns[kind], True
+
+
+def _give_back(kind: str, conn, borrowed: bool) -> None:
+    if borrowed:
+        _shared.busy.discard(kind)
+    else:
+        conn.close()
+
+
+def _open_rw():
     conn = sqlite3.connect(DB_PATH, timeout=LOCK_WAIT_SECONDS)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+@contextmanager
+def _get_conn():
+    """Context manager, always returns dicts, always closes cleanly."""
+    conn, borrowed = _borrow("rw", _open_rw)
     started = _time.monotonic()
+    before = conn.total_changes
     wrote = False
     try:
         yield conn
-        wrote = conn.total_changes > 0
+        wrote = conn.total_changes > before
         conn.commit()
     except Exception:
         conn.rollback()
         raise
     finally:
-        conn.close()
+        _give_back("rw", conn, borrowed)
         if wrote:
             _long_write(started)
 
@@ -408,12 +457,19 @@ def _get_readonly_conn():
             yield conn
         return
 
-    conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+    def _open_ro():
+        ro = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+        ro.row_factory = sqlite3.Row
+        return ro
+
+    conn, borrowed = _borrow("ro", _open_ro)
     try:
         yield conn
     finally:
-        conn.close()
+        if borrowed and conn.in_transaction:
+            # A read left open would keep the log from being folded back.
+            conn.rollback()
+        _give_back("ro", conn, borrowed)
 
 
 # SQLite writes CURRENT_TIMESTAMP as "YYYY-MM-DD HH:MM:SS" in UTC, with no
