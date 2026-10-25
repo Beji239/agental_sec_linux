@@ -175,6 +175,8 @@ if _shutil.which("node"):
     check("with another key it says so", "different key" in page.get("note", ""), True)
     page = _run_page(remote_reader.link(_base, _sealed) + "#tgWebAppVersion=7.0", _k)
     check("an old Telegram is told to update", "too old" in page.get("note", ""), True)
+    page = _run_page(remote_reader.link(_base, _sealed), _k)
+    check("outside Telegram it says to use the Read button", "Read button" in page.get("note", ""), True)
     page = _run_page(remote_reader.enrol_link(_base) + _tg, b"", remote_reader.qr_text(_k))
     check("scanning the key saves it in secure storage", page.get("saved"), remote_reader._b64(_k))
     check("and shows the check code", page.get("check"), remote_reader.check_code(_k))

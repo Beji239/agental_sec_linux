@@ -203,6 +203,10 @@
     theme((() => { try { return JSON.parse(hash.get('tgWebAppThemeParams') || '{}'); } catch (e) { return {}; } })());
     post('web_app_ready');
     post('web_app_expand');
+    if (!hash.get('tgWebAppVersion')) {
+      note('Open this page from the Read button in your AgentalSec bot, inside the Telegram app on your phone.');
+      return;
+    }
     if (typeof crypto === 'undefined' || !crypto.subtle) {
       note('This phone cannot open private messages: its web view has no encryption support.', true);
       return;
