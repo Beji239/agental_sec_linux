@@ -635,6 +635,9 @@ def register_routes(app):
             "module_settings": module_settings,
             # What the operator asked to be called, for the chat avatar.
             "operator_name": _operator_name(),
+            # Set as the first step of a shutdown, so the page can say so
+            # instead of showing the sensors as they stop one by one.
+            "shutting_down": bool(getattr(agent_loop, "_shutting_down", False)),
         })
 
     @app.route("/api/chat", methods=["POST"])

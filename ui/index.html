@@ -132,6 +132,18 @@
   }
 
   .pill.ok    { border-color: var(--green-dim); color: var(--green); }
+  /* While the app stops, and once it no longer answers, nothing on the page
+     may look live: the last answer it got is greyed, never left green. */
+  #app-state-banner { margin: 0; padding: 9px 18px; font-size: 13px; border-bottom: 1px solid var(--border);
+    background: #2a2210; color: var(--amber, #f4b350); }
+  #app-state-banner.down { background: #2a1015; color: var(--red); }
+  body.app-stopping #status-pills .pill, body.app-down #status-pills .pill,
+  body.app-stopping #hl-hero, body.app-down #hl-hero,
+  body.app-stopping .hl-lanes-card, body.app-down .hl-lanes-card,
+  body.app-stopping #module-grid, body.app-down #module-grid,
+  body.app-stopping #settings-readiness, body.app-down #settings-readiness {
+    filter: grayscale(1); opacity: 0.45; }
+  body.app-stopping .hl-sweep, body.app-down .hl-sweep { animation: none; display: none; }
   .pill.warn  { border-color: var(--amber);     color: var(--amber); }
   .pill.error { border-color: var(--red);       color: var(--red);   }
 
@@ -2145,6 +2157,7 @@
     <span id="model-note" title="Which model reasons about your network"></span>
   </div>
 </div>
+<div id="app-state-banner" role="status" hidden></div>
 
 <!-- THE QUESTION DOORBELL. Deliberately carries no detail: it says how many
      and takes you to the chat. A popup that tried to hold the question would
@@ -4823,11 +4836,82 @@ function startPolling() {
   refreshFindingsBadge();
 }
 
+// IS THE APP STILL THERE
+//
+// A failed request used to be ignored, so after a shutdown every pill and
+// count stayed as the last answer left it, green included. Two failures in a
+// row mean the app is not answering; a status that says it is shutting down
+// means it is stopping. Either way the page greys what it shows and says why,
+// and once the app answers again it reloads its real state. A stop started
+// by a signal does its work on the thread that serves the page, so then a
+// request hangs rather than fails: a status request gets 8 s.
+const APP = { state: 'up', fails: 0, polling: false };
+const STATUS_WAIT_MS = 8000;
+
+function setAppState(state) {
+  if (APP.state === state) return;
+  APP.state = state;
+  document.body.classList.toggle('app-stopping', state === 'stopping');
+  document.body.classList.toggle('app-down', state === 'down');
+  const banner = document.getElementById('app-state-banner');
+  if (banner) {
+    banner.hidden = state === 'up';
+    banner.className = state === 'down' ? 'down' : '';
+    banner.textContent = state === 'down'
+      ? 'AgentalSec is not answering: it is stopped, or shutting down. Nothing on this page is live; it picks up the real state by itself once the app is back.'
+      : state === 'stopping'
+        ? 'AgentalSec is shutting down. The sensors are stopping, which is expected; the final rollup can take a few minutes.'
+        : '';
+  }
+  appStateLabels();
+  if (typeof hlRender === 'function') hlRender();
+}
+
+function appStateLabels() {
+  if (APP.state === 'up') return;
+  const word = APP.state === 'down' ? 'NOT RUNNING' : 'STOPPING';
+  setPill('pill-protected', '', word, APP.state === 'down'
+    ? 'The app does not answer, so nothing is being watched from here.'
+    : 'The app is shutting down.');
+  ['pill-ai', 'pill-vpn', 'pill-sniffer', 'pill-sensors'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'pill';
+  });
+}
+
+function appAnswered(shuttingDown) {
+  APP.fails = 0;
+  if (shuttingDown) { setAppState('stopping'); return; }
+  // Back after a stop: the old picture is stale, so start from the app's own.
+  if (APP.state !== 'up') location.reload();
+}
+
+function appUnreachable() {
+  APP.fails += 1;
+  if (APP.fails >= 2) setAppState('down');
+}
+
 async function updateStatusPills() {
+  if (APP.polling) return;
+  APP.polling = true;
+  let r;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), STATUS_WAIT_MS);
   try {
-    const r = await fetch('/api/status', { headers: authHeaders() });
-    if (!r.ok) return;
+    r = await fetch('/api/status', { headers: authHeaders(), cache: 'no-store', signal: ctl.signal });
+  } catch (e) {
+    appUnreachable();
+    return;
+  } finally {
+    clearTimeout(timer);
+    APP.polling = false;
+  }
+  if (r.status >= 500) { appUnreachable(); return; }
+  // Any other answer, a refused sign-in included, means the app is running.
+  if (!r.ok) { appAnswered(false); return; }
+  try {
     const d = await r.json();
+    appAnswered(!!d.shutting_down);
 
     // THE MODEL PILL. Rewritten 2026-09-15, and both halves of it were wrong.
     //
@@ -5616,6 +5700,26 @@ function hlRender() {
   }).join('') || '<div class="hl-hint">The first sensor check runs a minute after start.</div>';
 
   hlDrawer();
+  hlAppState();
+}
+
+// The radar's own words while the app stops or is gone, so it never reads
+// "All 14 sensors are watching" from an answer that is no longer true.
+function hlAppState() {
+  if (typeof APP === 'undefined' || APP.state === 'up') return;
+  const down = APP.state === 'down';
+  document.getElementById('hl-hero').classList.remove('hl-alarm');
+  document.getElementById('hl-count').textContent = '0';
+  document.getElementById('hl-count-lbl').textContent = 'live';
+  document.getElementById('hl-radar-note').textContent = '';
+  document.getElementById('hl-headline').textContent = down
+    ? 'AgentalSec is not answering' : 'Shutting down: the sensors are stopping';
+  const sub = document.getElementById('hl-sub');
+  if (sub) sub.textContent = down
+    ? 'It is stopped or shutting down. Nothing is shown as live until it answers again.'
+    : 'This is expected. The page shows the real state again after the next start.';
+  const detail = document.getElementById('sensor-watch-detail');
+  if (detail) detail.innerHTML = '';
 }
 
 function hlDrawer() {
