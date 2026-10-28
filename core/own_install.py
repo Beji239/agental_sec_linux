@@ -30,8 +30,10 @@ WRITTEN = (
     ("install_capture_service.sh", "NAMES_UNIT_CONTENT", "$UNIT_DIR/$NAMES_UNIT"),
     ("install_capture_service.sh", "CAPTURE_UNIT_CONTENT",
      "$UNIT_DIR/$CAPTURE_UNIT"),
+    ("install_capture_service.sh", "RULE_CONTENT", "$RULE_FILE"),
     ("install_action_helper.sh", "UNIT_CONTENT", "$BOOT_UNIT_FILE"),
     ("install_ebpf_camera.sh", "UNIT_CONTENT", "$UNIT_PATH"),
+    ("install_ebpf_camera.sh", "RULE_CONTENT", "$RULE_FILE"),
     ("install_read_helper.sh", "DROP_IN_CONTENT", "$SUDOERS_FILE"),
 )
 COPIERS = ("install_capture_service.sh", "install_action_helper.sh",

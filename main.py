@@ -2121,6 +2121,15 @@ def main(argv=None):
     if _held.get("taken"):
         return _refuse_busy_port(_host, _port, _held)
 
+    # The sensor services run only while the app runs, and get a few seconds
+    # to settle before the modules read them. Stopped again at exit.
+    from core import sensor_units
+    sensor_units.start()
+    _at_boot = sensor_units.boot_enabled()
+    if _at_boot:
+        logger.warning(f"Still set to start at boot: {', '.join(_at_boot)}. "
+                       f"{sensor_units.FIX}")
+
     if not _initialize_database():
         logger.error("Cannot start - database initialization failed")
         return 1
@@ -2676,6 +2685,8 @@ def main(argv=None):
             except Exception as e:
                 logger.error(f"Shutdown from the dashboard failed: {e}")
             finally:
+                # os._exit skips atexit, so the sensors stop here.
+                sensor_units.stop()
                 os._exit(0)
 
         threading.Thread(target=run, name="dashboard-shutdown",

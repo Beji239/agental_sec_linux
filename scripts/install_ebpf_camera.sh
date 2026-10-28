@@ -29,13 +29,12 @@
 # installed one, and `--verify` asserts the two are the same file so an edit
 # in the tree cannot silently disagree with what is running.
 #
-# WHY IT IS A SYSTEMD UNIT AND NOT A LINE IN SOMEBODY'S STARTUP SCRIPT
+# WHEN IT RUNS
 #
-# The whole value of this sensor is that it is watching when nothing else is.
-# A camera started by hand, or started by the app, is off whenever the app is
-# off -- and it is off exactly when nothing is watching, which is when it
-# matters. Restart=always is the load-bearing line: the camera is meant to
-# outlive every session, every crash and every reboot.
+# Only while the app runs. It is not started at boot; the app starts it when
+# it opens and stops it when it quits, through a polkit rule that lets your
+# account start and stop this one unit. Restart=always brings it back if it
+# dies while the app is open.
 set -uo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,6 +46,7 @@ CAMERA_DST="$INSTALL_DIR/ebpf_monitor.py"
 OBJECT_DST="$INSTALL_DIR/ebpf_monitor.bpf.o"
 UNIT_NAME="agentalsec-ebpf-camera.service"
 UNIT_PATH="/etc/systemd/system/$UNIT_NAME"
+RULE_FILE="/etc/polkit-1/rules.d/50-agentalsec-camera.rules"
 DATA_DIR="/var/lib/agental_sec"
 EVENTS_DB="$DATA_DIR/ebpf_events.db"
 
@@ -109,10 +109,8 @@ UNIT_CONTENT="$(cat <<EOF
 # $EVENTS_DB, a file of its own that the app READS. Nothing running as root
 # ever opens the app's database -- that one-way street is the whole design.
 #
-# WHY IT MUST KEEP RUNNING: it is the only sensor in this app that sees an
-# execution AT THE MOMENT IT HAPPENS. Every other sensor polls, and a program
-# that starts, acts and exits between two polls is invisible to all of them.
-# Restart=always is therefore the load-bearing line here.
+# It is the only sensor in this app that sees an execution the moment it
+# happens. The app starts it when it opens and stops it when it quits.
 #
 # TO UNDO: sudo $PROJECT_ROOT/scripts/install_ebpf_camera.sh --uninstall
 [Unit]
@@ -167,6 +165,23 @@ WantedBy=multi-user.target
 EOF
 )"
 
+# Lets the app start and stop the camera without a password. Only this unit,
+# only start and stop, only this account.
+RULE_CONTENT="$(cat <<EOF
+// AgentalSec, installed by scripts/install_ebpf_camera.sh.
+// $REAL_USER may start and stop the kernel camera.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "$REAL_USER" &&
+        action.lookup("unit") == "$UNIT_NAME" &&
+        (action.lookup("verb") == "start" ||
+         action.lookup("verb") == "stop")) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+)"
+
 show_plan() {
     say "WHAT WOULD CHANGE"
     say ""
@@ -184,7 +199,11 @@ show_plan() {
     printf '%s\n' "$UNIT_CONTENT" | sed 's/^/     /'
     say ""
     say "4. systemd-analyze verify the unit BEFORE it is trusted, then"
-    say "   daemon-reload, enable and start it."
+    say "   daemon-reload, start it once to check it runs, and leave it off the"
+    say "   boot list."
+    say ""
+    say "   $RULE_FILE, so the app can start and stop it:"
+    printf '%s\n' "$RULE_CONTENT" | sed 's/^/     /'
     say ""
     say "5. run the camera's own --check as root and report what it says."
     say "   That is the step that proves this machine can load a BPF program"
@@ -192,12 +211,9 @@ show_plan() {
     say ""
     say "NOTHING ABOVE HAS HAPPENED. Run with --apply as root to do it."
     say ""
-    say "ONE THING TO KNOW FIRST: this starts a ROOT PROCESS that keeps"
-    say "running after this script exits and after every reboot. That is the"
-    say "point of it -- a camera that only watches while somebody is logged in"
-    say "is a camera that is off exactly when it matters -- and it is also the"
-    say "reason this is a deliberate, printed, undoable step rather than"
-    say "something the app does for itself."
+    say "ONE THING TO KNOW FIRST: the camera is a ROOT PROCESS. It runs while"
+    say "the app is open and stops when the app quits, so nothing is recorded"
+    say "while the app is closed."
 }
 
 verify() {
@@ -248,19 +264,16 @@ verify() {
     say ""
     say "  systemd's own view:"
     if systemctl is-enabled "$UNIT_NAME" >/dev/null 2>&1; then
-        say "  [PASS] the unit is enabled (it comes back after a reboot)"
-    else
-        say "  [FAIL] the unit is NOT enabled: it will not survive a reboot,"
-        say "         which for this sensor is the same as not being installed"
+        say "  [FAIL] the unit is still set to start at boot; run --apply again"
         fails=$((fails+1))
+    else
+        say "  [PASS] the unit is off the boot list (the app starts it)"
     fi
     if systemctl is-active "$UNIT_NAME" >/dev/null 2>&1; then
         say "  [PASS] the unit is ACTIVE (the camera is running now)"
     else
-        say "  [FAIL] the unit is NOT active. The app will report no kernel"
-        say "         event being collected, which is true and is bad news."
-        say "         Look at: journalctl -u $UNIT_NAME -n 30"
-        fails=$((fails+1))
+        say "  [NOTE] the unit is not running. It runs while the app is open."
+        say "         If the app is open, look at: journalctl -u $UNIT_NAME -n 30"
     fi
 
     say ""
@@ -415,11 +428,17 @@ restart loop in the journal and no events, which reads as a quiet machine."
     install -o root -g root -m 0644 "$tmp" "$UNIT_PATH" || die "could not install the unit"
     rm -f "$tmp"
     say "  installed $UNIT_PATH"
+    printf '%s\n' "$RULE_CONTENT" > "$RULE_FILE" || die "could not write $RULE_FILE"
+    chown root:root "$RULE_FILE"
+    chmod 0644 "$RULE_FILE"
+    say "  installed $RULE_FILE (the app may start and stop the camera)"
 
+    # Started once here to prove it runs, then left as it was before.
+    local was_running=0
+    systemctl is-active --quiet "$UNIT_NAME" && was_running=1
     systemctl daemon-reload || die "systemctl daemon-reload failed"
-    systemctl enable "$UNIT_NAME" >/dev/null 2>&1 \
-        && say "  enabled $UNIT_NAME (it will start on boot)" \
-        || say "  WARNING: could not enable the unit; it will not survive a reboot"
+    systemctl disable "$UNIT_NAME" >/dev/null 2>&1 \
+        && say "  $UNIT_NAME is off the boot list (the app starts it)"
     systemctl restart "$UNIT_NAME" || die "could not start the unit"
 
     say "  started. Waiting a few seconds for events to appear..."
@@ -442,7 +461,7 @@ restart loop in the journal and no events, which reads as a quiet machine."
     if ! systemctl is-active "$UNIT_NAME" >/dev/null 2>&1; then
         say ""
         say "  [FAIL] the unit is NOT active after being started. It is"
-        say "         installed and enabled, and it is not recording anything."
+        say "         installed, and it is not recording anything."
         say ""
         say "  the last lines of its journal:"
         journalctl -u "$UNIT_NAME" -n 12 --no-pager 2>/dev/null | sed 's/^/      /' \
@@ -454,6 +473,9 @@ restart loop in the journal and no events, which reads as a quiet machine."
         die "the camera did not start, so this install is NOT verified."
     fi
     say "  [PASS] the unit is active."
+    if (( was_running == 0 )); then
+        systemctl stop "$UNIT_NAME" && say "  stopped again; it starts when the app opens"
+    fi
 
     say ""
     say "WHAT IS HAPPENING NOW"
@@ -477,6 +499,7 @@ uninstall() {
         systemctl disable "$UNIT_NAME" >/dev/null 2>&1 && say "  disabled $UNIT_NAME"
     fi
     [[ -f "$UNIT_PATH" ]] && rm -f "$UNIT_PATH" && say "  removed $UNIT_PATH"
+    [[ -f "$RULE_FILE" ]] && rm -f "$RULE_FILE" && say "  removed $RULE_FILE"
     systemctl daemon-reload 2>/dev/null
 
     for f in "$CAMERA_DST" "$OBJECT_DST"; do
