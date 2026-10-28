@@ -84,6 +84,11 @@ for name in ("install_capture_service.sh", "install_ebpf_camera.sh"):
           '"start"' in text and '"stop"' in text and '"restart"' not in text,
           True)
 
+print("\n[7] the camera stops cleanly when told to")
+camera = (ROOT / "ebpf" / "ebpf_monitor.py").read_text()
+check("an interrupted poll is not a failure", "n == -errno.EINTR" in camera,
+      True)
+
 print()
 if fails:
     print(f"FAILED: {len(fails)}")

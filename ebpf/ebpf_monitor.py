@@ -76,6 +76,7 @@ the camera" before anything is installed and before a password is typed.
 
 import argparse
 import ctypes
+import errno
 import json
 import os
 import signal
@@ -1060,6 +1061,9 @@ def run(args) -> int:
             # A 200 ms poll keeps the loop responsive to SIGTERM while costing
             # nothing measurable; the kernel writes into the ring regardless.
             n = lib.ring_buffer__poll(ring.ring, 200)
+            # A signal breaks the wait; the loop test decides whether to stop.
+            if n == -errno.EINTR:
+                continue
             if n < 0:
                 print(f"ERROR: the ring buffer poll failed (libbpf error "
                       f"{n}). EVENTS ARE BEING LOST FROM HERE ON.", 
