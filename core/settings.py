@@ -165,19 +165,24 @@ def env_example_notes(path: Path | None = None) -> dict[str, str]:
 _CODE_KEYS = [
     {
         "env":      "AGENTAL_APP_API_KEY",
-        "label":    "Dashboard API key",
+        "label":    "Read-only integration API key",
         "group":    "core",
-        # NOT required, and that is not a slip. secret_store mints one when
-        # there is none, so a fresh clone works. What it costs is stability:
-        # the key changes at every restart. That is worth an amber row and it
-        # is not worth a red one, and a panel that paints a working install
-        # red teaches people to ignore red.
+        # Generated and saved at startup when absent.
         "required": False,
         "effect":   "restart",
         "generate": True,
-        "unlocks":  "every /api/* call the dashboard makes",
-        "without":  ("a fresh one is minted at each start, so the dashboard "
-                     "works but the key changes every restart"),
+        "unlocks":  "read-only API requests from integrations",
+        "without":  "a read key is generated and saved at the next start",
+    },
+    {
+        "env": "AGENTAL_DASHBOARD_KEY",
+        "label": "Dashboard sign-in key",
+        "group": "core",
+        "required": False,
+        "effect": "restart",
+        "generate": False,
+        "unlocks": "dashboard sessions, settings and action approvals",
+        "without": "a separate private key is generated at the next start",
     },
     {
         "env":      "AGENTAL_API_KEY",
@@ -367,27 +372,15 @@ def set_key(env_name: str, value: str) -> dict:
                            "quote or # character. Check for a stray newline "
                            "from the copy and paste.")}
 
-    # THE ONE KEY WITH A FLOOR, AND IT WAS MISSING.
-    #
-    # 47.9 item 5 wrote this up on 2026-09-04 as done, and on 2026-09-05 it
-    # was not in this file. tests/test_settings_panel.py had been asserting it
-    # and failing on every run since, and nothing ran the tests as a set, so
-    # the write-up was the only place it existed. That is worse than not
-    # having built it, because the note said it was handled.
-    #
-    # Every other key here was issued by somebody else and we are in no
-    # position to judge its shape. This one is ours and it guards every route
-    # on the dashboard, so a typed word is not a value to accept politely.
-    # Clearing stays allowed, because "mint a fresh one at the next start" is
-    # a legitimate thing to want.
+    # Check the shape of keys issued here. Provider keys keep their own format.
+    # Clearing either local key generates a replacement at the next start.
+    if entry["env"] == "AGENTAL_DASHBOARD_KEY" and val and not re.fullmatch(r"[0-9a-fA-F]{64}", val):
+        return {"ok": False, "reason": "The dashboard key needs 64 hexadecimal "
+                "characters. Clear it to generate one at the next start."}
     if entry["env"] == _APP_KEY_ENV and val and len(val) < _APP_KEY_MIN:
         return {"ok": False,
-                "reason": (f"The application key must be at least "
-                           f"{_APP_KEY_MIN} characters. It is the key that "
-                           f"guards every route on this dashboard, so a typed "
-                           f"word is not enough. Use Generate to mint one, or "
-                           f"clear the box to have one minted at the next "
-                           f"start.")}
+                "reason": (f"The key must be at least {_APP_KEY_MIN} characters. "
+                           "Clear the box to generate a new key at the next start.")}
 
     ok, err = _write_env_line(entry["env"], val)
     if not ok:

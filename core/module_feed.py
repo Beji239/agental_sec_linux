@@ -181,7 +181,8 @@ def decide(kind: str, ref, choice: str, person: str, text: str = None) -> dict:
             if choice == "deny":
                 note += " " + ((text or "").strip()[:300] or "No reason given.")
             out = actions.decide(int(ref), approved=choice == "approve",
-                                 decided_by="user", note=note)
+                                 decided_by="user", note=note,
+                                 decision_source="phone", decision_actor=who)
             return {"ok": bool(out.get("success")),
                     "detail": out.get("error") or out.get("state"), "result": out}
         if kind == "question":

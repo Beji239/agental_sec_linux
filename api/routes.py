@@ -1,8 +1,7 @@
 # api/routes.py
 # AgentalSec V2, all Flask endpoints
 # Thin layer. No logic here, agent_loop and memory_engine do the work.
-# Every endpoint requiring auth checks the X-API-Key header, or the
-# dashboard's session header (api/dashboard_session.py).
+# X-API-Key permits reads. Changes need a separately signed dashboard session.
 
 
 import asyncio
@@ -220,6 +219,7 @@ def _operator_name() -> str:
 
 
 def register_routes(app):
+    app.config.setdefault("AGENTAL_DASHBOARD_KEY", secrets.token_hex(32))
 
     # A bad value in a query string is the caller's mistake, so say so with a
     # 400 instead of a 500. memory_engine raises BadInput for an invalid
@@ -297,9 +297,13 @@ def register_routes(app):
             except Exception:
                 ok = False
             if not ok and not key:
-                ok = _session_ok(expected)
+                ok = _session_ok(current_app.config["AGENTAL_DASHBOARD_KEY"])
 
             if ok:
+                if key and request.method not in ("GET", "HEAD", "OPTIONS"):
+                    return jsonify({"error": "Read-only integration key",
+                                    "detail": "Open the dashboard to change "
+                                              "settings or approve actions."}), 403
                 return f(*args, **kwargs)
 
             # Already in a lockout: refuse, and do NOT count this one, so the
@@ -430,7 +434,7 @@ def register_routes(app):
     def open_link():
         """The app's one-time link: a session for this browser, then the
         dashboard. A spent or forged link just lands on the sign in box."""
-        api_key = current_app.config["AGENTAL_API_KEY"]
+        api_key = current_app.config["AGENTAL_DASHBOARD_KEY"]
         if not ds.redeem_link(api_key, request.args.get("t", "")):
             return redirect("/", code=303)
         nonce = secrets.token_urlsafe(18)
@@ -443,10 +447,10 @@ def register_routes(app):
 
     @app.route("/open", methods=["POST"])
     def open_with_key():
-        """The app key, pasted into the sign in box, for a session. Wrong
+        """The dashboard key, pasted into the sign in box, for a session. Wrong
         keys count towards the same throttle as the API, and as there a
         correct key works even during a lockout."""
-        api_key = current_app.config["AGENTAL_API_KEY"]
+        api_key = current_app.config["AGENTAL_DASHBOARD_KEY"]
         caller = request.remote_addr or "unknown"
         body = request.get_json(silent=True) or {}
         supplied = _text(body, "key").lower()
@@ -2650,7 +2654,7 @@ def register_routes(app):
         from core import actions
         data = request.get_json(silent=True) or {}
         result = actions.decide(request_id, approved=True, decided_by="user",
-                                note=data.get("note"))
+                                note=data.get("note"), decision_source="dashboard")
         logger.info("Action request %s approved from the dashboard.",
                     request_id)
         return jsonify(result), (200 if result.get("success") else 409)
@@ -2668,7 +2672,7 @@ def register_routes(app):
             # action did not happen at 3am.
             note = "Denied from the dashboard. No reason given."
         result = actions.decide(request_id, approved=False, decided_by="user",
-                                note=note)
+                                note=note, decision_source="dashboard")
         logger.info("Action request %s denied from the dashboard.",
                     request_id)
         return jsonify(result), (200 if result.get("success") else 409)

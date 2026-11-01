@@ -6,6 +6,7 @@
 # port there, while the page's own storage stays with this port.
 
 import hashlib
+import errno
 import hmac
 import json
 import os
@@ -92,8 +93,13 @@ def write_opener(url: str, owner_uid=None) -> str:
         run_dir = f"/run/user/{owner_uid}"
     if not (run_dir and os.path.isdir(run_dir)):
         run_dir = None
-    fd, path = tempfile.mkstemp(prefix="agentalsec-open-", suffix=".html",
-                                dir=run_dir)
+    try:
+        fd, path = tempfile.mkstemp(prefix="agentalsec-open-", suffix=".html",
+                                    dir=run_dir)
+    except OSError as e:
+        if not run_dir or e.errno not in (errno.EACCES, errno.EROFS, errno.ENOENT):
+            raise
+        fd, path = tempfile.mkstemp(prefix="agentalsec-open-", suffix=".html")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         u = escape(url, quote=True)
         fh.write('<!doctype html><meta charset="utf-8">'

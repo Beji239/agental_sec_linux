@@ -140,17 +140,16 @@ check("and it names the tool the text came from",
 
 
 print("\n[2] THE NEGATIVE CONTROL: a turn that read only a trusted tool")
-print("    query_host_info is this app's own reading of this machine, which")
-print("    is the definition of a measurement rather than attacker text. The")
-print("    same turn and the same writer must leave the row CLEAN, or the")
-print("    check above is asserting a constant.")
-sources = drive_turn("query_host_info", {})
+print("    Database sizes are generated measurements. Host information can")
+print("    include names supplied by other people, so it is fenced too.")
+print("    The same writer must keep a measurement without outside text clean.")
+sources = drive_turn("query_database_size", {})
 check("nothing untrusted was read", sources, [])
 
 me.write_behavioral_observation(
     entity_type="ip", entity_value="192.0.2.78",
     behavior_key="active_hours", behavior_value="[8,16]",
-    session_id=SID, context="from this machine's own host info")
+    session_id=SID, context="from database size measurements")
 untrusted, named = row_for("192.0.2.78")
 check("the row is clean", untrusted, 0)
 check("and names no source", named, None)
@@ -159,7 +158,7 @@ check("and names no source", named, None)
 print("\n[3] the two rows differ, which is the whole claim")
 a = row_for("192.0.2.77")
 b = row_for("192.0.2.78")
-check("one reading of the wire and one reading of the machine are not"
+check("outside text and generated size measurements are not"
       " recorded as the same kind of evidence", a[0] == b[0], False)
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))

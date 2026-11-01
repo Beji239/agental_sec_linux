@@ -360,7 +360,8 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}}, {}, "t",
                  api_key=KEY)
 app.config["AGENTAL_ALLOWED_HOSTS"] = allowed_hosts({"flask": {"host": "127.0.0.1"}})
 web = app.test_client()
-H = {"X-API-Key": KEY}
+from api import dashboard_session as ds
+H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 with sqlite3.connect(DB) as c:
     c.execute("DELETE FROM daily_report")
     for back in (3, 2, 1):

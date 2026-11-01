@@ -82,7 +82,8 @@ chmod 600 config.json .env
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-- `AGENTAL_APP_API_KEY`: paste the value printed above. The dashboard asks for it.
+- `AGENTAL_APP_API_KEY`: read-only integrations. Leave blank to generate and save it at first start.
+- `AGENTAL_DASHBOARD_KEY`: private dashboard sign-in. Leave blank to generate and save a separate key.
 - `AGENTAL_API_KEY`: your model provider's key, needed for the AI analyst.
 - Everything else in `.env` is optional. A blank key turns that source off.
 
@@ -134,7 +135,7 @@ python3 main.py
 ```
 
 The browser opens on the dashboard, signed in. Opened by hand at
-http://127.0.0.1:5000, it asks once for `AGENTAL_APP_API_KEY`. Stop with Ctrl+C.
+http://127.0.0.1:5000, it asks for `AGENTAL_DASHBOARD_KEY` when a browser session is needed. Stop with Ctrl+C.
 
 Both commands print a reminder that the launchers are not installed yet. That
 is expected at this point; step 9 installs them.
@@ -382,3 +383,5 @@ pip install --user --break-system-packages --upgrade -r requirements.txt
   open http://127.0.0.1:5000 there. Setting `flask.host` to `0.0.0.0` (plus the
   address under `flask.allowed_hosts`) also works, but exposes the dashboard
   to your whole network.
+
+For credential migration and read-only examples, see [API access](docs/API-ACCESS.md).

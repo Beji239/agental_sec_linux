@@ -29,7 +29,7 @@ not close it, because closing it stops the app. AgentalSec keeps watching on
 its own, and with no browser open it uses less RAM. If you run an agent such as
 OpenClaw or Hermes, let it do the reading for you: it can ask AgentalSec's
 local API for the same data the dashboard shows, with your
-`AGENTAL_APP_API_KEY`, and tell you exactly what is happening. Want the
+`AGENTAL_APP_API_KEY` for read-only requests, and tell you what is happening. Want the
 dashboard back? Open http://127.0.0.1:5000 again. Done for the day? Press
 Ctrl+C in the terminal, or the Stop AgentalSec button on the Settings tab,
 which stops it just as cleanly, and start it again whenever you like.
@@ -487,8 +487,7 @@ nothing it already has.
 
 When it finishes, start AgentalSec from its icon. The dashboard opens at
 http://127.0.0.1:5000, already signed in. Opened by hand, it asks once for the
-dashboard key the installer printed (it is also in `.env` as
-`AGENTAL_APP_API_KEY`), and that browser stays signed in for 30 days. If a
+private sign-in key in `.env`, named `AGENTAL_DASHBOARD_KEY`, and that browser stays signed in for 30 days. If a
 desktop icon says "untrusted", right-click it and choose "Allow launching".
 
 The optional parts (the kernel camera, your router, start on boot) and every
@@ -562,8 +561,9 @@ stranger. The full list is in [docs/PRIVACY.md](docs/PRIVACY.md). In short:
   network can reach it. A request that names any other host is refused, which
   stops web pages reaching it through your browser. From another computer,
   use an SSH tunnel (see [SETUP.md](SETUP.md)).
-- **Signed in, not guessable.** Every API call needs the app key, compared in
-  constant time, and repeated wrong keys lock the caller out. The page holds
+- **Signed in, not guessable.** Read-only integrations use a separate API key.
+  Changes require a dashboard session signed with its private key. Repeated
+  wrong keys lock the caller out. The page holds
   no key: the browser signs in once through a two minute, one time link and
   keeps a signed 30 day session. The page runs no script but its own.
 - **Hashes that make tampering visible.** High value writes go into a hash
@@ -640,3 +640,11 @@ them those tests are skipped; to install them, see "Security test tools" in
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## API access and dashboard approvals
+
+`AGENTAL_APP_API_KEY` is read-only integration access. Changes and approvals
+need a browser session signed with the separate `AGENTAL_DASHBOARD_KEY`.
+Both keys are generated and saved in `.env` when absent. Keep the dashboard
+key private. See [API access](docs/API-ACCESS.md) for the upgrade steps and
+an example that contains no real credential.

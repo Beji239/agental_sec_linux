@@ -97,7 +97,8 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}}, {}, "t",
                  api_key=KEY)
 app.config["AGENTAL_ALLOWED_HOSTS"] = allowed_hosts({"flask": {"host": "127.0.0.1"}})
 web = app.test_client()
-H = {"X-API-Key": KEY}
+from api import dashboard_session as ds
+H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 r = web.post("/api/agents/runs/dismiss", headers=H, json={"run_ids": [ids[5]]})
 check("the route dismisses", (r.status_code, r.get_json().get("changed")), (200, 1))
 got = web.get("/api/agents?runs_show=dismissed", headers=H).get_json()

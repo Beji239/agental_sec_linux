@@ -1564,6 +1564,8 @@ _permission_decisions: dict[str, bool] = {}
 
 def set_permission_decision(call_id: str, approved: bool):
     """Called by routes.py when user taps Approve or Deny."""
+    me._journal("permission_approved" if approved else "permission_denied",
+                "permission_card", call_id, {"source": "dashboard"})
     _permission_decisions[call_id] = approved
 
 

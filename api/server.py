@@ -3,6 +3,7 @@
 
 import ipaddress
 import logging
+import secrets
 
 from flask import Flask
 from flask_cors import CORS
@@ -147,7 +148,8 @@ def allowed_hosts(config: dict) -> set:
     return hosts
 
 
-def create_app(config: dict, modules: dict, session_id: str, api_key: str = "") -> Flask:
+def create_app(config: dict, modules: dict, session_id: str, api_key: str = "",
+               dashboard_key: str = None) -> Flask:
     app = Flask(__name__, static_folder="../ui", template_folder="../ui")
 
     # CORS stays for defence in depth, but it was never the thing protecting
@@ -171,10 +173,14 @@ def create_app(config: dict, modules: dict, session_id: str, api_key: str = "") 
     # secrets do not live there, and a fallback that reads one is how the
     # un-migrated copy survives unnoticed.
     app.config["AGENTAL_API_KEY"] = api_key
+    dashboard_key = dashboard_key or secrets.token_hex(32)
+    if dashboard_key.casefold() == api_key.casefold():
+        raise ValueError("Dashboard and integration keys must be different")
+    app.config["AGENTAL_DASHBOARD_KEY"] = dashboard_key
 
     if not api_key:
         logger.error(
-            "No API key available, every /api/* call will return 401. "
+            "No integration API key available, read-key requests will return 401. "
             "Set AGENTAL_APP_API_KEY in .env."
         )
 

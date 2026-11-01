@@ -6193,11 +6193,12 @@ def execute_tool(name: str, params: dict) -> dict:
     from core import sanitize
     from core import sensor_health
 
+    def failure(text):
+        return {"result": None, "error": sanitize.scrub_string(text),
+                "untrusted": True}
+
     try:
         result = _dispatch(name, params)
-
-        if sanitize.is_untrusted(name):
-            result = sanitize.scrub(result)
 
         out = {
             "result": result,
@@ -6224,23 +6225,24 @@ def execute_tool(name: str, params: dict) -> dict:
         degraded = sensor_health.envelope_for(name, _modules)
         if degraded:
             out["sensor_health"] = degraded
+            out["untrusted"] = True
 
-        return out
+        return sanitize.scrub(out) if out["untrusted"] else out
     except UnknownTool as e:
         logger.warning(f"Unknown tool requested: {e}")
-        return {"result": None, "error": f"Unknown tool: {e}"}
+        return failure(f"Unknown tool: {e}")
     except ToolUnavailable as e:
         logger.warning(f"Tool unavailable [{name}]: {e}")
-        return {"result": None, "error": f"Tool unavailable: {e}"}
+        return failure(f"Tool unavailable: {e}")
     except ValueError as e:
         logger.warning(f"Tool validation error [{name}]: {e}")
-        return {"result": None, "error": f"Validation error: {e}"}
+        return failure(f"Validation error: {e}")
     except PermissionError as e:
         logger.error(f"Tool permission blocked [{name}]: {e}")
-        return {"result": None, "error": f"Permission denied: {e}"}
+        return failure(f"Permission denied: {e}")
     except Exception as e:
         logger.error(f"Tool execution error [{name}]: {e}", exc_info=True)
-        return {"result": None, "error": f"Execution error: {e}"}
+        return failure(f"Execution error: {e}")
 
 
 def _dispatch(name: str, params: dict):

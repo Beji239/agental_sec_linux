@@ -29,7 +29,8 @@ def check(label, got, want):
 KEY = "k" * 64
 app = create_app({"flask": {"host": "127.0.0.1", "port": 5091}}, {}, "test", api_key=KEY)
 client = app.test_client()
-H = {"X-API-Key": KEY}
+from api import dashboard_session as ds
+H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 
 print("the status says when the app is shutting down")
 agent_loop._shutting_down = False

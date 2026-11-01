@@ -164,7 +164,8 @@ for route in ("/api/enrollment", "/api/probe/status"):
     check(f"{route} answers with it",
           client.get(route, headers={"X-API-Key": API_KEY}).status_code, 200)
 
-r = client.post("/api/enrollment/complete", headers={"X-API-Key": API_KEY})
+from api import dashboard_session as ds
+r = client.post("/api/enrollment/complete", headers={ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])})
 check("complete is a POST, not a GET", r.status_code, 200)
 check("and GET is refused",
       client.get("/api/enrollment/complete",

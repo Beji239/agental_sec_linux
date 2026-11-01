@@ -848,9 +848,11 @@ def verb_quarantine(path, sha_expected):
         raise Refusal(f"{path} belongs to the package {owner}. Moving it "
                       f"would break that package; if it was tampered with, "
                       f"reinstall the package instead.")
+    parent, name = _parent_fd(path)
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
     except OSError as e:
+        os.close(parent)
         raise Refusal(f"{path} could not be opened without following a link: "
                       f"{e}")
     try:
@@ -861,10 +863,14 @@ def verb_quarantine(path, sha_expected):
             raise Refusal(f"{path} is larger than {MAX_FILE_BYTES} bytes.")
         digest = hashlib.sha256()
         chunks = []
+        total = 0
         while True:
             chunk = os.read(fd, 1 << 20)
             if not chunk:
                 break
+            total += len(chunk)
+            if total > MAX_FILE_BYTES:
+                raise Refusal("The file grew beyond the quarantine size limit.")
             digest.update(chunk)
             chunks.append(chunk)
         sha = digest.hexdigest()
@@ -898,13 +904,15 @@ def verb_quarantine(path, sha_expected):
         with os.fdopen(mfd, "w") as fh:
             json.dump(manifest, fh, indent=2)
         # The original goes only if it is still the file that was hashed.
-        now = os.lstat(path)
-        if (now.st_ino, now.st_dev) != (st.st_ino, st.st_dev):
+        now = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        fields = ("st_ino", "st_dev", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(now, field) != getattr(st, field) for field in fields):
             raise Refusal(f"{path} was replaced while it was being copied. "
                           f"A copy is held as {qid}; the original was left.")
-        os.unlink(path)
+        os.unlink(name, dir_fd=parent)
     finally:
         os.close(fd)
+        os.close(parent)
     return {"quarantined": path, "id": qid, "sha256": sha,
             "held_at": home, "undo": f"restore {qid}"}
 
@@ -930,14 +938,24 @@ def verb_restore(qid):
     if hashlib.sha256(data).hexdigest() != manifest.get("sha256"):
         raise Refusal(f"the held copy of {qid} no longer matches its recorded "
                       f"hash. Not restored.")
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                 0o600)
-    with os.fdopen(fd, "wb") as fh:
-        fh.write(data)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.chown(path, int(manifest.get("uid", 0)), int(manifest.get("gid", 0)))
-    os.chmod(path, int(manifest.get("mode", 0o600)))
+    if len(data) > MAX_FILE_BYTES:
+        raise Refusal("The held file exceeds the restore size limit.")
+    parent, name = _parent_fd(path)
+    try:
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=parent)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fchown(fh.fileno(), int(manifest.get("uid", 0)), int(manifest.get("gid", 0)))
+            os.fchmod(fh.fileno(), int(manifest.get("mode", 0o600)))
+            os.fsync(fh.fileno())
+            st = os.fstat(fh.fileno())
+        live = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if (live.st_dev, live.st_ino) != (st.st_dev, st.st_ino):
+            raise Refusal("The restore destination changed. The held copy is kept.")
+    finally:
+        os.close(parent)
     for name in ("payload", "manifest.json"):
         os.unlink(os.path.join(home, name))
     os.rmdir(home)
@@ -1144,37 +1162,78 @@ def verb_restore_group_member(uid):
 
 # TEXT FILES SHARED BY THE SSH KEY AND CRON VERBS
 
+def _parent_fd(path: str):
+    """Open each parent directory without following symlinks."""
+    if not os.path.isabs(path) or os.path.normpath(path) != path:
+        raise Refusal("The file path must be absolute and written plainly.")
+    parts = path.split("/")[1:]
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in parts[:-1]:
+            nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                          dir_fd=fd)
+            os.close(fd)
+            fd = nxt
+        return fd, parts[-1]
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def _open_text(path: str):
-    """(text, stat) of a small regular file, opened without following a link."""
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    with os.fdopen(fd, "rb") as fh:
-        st = os.fstat(fh.fileno())
-        if not stat.S_ISREG(st.st_mode):
-            raise Refusal(f"{path} is not a regular file.")
-        if st.st_size > MAX_SMALL_FILE:
-            raise Refusal(f"{path} is larger than {MAX_SMALL_FILE} bytes.")
-        return fh.read().decode("utf-8", errors="surrogateescape"), st
+    """Read a bounded regular file through its pinned parent directory."""
+    parent, name = _parent_fd(path)
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                     dir_fd=parent)
+        with os.fdopen(fd, "rb") as fh:
+            st = os.fstat(fh.fileno())
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+                raise Refusal(f"{path} must be a regular file with one link.")
+            data = fh.read(MAX_SMALL_FILE + 1)
+            if len(data) > MAX_SMALL_FILE:
+                raise Refusal(f"{path} is larger than {MAX_SMALL_FILE} bytes.")
+            return data.decode("utf-8", errors="surrogateescape"), st
+    finally:
+        os.close(parent)
 
 
 def _rewrite(path: str, text: str, st):
-    """Replace a file atomically, keeping its owner and mode."""
-    tmp = f"{path}.agentalsec-{os.getpid()}"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                 stat.S_IMODE(st.st_mode))
+    """Replace the checked file inside a pinned directory, preserving metadata."""
+    data = text.encode("utf-8", errors="surrogateescape")
+    if len(data) > MAX_SMALL_FILE:
+        raise Refusal("The replacement exceeds the text file size limit.")
+    parent, name = _parent_fd(path)
+    tmp = f".agentalsec-{os.getpid()}-{os.urandom(8).hex()}"
+    made = False
     try:
+        live = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        fields = ("st_dev", "st_ino", "st_mtime_ns", "st_ctime_ns", "st_size")
+        if (not stat.S_ISREG(live.st_mode) or live.st_nlink != 1
+                or any(getattr(live, field) != getattr(st, field) for field in fields)):
+            raise Refusal(f"{path} changed after it was read. Nothing was replaced.")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     stat.S_IMODE(st.st_mode), dir_fd=parent)
+        made = True
         with os.fdopen(fd, "wb") as fh:
-            fh.write(text.encode("utf-8", errors="surrogateescape"))
+            fh.write(data)
             fh.flush()
             os.fchown(fh.fileno(), st.st_uid, st.st_gid)
             os.fchmod(fh.fileno(), stat.S_IMODE(st.st_mode))
             os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+        live = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if any(getattr(live, field) != getattr(st, field) for field in fields):
+            raise Refusal(f"{path} changed while its replacement was prepared.")
+        os.replace(tmp, name, src_dir_fd=parent, dst_dir_fd=parent)
+        made = False
+        os.fsync(parent)
+    finally:
+        if made:
+            try:
+                os.unlink(tmp, dir_fd=parent)
+            except OSError:
+                pass
+        os.close(parent)
 
 
 # SSH KEYS

@@ -35,7 +35,9 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}}, {}, "test-sessi
                  api_key=API_KEY)
 app.config["AGENTAL_ALLOWED_HOSTS"] = allowed_hosts({"flask": {"host": "127.0.0.1"}})
 client = app.test_client()
-H = {"X-API-Key": API_KEY}
+from api import dashboard_session as ds
+DASHBOARD = app.config["AGENTAL_DASHBOARD_KEY"]
+H = {ds.HEADER: ds.new_session(DASHBOARD)}
 
 
 print("\n[1] S11: a malformed limit is answered, not crashed on")
@@ -190,7 +192,7 @@ for label, resp in (("the page", r),
           all(f"{f}=()" in resp.headers.get("Permissions-Policy", "")
               for f in ("camera", "microphone", "geolocation")), True)
 
-link = ds.open_link_token(API_KEY)
+link = ds.open_link_token(DASHBOARD)
 r = client.get("/open?t=" + link, environ_overrides=LOCAL)
 handoff = r.get_data(as_text=True)
 check("the app's link answers with a session", r.status_code, 200)
@@ -200,19 +202,19 @@ check("and that page's one script carries its nonce",
       r.headers["Content-Security-Policy"].split("'nonce-")[1].split("'")[0]
       in handoff, True)
 session = handoff.split(f'"{ds.STORAGE_KEY}", "')[1].split('"')[0]
-check("the session it hands over is valid", ds.session_valid(API_KEY, session), True)
+check("the session it hands over is valid", ds.session_valid(DASHBOARD, session), True)
 check("a link works once",
       client.get("/open?t=" + link, environ_overrides=LOCAL).status_code, 303)
-old = ds.open_link_token(API_KEY, now=1_000_000)
+old = ds.open_link_token(DASHBOARD, now=1_000_000)
 check("an old link does not work",
       client.get("/open?t=" + old, environ_overrides=LOCAL).status_code, 303)
 forged = link.rsplit(".", 1)[0] + "." + "0" * 64
 check("a forged link does not work",
       client.get("/open?t=" + forged, environ_overrides=LOCAL).status_code, 303)
 check("a session made with another key does not work",
-      ds.session_valid(API_KEY, ds.new_session("1" * 64)), False)
+      ds.session_valid(DASHBOARD, ds.new_session("1" * 64)), False)
 check("an expired session does not work",
-      ds.session_valid(API_KEY, ds.new_session(API_KEY, now=1_000_000)), False)
+      ds.session_valid(DASHBOARD, ds.new_session(DASHBOARD, now=1_000_000)), False)
 
 check("the session reaches the API in the page's header",
       client.get("/api/findings", environ_overrides=LOCAL,
@@ -230,9 +232,9 @@ _routes_mod._auth_fails.clear(); _routes_mod._auth_locked.clear()
 
 r = client.post("/open", json={"key": "f" * 64}, environ_overrides=LOCAL)
 check("a wrong pasted key is refused", r.status_code, 401)
-r = client.post("/open", json={"key": API_KEY}, environ_overrides=LOCAL)
+r = client.post("/open", json={"key": DASHBOARD}, environ_overrides=LOCAL)
 check("the right pasted key gets a session",
-      ds.session_valid(API_KEY, (r.get_json() or {}).get("session")), True)
+      ds.session_valid(DASHBOARD, (r.get_json() or {}).get("session")), True)
 _routes_mod._auth_fails.clear(); _routes_mod._auth_locked.clear()
 
 import os, stat   # noqa: E402

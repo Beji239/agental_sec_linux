@@ -84,7 +84,7 @@ res = {"routes": len(routes), "open": [], "wrong_key": [], "forged": [],
        "foreign_host": [], "cors": [], "e500": [], "html": [],
        "wrong_method": []}
 forged = ds.new_session("cd" * 32)
-expired = ds.new_session(KEY, now=1_000_000)
+expired = ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"], now=1_000_000)
 
 for rule, m in routes:
     u = url(rule)
@@ -119,7 +119,8 @@ for rule, m in routes:
     if r.status_code != 405:
         res["wrong_method"].append(f"{other.upper()} {rule} {r.status_code}")
 
-H = {"X-API-Key": KEY}
+from api import dashboard_session as ds
+H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 BODIES = [("text", "not json at all", "text/plain"),
           ("broken json", "{\"a\": ", "application/json"),
           ("a list", "[1, 2, 3]", "application/json"),

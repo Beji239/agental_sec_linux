@@ -157,6 +157,9 @@ _LOOSE_FENCE = re.compile(
 UNTRUSTED_TOOLS = {
     # Stored questions can repeat text from observations and research.
     "query_operator_answers",
+    # Host names and map labels can come from devices and stored observations.
+    "query_host_info",
+    "query_map_summary",
     "query_packets",
     # T9: lease hostnames are chosen by the devices and log lines by whatever
     # wrote them on the router.

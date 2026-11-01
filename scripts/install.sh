@@ -222,10 +222,18 @@ PY
 # 5. Keys in .env
 step "Keys"
 if [[ -n "$(env_get AGENTAL_APP_API_KEY)" ]]; then
-    ok "dashboard key already set, kept"
+    ok "read-only integration key already set, kept"
 else
     env_set AGENTAL_APP_API_KEY "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-    ok "dashboard key generated (AGENTAL_APP_API_KEY)"
+    ok "read-only integration key generated (AGENTAL_APP_API_KEY)"
+fi
+dashboard_key="$(env_get AGENTAL_DASHBOARD_KEY)"
+read_key="$(env_get AGENTAL_APP_API_KEY)"
+if [[ ! "$dashboard_key" =~ ^[0-9a-fA-F]{64}$ || "${dashboard_key,,}" == "${read_key,,}" ]]; then
+    env_set AGENTAL_DASHBOARD_KEY "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+    ok "separate dashboard sign-in key generated"
+else
+    ok "dashboard sign-in key already set, kept"
 fi
 if [[ -n "$(env_get AGENTAL_API_KEY)" ]]; then
     ok "model provider key already set, kept"
@@ -356,9 +364,8 @@ echo "Installed AgentalSec $(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "(v
 echo
 echo "Start it from the AgentalSec icon in your app menu, or here with:"
 echo "    python3 main.py"
-echo "Then open http://127.0.0.1:5000 and enter the dashboard key:"
-echo "    $(env_get AGENTAL_APP_API_KEY)"
-echo "It is kept in .env as AGENTAL_APP_API_KEY."
+echo "The app opens a signed-in dashboard tab."
+echo "If asked to sign in, use AGENTAL_DASHBOARD_KEY from your private .env file."
 echo "It runs as you: packets are captured by the capture service."
 if [[ ${#WARNINGS[@]} -gt 0 ]]; then
     echo

@@ -474,10 +474,11 @@ def write_request(verb: str, params: dict, reason: str,
     return out
 
 
-# The decision: only a person, through the API key. No tool calls decide().
+# Decisions come from the dashboard or a paired phone, never a read key.
 
 def decide(request_id: int, approved: bool, decided_by: str = "user",
-           note: str = None) -> dict:
+           note: str = None, decision_source: str = "local",
+           decision_actor: str = None) -> dict:
     """
     Record a person's approval or denial of a pending request. Only
     decided_by='user' is accepted, and a request is decided once.
@@ -490,6 +491,12 @@ def decide(request_id: int, approved: bool, decided_by: str = "user",
                           "decision here would be the model approving itself, "
                           "which is the thing the gate exists to prevent.")}
 
+    if decision_source not in ("local", "dashboard", "phone"):
+        return {"success": False, "error": "Unknown decision source"}
+    actor = str(decision_actor or "operator")[:100]
+    from core import sanitize
+    actor = sanitize.scrub_string(actor)
+    note = f"Decision from {decision_source}, {actor}." + (f" {note}" if note else "")
     now = _sql_ts(_now())
     with me._get_conn() as conn:
         if not _table_ready(conn):
@@ -532,13 +539,15 @@ def decide(request_id: int, approved: bool, decided_by: str = "user",
     me._journal("action_approved" if approved else "action_rejected",
                 "action_request", request_id,
                 {"verb": (row["verb"] if row is not None else None),
-                 "noted": note})
+                 "noted": note, "source": decision_source, "actor": actor})
 
     out = {
         "success": True,
         "request_id": request_id,
         "state": state,
         "decided_at": now,
+        "decision_source": decision_source,
+        "decision_actor": actor,
     }
     if approved:
         out["note"] = (

@@ -376,7 +376,8 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}},
 cl = app.test_client()
 # The page's OWN authHeaders(), JSON declared. A bare `data=` string is a
 # different request than the page makes.
-HJ = {"X-API-Key": KEY, "Content-Type": "application/json"}
+from api import dashboard_session as ds
+HJ = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"]), "Content-Type": "application/json"}
 
 # THE SCAN TARGET IS LOOPBACK, AND THAT IS THE POINT OF THE CONSTANT.
 # The first draft used 192.0.2.24, this tree's usual documentation address --

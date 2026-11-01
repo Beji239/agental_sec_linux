@@ -177,7 +177,8 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": 5000}}, {}, "test-sessi
                  api_key=API_KEY)
 app.config["AGENTAL_ALLOWED_HOSTS"] = allowed_hosts({"flask": {"host": "127.0.0.1"}})
 client = app.test_client()
-H = {"X-API-Key": API_KEY}
+from api import dashboard_session as ds
+H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 
 r = client.post("/api/shutdown")
 check("no key is 401", r.status_code, 401)

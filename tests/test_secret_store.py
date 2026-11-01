@@ -25,7 +25,7 @@ from core import secret_crypto as crypto                # noqa: E402
 from core import secret_store as ss                     # noqa: E402
 
 fails = []
-NAMES = ["AGENTAL_API_KEY", "AGENTAL_APP_API_KEY", "AGENTAL_ROUTER_COMMUNITY",
+NAMES = ["AGENTAL_DASHBOARD_KEY", "AGENTAL_API_KEY", "AGENTAL_APP_API_KEY", "AGENTAL_ROUTER_COMMUNITY",
          "T_PLAIN", "T_QUOTED", "T_SINGLE", "T_EXPORTED", "T_KEPT", "T_SEALED",
          "T_BROKEN", "T_EMPTY"]
 SAVED = {n: os.environ.get(n) for n in NAMES}

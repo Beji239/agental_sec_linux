@@ -185,7 +185,8 @@ try:
     from api.server import create_app
     app = create_app({"dashboard": {}}, {}, SID, api_key="k")
     cl = app.test_client()
-    H = {"X-API-Key": "k"}
+    from api import dashboard_session as ds
+    H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 
     raise_finding("192.0.2.21", "via the route")
     r = cl.post("/api/findings/dismiss", headers=H,

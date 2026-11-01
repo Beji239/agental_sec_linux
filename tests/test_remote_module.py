@@ -293,9 +293,12 @@ app = create_app({"flask": {"host": "127.0.0.1", "port": app_port}}, {}, "test",
 app_server = make_server("127.0.0.1", app_port, app, threaded=True)
 threading.Thread(target=app_server.serve_forever, daemon=True).start()
 client = app.test_client()
-H = {"X-API-Key": KEY}
+from api import dashboard_session as ds
+H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
 
 scratch = pathlib.Path(tempfile.mkdtemp(prefix="modhost-"))
+runtime = tempfile.TemporaryDirectory(prefix="ags-runtime-", dir="/tmp")
+os.environ["XDG_RUNTIME_DIR"] = runtime.name
 module_host.DATA_DIR = scratch / "module_data"
 module_host.SWITCHES = module_host.DATA_DIR / "switches.json"
 module_host.LOG_DIR = scratch / "logs"
@@ -616,7 +619,8 @@ try:
     row = actions.query_requests(request_id=a1, limit=1)[0]
     check("the request is approved", row["state"], "approved")
     check("by a person, noted as from the phone",
-          (row["decided_by"], row["decision_note"]), ("user", "From the phone by Sam."))
+          (row["decided_by"], row["decision_note"]),
+          ("user", "Decision from phone, Sam. From the phone by Sam."))
     n = len(fake.to(111))
     press(sam, f"a:{a1}:y")
     check("deciding twice says it is gone", bool(next_to_sam(n, "already decided")), True)

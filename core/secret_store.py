@@ -16,6 +16,7 @@
 
 import logging
 import os
+import re
 import secrets as _secrets
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def decrypt_failures() -> list[tuple[str, str]]:
 
 ENV_API_KEY      = "AGENTAL_API_KEY"
 ENV_APP_KEY      = "AGENTAL_APP_API_KEY"
+ENV_DASHBOARD_KEY = "AGENTAL_DASHBOARD_KEY"
 
 # The router's SNMP read community string.
 #
@@ -118,7 +120,7 @@ def load_dotenv(path: Path) -> int:
 
 def resolve(config: dict, project_root: Path) -> dict:
     """
-    Return {"api_key": str, "app_api_key": str, "legacy": [names]}.
+    Resolve provider, read-only integration and private dashboard keys.
 
     `legacy` lists any secret that had to be read out of config.json, so the
     caller can warn once at startup instead of on every use.
@@ -164,9 +166,22 @@ def resolve(config: dict, project_root: Path) -> dict:
                 "on the next start, which breaks anything holding the old one. "
                 "Set %s in .env, or mint one on the Settings tab.", ENV_APP_KEY)
 
+    dashboard_key = os.environ.get(ENV_DASHBOARD_KEY, "").strip()
+    dashboard_key_created = (not re.fullmatch(r"[0-9a-fA-F]{64}", dashboard_key)
+                             or dashboard_key.casefold() == app_key.casefold())
+    if dashboard_key_created:
+        dashboard_key = _secrets.token_hex(32)
+        if not persist_env_value(project_root / ".env", ENV_DASHBOARD_KEY,
+                                 dashboard_key):
+            logger.warning("The dashboard key could not be saved. Browser "
+                           "sessions will end at the next restart.")
+
+    os.environ[ENV_DASHBOARD_KEY] = dashboard_key
     return {
         "api_key":          model_key,
         "app_api_key":      app_key,
+        "dashboard_key":    dashboard_key,
+        "dashboard_key_created": dashboard_key_created,
         "legacy":           legacy,
     }
 

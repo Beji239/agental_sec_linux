@@ -300,8 +300,8 @@ print("\n[10] the app key has a floor, because it is the one we issue")
 # word is not a value to accept politely.
 check("a short app key is refused",
       st.set_key("AGENTAL_APP_API_KEY", "test123")["ok"], False)
-check("and the refusal points at Generate",
-      "Generate" in st.set_key("AGENTAL_APP_API_KEY", "test123")["reason"], True)
+check("and the refusal explains how to generate a replacement",
+      "generate a new key" in st.set_key("AGENTAL_APP_API_KEY", "test123")["reason"], True)
 check("a real length is accepted",
       st.set_key("AGENTAL_APP_API_KEY", "b" * 64)["ok"], True)
 # Clearing it stays possible: an empty value means "mint one at the next
@@ -373,7 +373,8 @@ else:
     })
     routes.register_routes(app)
     c = app.test_client()
-    H = {"X-API-Key": "k" * 64}
+    from api import dashboard_session as ds
+    H = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"])}
     B = "http://localhost"
 
     def post(path, body):

@@ -2121,7 +2121,7 @@
     <p>
       This browser is not signed in, so every <code>/api/*</code> call
       returns 401. The app signs the browser in when it opens the dashboard
-      itself. To sign in here, paste the <code>AGENTAL_APP_API_KEY</code>
+      itself. To sign in here, paste the <code>AGENTAL_DASHBOARD_KEY</code>
       value from <code>.env</code>. It is sent once and not kept; this
       browser keeps a session for 30 days.
     </p>
@@ -2129,7 +2129,7 @@
       This is <strong>not</strong> your model provider key, that one is
       <code>AGENTAL_API_KEY</code> and the dashboard never handles it.
     </p>
-    <input type="password" class="input" id="key-input" placeholder="64-char hex app key" autocomplete="off">
+    <input type="password" class="input" id="key-input" placeholder="64-char hex dashboard key" autocomplete="off">
     <div id="key-modal-error">That does not look like a 64-character hex key.</div>
     <div class="row">
       <button class="btn primary" data-onclick="saveApiKey()">Sign in</button>
@@ -4297,7 +4297,7 @@ async function saveApiKey() {
 
   if (!/^[0-9a-fA-F]{64}$/.test(key)) {
     err.textContent = key.startsWith('sk-')
-      ? 'That is a model provider key. This box wants AGENTAL_APP_API_KEY (64 hex chars).'
+      ? 'That is a model provider key. This box wants AGENTAL_DASHBOARD_KEY (64 hex chars).'
       : 'That does not look like a 64-character hex key.';
     err.style.display = 'block';
     return;

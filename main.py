@@ -1750,7 +1750,7 @@ def _open_browser_when_ready(host: str, port: int, api_key: str = "") -> None:
                 owner_uid=account[3] if account else None)
         except OSError as e:
             logger.warning(f"Could not write the opening page ({e}). Open "
-                           f"{url} and paste the app key there.")
+                           f"{url} and paste AGENTAL_DASHBOARD_KEY there.")
     _launch_browser(url)
 
 
@@ -2705,8 +2705,9 @@ def main(argv=None):
     host         = flask_cfg.get("host", "127.0.0.1")
     port         = int(flask_cfg.get("port", 5000))
     auto_browser = flask_cfg.get("auto_open_browser", True)
-    # A restart from the Update button reuses the tab already open.
-    if os.environ.pop("AGENTALSEC_NO_BROWSER", ""):
+    # A normal update reuses the tab. A new signing key needs a fresh link.
+    if (os.environ.pop("AGENTALSEC_NO_BROWSER", "")
+            and not resolved["dashboard_key_created"]):
         auto_browser = False
 
     if host != "127.0.0.1":
@@ -2714,7 +2715,8 @@ def main(argv=None):
                        f"Add the name you browse to under flask.allowed_hosts "
                        f"or the Host check will answer 403.")
 
-    app = create_app(config, modules, session_id, api_key=resolved["app_api_key"])
+    app = create_app(config, modules, session_id, api_key=resolved["app_api_key"],
+                     dashboard_key=resolved["dashboard_key"])
     app.config["AGENTAL_SHUTDOWN"] = _shutdown_from_dashboard
 
     # The Update button's restart: the same clean stop, then this process
@@ -2756,7 +2758,7 @@ def main(argv=None):
 
     if auto_browser:
         threading.Thread(target=_open_browser_when_ready,
-                         args=(host, port, resolved["app_api_key"]),
+                         args=(host, port, resolved["dashboard_key"]),
                          name="open-browser",
                          daemon=True).start()
 
