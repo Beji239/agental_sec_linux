@@ -4135,7 +4135,8 @@ class LinuxRemediation:
     # process
 
     def kill_process(self, pid, reason: str, expected_name: str = None,
-                     session_id: str = None, include_children: bool = False) -> dict:
+                     session_id: str = None, include_children: bool = False,
+                     expected_started: float = None) -> dict:
         import psutil
         from tools import remediation_linux as rl
         from core import memory_engine as me
@@ -4307,7 +4308,17 @@ class LinuxRemediation:
                         f"to keep running and you want one process gone, that "
                         f"has to be decided outside this tool.")}
 
-        result = rl.kill_process(pid, include_children=bool(include_children))
+        if (not isinstance(expected_started, (int, float))
+                or isinstance(expected_started, bool)
+                or expected_started <= 0
+                or proc.create_time() != expected_started):
+            return {"success": False, "refused": True, "pid": pid,
+                    "error": "The approval does not identify this process "
+                             "instance. Nothing was sent. Look up the process "
+                             "and request a new approval."}
+
+        result = rl.kill_process(pid, include_children=bool(include_children),
+                                 expected_started=expected_started)
         if not result.get("success") and result.get("needs_root") \
                 and _unelevated():
             # Another account's process. The helper re-checks the same pin
@@ -4316,6 +4327,15 @@ class LinuxRemediation:
             fields = ah._stat_fields(pid)
             if fields is None:
                 return {"success": False, "error": "Process no longer exists"}
+            # Check a fresh process after reading the helper's kernel pin.
+            try:
+                same = psutil.Process(pid).create_time() == expected_started
+            except psutil.Error:
+                same = False
+            if not same:
+                return {"success": False, "refused": True, "pid": pid,
+                        "error": "The process changed before the helper "
+                                 "could act. Request a new approval."}
             result = _via_helper("kill_tree" if include_children else "kill",
                                  str(pid), fields[0], str(fields[2]))
         if not result.get("success"):

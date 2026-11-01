@@ -45,6 +45,9 @@ def _check(origin_url: str, target_url: str, same_host: bool):
     parts, origin = urlsplit(target_url), urlsplit(origin_url)
     if parts.scheme not in ("http", "https"):
         raise RedirectRefused(f"redirect to {parts.scheme}: refused")
+    if origin.scheme == "https" and parts.scheme != "https":
+        raise RedirectRefused(
+            "HTTPS redirected to unencrypted HTTP; refused")
     if same_host and parts.netloc.lower() != origin.netloc.lower():
         raise RedirectRefused(
             f"{origin.hostname} redirected a request carrying a key to "
@@ -64,9 +67,11 @@ def _send(method: str, url: str, same_host: bool, kwargs: dict):
         resp = call(url, **kwargs)
         if not getattr(resp, "is_redirect", False):
             return resp
-        target = urljoin(url, resp.headers.get("location", ""))
-        _check(url, target, same_host)
-        resp.close()
+        try:
+            target = urljoin(url, resp.headers.get("location", ""))
+            _check(url, target, same_host)
+        finally:
+            resp.close()
         code = resp.status_code
         if method == "POST" and code in (301, 302, 303):
             method = "GET"

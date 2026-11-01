@@ -7501,6 +7501,7 @@ def _dispatch(name: str, params: dict):
             # called at the moment of the decision rather than whatever holds
             # the pid now. See TODO 66.
             expected_name=params.get("expected_name"),
+            expected_started=params.get("expected_started"),
             session_id=sid,
             include_children=bool(params.get("include_children")),
         )

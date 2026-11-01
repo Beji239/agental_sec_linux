@@ -26,6 +26,7 @@ Runs anywhere. No database, no network, no Windows.
 """
 import pathlib
 import sys
+import psutil
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -159,7 +160,8 @@ try:
     # And the ordinary path still works: the right name kills it.
     live = pm.describe_process(victim.pid)["name"]
     out = rem.kill_process(victim.pid, reason="testing the guard",
-                           expected_name=live)
+                           expected_name=live,
+                           expected_started=psutil.Process(victim.pid).create_time())
     time.sleep(0.4)
     check("the right name still kills", out.get("success"), True)
     check("and the process really went", victim.poll() is not None, True)

@@ -52,9 +52,8 @@ DEFAULT_EXPIRY_DAYS = 10
 # scans are decided live in the chat. A verb absent here cannot be filed.
 QUEUEABLE = {
     "kill_process": {
-        # expected_name is filled in at filing time and checked before the
-        # kill, so a pid reused between filing and approval is refused.
-        "required": ("pid", "reason", "expected_name"),
+        # Read both values when filing, since a process name can repeat.
+        "required": ("pid", "reason", "expected_name", "expected_started"),
         "needs":    ("pid",),
         "blurb":    "Terminate a running process at this host.",
     },
@@ -341,7 +340,11 @@ def write_request(verb: str, params: dict, reason: str,
         # the process that really holds the pid.
         try:
             import psutil
-            narrowed["expected_name"] = psutil.Process(int(narrowed["pid"])).name()
+            proc = psutil.Process(int(narrowed["pid"]))
+            narrowed["expected_name"] = proc.name()
+            narrowed["expected_started"] = proc.create_time()
+            if not proc.is_running():
+                raise psutil.NoSuchProcess(proc.pid)
         except Exception as e:                      # noqa: BLE001
             raise BadActionRequest(
                 f"pid {narrowed.get('pid')} could not be read now ({e}), so "

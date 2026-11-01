@@ -1818,31 +1818,22 @@ def _remember_kill(tool_name, result):
 
 
 def _pin_process_name(params):
-    """
-    Look the pid up now and remember the name on the call.
-
-    Never fatal. If the lookup fails the card falls back to the bare number,
-    which is what it always said, and the kill goes ahead with no expected
-    name, which is what it always did.
-
-    IT ALSO REMEMBERS THE UNIT THE PID BELONGS TO, added 2026-09-22 with L2,
-    and that is for the card and not for the kill: the kill asks the module
-    itself at execution time, because a unit can change hands between the
-    approval and the act and the answer here would be stale by then. What this
-    copy is for is the DECISION -- a person approving a kill on a process that
-    belongs to a service with Restart=always should be told, before they press
-    approve, that the kill will not hold.
-    """
-    if params.get("expected_name"):
-        return
+    """Read the process identity before showing its approval card."""
+    for key in ("expected_name", "expected_started", "_process", "_unit"):
+        params.pop(key, None)
     try:
+        import psutil
         from tools import process_monitor
-        row = process_monitor.describe_process(params.get("pid"))
-        if row and row.get("name"):
-            params["expected_name"] = row["name"]
-            params["_process"] = row
+        proc = psutil.Process(int(params.get("pid")))
+        name, started = proc.name(), proc.create_time()
+        row = process_monitor.describe_process(proc.pid) or {}
+        if not proc.is_running():
+            return
+        params["expected_name"] = name
+        params["expected_started"] = started
+        params["_process"] = {**row, "name": name, "pid": proc.pid}
     except Exception as e:
-        logger.debug(f"Could not name PID {params.get('pid')} for the card: {e}")
+        logger.debug(f"Could not identify PID {params.get('pid')} for the card: {e}")
         return
 
     try:
@@ -1865,7 +1856,8 @@ def _kill_card_line(params):
         return (f"Kill PID {pid}"
                 + (" and every process it started" if params.get("include_children") else "")
                 + ". This tool could not read what that process "
-                f"is, so nothing here confirms what will be killed")
+                f"is. This approval cannot run. Look up the process and "
+                f"ask again.")
     who = row.get("username")
     line = f"Kill {name}, PID {pid}"
     if who:

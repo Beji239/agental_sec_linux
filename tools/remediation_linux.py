@@ -417,7 +417,8 @@ def self_protection(pid: int) -> str:
 
 
 def kill_process(pid: int, force: bool = False,
-                 include_children: bool = False) -> dict:
+                 include_children: bool = False,
+                 expected_started: float = None) -> dict:
     """
     Terminate a process.
 
@@ -476,6 +477,11 @@ def kill_process(pid: int, force: bool = False,
     except Exception as e:
         logger.error(f"kill_process could not open pid {pid}: {e}")
         return {"success": False, "error": str(e)}
+
+    if expected_started is not None and proc.create_time() != expected_started:
+        return {"success": False, "refused": True, "pid": pid,
+                "error": "The process start time changed after approval. "
+                         "Nothing was sent. Request a new approval."}
 
     # A PROCESS THAT IS ALREADY DEAD IS NOT A KILL. REM-7. Checked BEFORE the
     # critical list, because "there is nothing to end" is a fact about the pid

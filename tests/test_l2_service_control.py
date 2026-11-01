@@ -41,6 +41,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import psutil
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -146,7 +147,8 @@ tr.init_registry("l2-wiring-test", {"remediation": rem})
 victim = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
 time.sleep(0.5)
 try:
-    r = rem.kill_process(victim.pid, reason="testing the ordinary path")
+    r = rem.kill_process(victim.pid, reason="testing the ordinary path",
+                         expected_started=psutil.Process(victim.pid).create_time())
     check("an ordinary process still dies", r.get("success"), True)
     facts = r.get("systemd") or {}
     ok("  and the answer carries what unit it was part of",
