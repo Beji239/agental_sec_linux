@@ -648,3 +648,14 @@ need a browser session signed with the separate `AGENTAL_DASHBOARD_KEY`.
 Both keys are generated and saved in `.env` when absent. Keep the dashboard
 key private. See [API access](docs/API-ACCESS.md) for the upgrade steps and
 an example that contains no real credential.
+
+
+## Choosing ongoing monitoring
+
+Open Settings, Choose what runs, to control process observation on this
+computer. Start now and Stop now affect this session. Start automatically
+next time saves a separate choice for the next launch. Stored findings remain
+available after stopping. Other monitoring sources remain independent.
+
+This is the first live feature control. See [resource controls](docs/RESOURCE-CONTROLS.md)
+for configuration compatibility, scope and measurement limits.

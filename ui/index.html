@@ -2093,6 +2093,19 @@
   @media (prefers-reduced-motion: reduce) {
     .hl-sweep, .hl-blip::after, .hl-chip-dot, .hl-link span { animation: none !important; }
   }
+  .feature-controls { font-size:16px; line-height:1.55; }
+  .feature-controls h2 { font-size:20px; margin-bottom:12px; color:var(--text-hi); }
+  .feature-controls p { margin:10px 0; }
+  .feature-controls .feature-row { margin-top:18px; padding:16px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; }
+  .feature-controls .feature-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .feature-controls .feature-heading h3 { font-size:18px; }
+  .feature-controls button { font-size:16px; min-height:44px; padding:8px 16px; }
+  .feature-controls button:focus-visible, .feature-controls input:focus-visible { outline:3px solid var(--green); outline-offset:3px; }
+  .feature-controls label { display:flex; gap:10px; align-items:center; margin-top:14px; }
+  .feature-controls input { width:20px; height:20px; }
+  .feature-controls .feature-state { color:var(--amber); }
+  .feature-controls .feature-state.collecting { color:var(--green); }
+  .feature-controls .feature-scope { color:var(--text); }
 </style>
 </head>
 <body>
@@ -3789,6 +3802,14 @@
        most need it is never the moment it is showing. -->
   <div class="page" id="page-settings">
 
+    <section class="card feature-controls" aria-labelledby="feature-controls-title">
+      <h2 id="feature-controls-title">Choose what runs</h2>
+      <p>Change ongoing collection now, or save a separate choice for the next start.</p>
+      <div id="feature-controls-list"><p>Reading collector state...</p></div>
+      <p id="feature-controls-message" role="status" aria-live="polite"></p>
+      <p>This is the first live feature control. Other monitoring is unchanged.</p>
+    </section>
+
     <!-- Updates from GitHub, core/updater.py. -->
     <div class="card" id="updates-card">
       <div class="card-title">Updates</div>
@@ -4332,6 +4353,8 @@ function authHeaders() {
 // (strings, numbers, true, false, null, this, event, this.x, event.x and
 // arrays of those), optionally ending in "return false". Nothing is evaluated.
 const UI_ACTIONS = new Set([
+  'changeFeatureRunning',
+  'changeFeatureStartup',
   'ackExpectation',
   'answerQuestion',
   'approveAction',
@@ -4823,6 +4846,7 @@ function startPolling() {
     if (currentPage === 'alerts')    { loadFindings(); loadImportant(); }
     if (currentPage === 'dashboard') loadDashboard();
     if (currentPage === 'inbox')     loadActions();
+    if (currentPage === 'settings')  loadFeatureControls();
     checkQuestionPopup();
     refreshActionBadge();
     refreshAlertBadge();
@@ -6175,7 +6199,7 @@ function renderTimelineCoverage(win, gaps, watchedSince) {
   }).join('');
   const lines = gaps.length
     ? gaps.slice(0, 8).map(g =>
-        `<div>${esc(g.label)}: ${g.sensor === 'agentalsec' ? 'not running' : 'quiet'}, `
+        `<div>${esc(g.label)}: ${g.sensor === 'agentalsec' ? 'not running' : 'not collecting'}, `
         + `${esc(fmtTime(g.start))} to ${g.open ? 'now' : esc(fmtTime(g.end))}`
         + `${g.sensor === 'agentalsec' ? '' : ` (${esc(g.reason || 'no reason recorded')})`}</div>`).join('')
       + (gaps.length > 8 ? `<div>${gaps.length - 8} more, hover the bar</div>` : '')
@@ -11670,7 +11694,75 @@ function renderSettingsAge() {
   el.innerHTML = `<span class="${cls}">${esc(fmtSettingsAge())}</span>`;
 }
 
+let _featureBusy = false;
+let _featureReadPromise = null;
+function renderFeatureControls(data) {
+  const list = document.getElementById('feature-controls-list');
+  const states = {running:'Running',stopping:'Stopping, a pass is finishing',stopped:'Stopped',off:'Off',unavailable:'Unavailable',failed:'Collection error'};
+  list.innerHTML = (data.features || []).map(f => {
+    const state = f.last_error && f.running ? 'failed' : f.state;
+    const unavailable = _featureBusy || data.shutting_down || !f.available || f.state === 'stopping';
+    const success = f.last_success_at ? new Date(f.last_success_at * 1000).toLocaleString() : 'No successful pass recorded in this session';
+    return `<div class="feature-row"><div class="feature-heading"><h3>${esc(f.title)}</h3>
+      <span class="feature-state ${state === 'running' ? 'collecting' : ''}">${esc(states[state] || 'Unknown')}</span></div>
+      <p>${esc(f.reason)}</p><p class="feature-scope">${esc(f.scope)}</p>
+      <p>${esc(f.effect_when_stopped)}</p><p>Last successful observation: ${esc(success)}</p>
+      ${f.last_error ? `<p>Last collection error: ${esc(f.last_error)}</p>` : ''}
+      <button class="btn" ${unavailable ? 'disabled' : ''} data-onclick="changeFeatureRunning('${escJs(f.id)}',${!f.running},this)">${f.running ? 'Stop now' : 'Start now'}</button>
+      <label><input type="checkbox" ${f.automatic_start ? 'checked' : ''} ${_featureBusy || data.shutting_down ? 'disabled' : ''}
+        data-onchange="changeFeatureStartup('${escJs(f.id)}',this.checked,this)">Start automatically next time</label>
+      ${f.startup_error ? `<p>${esc(f.startup_error)}</p>` : ''}
+      <p>Start now and Stop now only affect this session. The checkbox applies when you next open AgentalSec.</p></div>`;
+  }).join('');
+}
+async function loadFeatureControls(force = false) {
+  if (_featureBusy) return;
+  if (_featureReadPromise) {
+    if (force) { await _featureReadPromise; return loadFeatureControls(true); }
+    return;
+  }
+  _featureReadPromise = (async () => {
+    try {
+      const response = await fetch('/api/features', {headers:authHeaders(),cache:'no-store'});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Feature state is unavailable.');
+      const list = document.getElementById('feature-controls-list');
+      if (!_featureBusy && (force || !list.contains(document.activeElement))) renderFeatureControls(data);
+    } catch (e) {
+      document.getElementById('feature-controls-list').textContent = 'Could not read current collector state. Refresh or restart the app. ' + e.message;
+    }
+  })().finally(() => { _featureReadPromise = null; });
+  return _featureReadPromise;
+}
+async function changeFeature(name, action, body, element) {
+  if (_featureBusy) return;
+  _featureBusy = true;
+  document.querySelectorAll('#feature-controls-list button, #feature-controls-list input').forEach(control => { control.disabled = true; });
+  const message = document.getElementById('feature-controls-message');
+  message.textContent = 'Applying your choice...';
+  try {
+    const response = await fetch('/api/features/' + encodeURIComponent(name) + '/' + action,
+      {method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'The change was not applied.');
+    message.textContent = data.warning || (action === 'startup' ? 'Next-start preference saved. Current collection is unchanged.' : 'Collector request applied. Stored evidence is retained.');
+  } catch (e) { message.textContent = 'Not applied: ' + e.message; }
+  finally {
+    _featureBusy = false;
+    await loadFeatureControls(true);
+    const target = document.querySelector('#feature-controls-list ' + (action === 'startup' ? 'input' : 'button'));
+    if (target) target.focus({preventScroll:true});
+  }
+}
+function changeFeatureRunning(name, running, element) {
+  return changeFeature(name, 'run', {running}, element);
+}
+function changeFeatureStartup(name, enabled, element) {
+  return changeFeature(name, 'startup', {enabled}, element);
+}
+
 async function loadSettings() {
+  loadFeatureControls();
   try {
     _settingsData = await fetch('/api/settings', { headers: authHeaders() }).then(r => r.json());
     _settingsReadAt = Date.now();

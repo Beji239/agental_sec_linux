@@ -56,6 +56,15 @@
     "locate_online": true
   },
 
+  "feature_startup": {
+    "_comment": [
+      "Settings, Choose what runs, saves next-start preferences here.",
+      "When process_monitor is absent, sensors.process_monitor.enabled is used.",
+      "A saved boolean preference overrides that legacy startup setting.",
+      "Starting or stopping now does not change the saved preference."
+    ]
+  },
+
   "flask": {
     "_comment": [
       "Dashboard binding. 127.0.0.1 for local-only, 0.0.0.0 for LAN access.",

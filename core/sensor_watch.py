@@ -31,6 +31,7 @@ FAILURE_FLOOR = 3
 APP = "agentalsec"
 
 _lock = threading.Lock()
+CONTROL_GUARD = threading.RLock()
 _watch = None
 
 
@@ -98,6 +99,10 @@ def assess(name: str, mod, now: float = None) -> dict | None:
             out["use"] = use
         return out
 
+    if st.get("coverage_paused"):
+        result = row("off", st.get("reason") or "stopped by the operator")
+        result["coverage_gap"] = True
+        return result
     if st.get("off_by_config"):
         return row("off", "switched off in Settings")
     if st.get("idle_reason"):
@@ -182,6 +187,37 @@ class LoopTracker:
         return {"idle_reason": why} if why else {}
 
 
+def _open_recorded_gap(name, reason, now, session_id):
+    try:
+        with me._get_conn() as conn:
+            conn.execute("INSERT INTO sensor_gaps (sensor, reason, started_at, session_id) "
+                         "SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM sensor_gaps "
+                         "WHERE sensor=? AND ended_at IS NULL)",
+                         (name, reason, _sql(now), session_id, name))
+        return True
+    except Exception as e:
+        logger.warning(f"sensor watch could not record a gap: {e}")
+        return False
+
+
+def _close_recorded_gap(name, now):
+    try:
+        with me._get_conn() as conn:
+            conn.execute("UPDATE sensor_gaps SET ended_at=? WHERE sensor=? AND ended_at IS NULL",
+                         (_sql(now), name))
+        return True
+    except Exception as e:
+        logger.warning(f"sensor watch could not close a gap: {e}")
+        return False
+
+
+def record_control_choice(name, running, session_id):
+    now = time.time()
+    if running:
+        return _close_recorded_gap(name, now)
+    return _open_recorded_gap(name, "Paused from monitoring controls.", now, session_id)
+
+
 class SensorWatch:
     def __init__(self, modules: dict, session_id: str = None, save=None,
                  extras=None):
@@ -199,6 +235,10 @@ class SensorWatch:
         self._started = time.time()
 
     def check_once(self, now: float = None) -> dict:
+        with CONTROL_GUARD:
+            return self._check_once(now)
+
+    def _check_once(self, now: float = None) -> dict:
         now = time.time() if now is None else now
         if self.stopped:
             return self.current()
@@ -258,8 +298,14 @@ class SensorWatch:
         prev = self._state.get(name)
         self._state[name] = a
         prev_state = prev["state"] if prev else None
+        if state == "ok":
+            self._close_gap(name, now)
         if prev_state == state:
             return
+        if a.get("coverage_gap"):
+            self._open_gap(name, a["reason"], now)
+        elif prev and prev.get("coverage_gap"):
+            self._close_gap(name, now)
         if state == "quiet":
             self._open_gap(name, a["reason"], now)
             last = self._alerted.get(name, 0)
@@ -272,7 +318,7 @@ class SensorWatch:
                             f"{a['reason']}. Until it comes back, nothing it "
                             f"watches is being recorded, so a quiet stretch "
                             f"on the Timeline is not a calm one.", a)
-        elif prev_state == "quiet":
+        elif prev_state == "quiet" and not a.get("coverage_gap"):
             self._close_gap(name, now)
             if state == "ok" and name in self._open_alert:
                 self._open_alert.discard(name)
@@ -282,23 +328,10 @@ class SensorWatch:
                             f"being quiet ({prev['reason']}).", a)
 
     def _open_gap(self, name, reason, now):
-        try:
-            with me._get_conn() as conn:
-                conn.execute(
-                    "INSERT INTO sensor_gaps (sensor, reason, started_at, "
-                    "session_id) VALUES (?,?,?,?)",
-                    (name, reason, _sql(now), self.session_id))
-        except Exception as e:
-            logger.warning(f"sensor watch could not record a gap: {e}")
+        return _open_recorded_gap(name, reason, now, self.session_id)
 
     def _close_gap(self, name, now):
-        try:
-            with me._get_conn() as conn:
-                conn.execute("UPDATE sensor_gaps SET ended_at = ? "
-                             "WHERE sensor = ? AND ended_at IS NULL",
-                             (_sql(now), name))
-        except Exception as e:
-            logger.warning(f"sensor watch could not close a gap: {e}")
+        return _close_recorded_gap(name, now)
 
     def _raise(self, did, severity, name, title, description, a):
         value = f"sensor:{name}"
@@ -323,6 +356,8 @@ def summary(rows: list, checked_at: float = None) -> dict:
         label = "Sensors not checked yet"
     elif quiet:
         label = f"{len(quiet)} sensor{'s' if len(quiet) != 1 else ''} quiet"
+    elif any(r["state"] == "off" and not r.get("use") for r in rows):
+        label = "Monitoring incomplete, some collectors are off"
     else:
         label = "All sensors OK"
     return {"label": label, "quiet": len(quiet),

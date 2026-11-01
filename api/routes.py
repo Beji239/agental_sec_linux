@@ -326,6 +326,36 @@ def register_routes(app):
             return jsonify({"error": "Unauthorized"}), 401
         return decorated
 
+    @app.route("/api/features", methods=["GET"])
+    @require_api_key
+    def feature_status():
+        controls = current_app.config.get("AGENTAL_FEATURE_CONTROLS")
+        if controls is None:
+            return jsonify({"error": "Feature controls are unavailable. Restart the app."}), 503
+        return jsonify(controls.snapshot())
+
+    def feature_change(name, field, method):
+        controls = current_app.config.get("AGENTAL_FEATURE_CONTROLS")
+        if controls is None:
+            return jsonify({"error": "Feature controls are unavailable. Restart the app."}), 503
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or type(data.get(field)) is not bool:
+            return jsonify({"error": f"{field} must be true or false"}), 400
+        result, status = getattr(controls, method)(name, data[field])
+        if result.get("ok"):
+            logger.info("Dashboard changed feature %s, %s=%s", name, field, data[field])
+        return jsonify(result), status
+
+    @app.route("/api/features/<name>/run", methods=["POST"])
+    @require_api_key
+    def feature_run(name):
+        return feature_change(name, "running", "change_running")
+
+    @app.route("/api/features/<name>/startup", methods=["POST"])
+    @require_api_key
+    def feature_startup(name):
+        return feature_change(name, "enabled", "change_startup")
+
     def get_session_id():
         return current_app.config["AGENTAL_SESSION_ID"]
 

@@ -13,24 +13,42 @@ approval controls.
 
 ## Process observation
 
-Set `sensors.process_monitor.enabled` to `false` in the local configuration
-and restart the application to prevent ongoing process collection. The value
-must be a JSON boolean. A missing value keeps the existing enabled default.
-Values such as the string `"false"` do not enable collection.
+Open Settings, Choose what runs. Process observation is the first collector
+with live controls.
 
-The collector reports whether it is running, stopping, stopped or off. When
-stopped, the previous observation remains available and is not a new reading.
-Stored database evidence is retained. This setting controls ongoing process
-observation, not every local inspection performed by other features.
+Start now and Stop now affect ongoing collection in this session. They do
+not change the next-start preference. An existing pass may finish after a
+stop request, and the card shows Stopping until the worker exits. Starting a
+second worker is refused while that happens.
 
-Stopping wakes a collector waiting for its next pass. If a pass is already
-running, stopping waits up to three seconds by default and returns whether
-the worker has finished. A caller can supply another wait duration. A new
-worker cannot start while the previous worker is still finishing.
+Start automatically next time saves a separate preference. Saving it does
+not start or stop collection now. It is stored as the JSON boolean
+`feature_startup.process_monitor` in the local configuration.
 
-The current settings panel does not provide a general live feature switch.
-Editing this configuration remains a restart operation. The interactive
-design preview illustrates a proposed interface and is not a live control.
+When that preference is absent, `sensors.process_monitor.enabled` keeps its
+existing startup meaning. A saved feature preference overrides the legacy
+setting at the next launch. Existing installations retain their startup
+behavior until the preference is explicitly saved.
+
+The card shows current state, the last successful pass and any last error.
+Stored findings are retained after stopping. The coverage history records
+the paused interval, and an intentional stop is shown as off rather than as
+a collector failure.
+
+This switch controls the process-monitor passes on this computer. Kernel,
+audit and other sources remain independent. Starting or stopping this
+collector does not enable or disable every source of process information.
+
+Stop ends the collector worker when its current pass finishes. Already
+imported Python libraries remain in the main process. This is not a claim
+that stopping the collector unloads all of its memory.
+
+The read-only integration key can read `/api/features`. Only a dashboard
+session can use the authenticated POST routes for current execution and
+startup preferences. Opening the feature card does not start collection.
+
+Configuration writes preserve other fields and keep the resulting file
+readable and writable only by its owner.
 
 ## Measurement limits
 

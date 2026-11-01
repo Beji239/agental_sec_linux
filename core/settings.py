@@ -814,6 +814,8 @@ def persist_config_value(block: str, leaf: str, value) -> str | None:
         except (OSError, json.JSONDecodeError) as e:
             return f"Could not read config.json: {e}"
 
+        if not isinstance(raw, dict):
+            return "config.json must contain a JSON object."
         raw.setdefault(block, {})
         if not isinstance(raw[block], dict):
             return f"config.json has no '{block}' block to write into."
@@ -821,7 +823,10 @@ def persist_config_value(block: str, leaf: str, value) -> str | None:
 
         tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
         try:
-            tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+            with open(tmp, "w", encoding="utf-8",
+                      opener=lambda path, flags: os.open(path, flags, 0o600)) as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(json.dumps(raw, indent=2))
             os.replace(tmp, CONFIG_PATH)
         except OSError as e:
             try:
@@ -1431,6 +1436,9 @@ def _module_row(name: str, mod) -> dict:
     # The collector's own sentence, carried through whatever verdict this
     # function reaches. Read once here so every return below can pass it.
     note = str(st.get("note") or "").strip()
+
+    if st.get("coverage_paused"):
+        return _row("Collectors", label, "off", st.get("reason") or "stopped", "", note)
 
     # A MODULE THAT KNOWS IT IS BROKEN, and says so in its own words.
     # Checked before the alive flags, because a worker whose thread has died

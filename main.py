@@ -512,6 +512,9 @@ def _initialize_database():
 # already use, so they are NOT free to rename.
 
 
+_FEATURE_CONTROLS = None
+
+
 def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
     """
     Build the modules dict, exactly as the Windows main.py does.
@@ -986,6 +989,11 @@ def _load_modules(config: dict, session_id: str, rollup_engine) -> dict:
     # session. Nothing else sets this; see tools/action_broker.LIVE.
     from tools import action_broker
     action_broker.LIVE = True
+
+    from core.feature_controls import FeatureControls
+    global _FEATURE_CONTROLS
+    _FEATURE_CONTROLS = FeatureControls(config, modules)
+    _FEATURE_CONTROLS.prepare_startup()
 
     for name, mod in modules.items():
         if mod and hasattr(mod, "start"):
@@ -2570,6 +2578,9 @@ def main(argv=None):
 
         logger.info(f"{reason}. Stopping the writers, then the final rollup and retention...")
 
+        if _FEATURE_CONTROLS is not None:
+            _FEATURE_CONTROLS.shutdown()
+
         # FIRST, before anything slow. Approval cards have no time cap, so a
         # card left open on a screen would otherwise hold its chat thread in
         # the model loop for as long as the process lives.
@@ -2721,6 +2732,7 @@ def main(argv=None):
 
     app = create_app(config, modules, session_id, api_key=resolved["app_api_key"],
                      dashboard_key=resolved["dashboard_key"])
+    app.config["AGENTAL_FEATURE_CONTROLS"] = _FEATURE_CONTROLS
     app.config["AGENTAL_SHUTDOWN"] = _shutdown_from_dashboard
 
     # The Update button's restart: the same clean stop, then this process

@@ -377,8 +377,17 @@ class LinuxProcessMonitor(_BaseAdapter):
         self._own_test_runs = 0
         self._lifecycle_lock = threading.RLock()
         self._stop_requested = threading.Event()
+        self._runtime_enabled = None
+
+    def set_runtime_enabled(self, enabled):
+        if type(enabled) is not bool:
+            raise ValueError("enabled must be true or false")
+        with self._lifecycle_lock:
+            self._runtime_enabled = enabled
 
     def _collection_enabled(self):
+        if self._runtime_enabled is not None:
+            return self._runtime_enabled
         block = (self.config.get("sensors") or {}).get(self.role) or {}
         return block.get("enabled", True) is True
 
@@ -579,7 +588,10 @@ class LinuxProcessMonitor(_BaseAdapter):
         out["state"] = ("running" if self._running and alive else
                         "stopping" if alive else "stopped" if enabled else "off")
         if not enabled:
-            out["reason"] = "Process observation is off in configuration."
+            out["reason"] = ("Ongoing process observation is off."
+                             if self._runtime_enabled is False else
+                             "Process observation is off in configuration.")
+            out["coverage_paused"] = True
             out["note"] = (out["reason"] + " Stored observations remain available.")
         elif out["state"] == "stopping":
             out["reason"] = "Waiting for the current process pass to finish."
