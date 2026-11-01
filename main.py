@@ -9,6 +9,7 @@
 
 import asyncio
 import contextlib
+import importlib.util
 import json
 import logging
 import os
@@ -362,12 +363,15 @@ def _check_dependencies():
         ("requests",   "requests (KEV feed, search)",  False),
         ("paramiko",   "paramiko (remote monitoring)", False),
         ("cryptography", "cryptography (secret encryption)", False),
-        ("scapy.all",  "scapy (packet capture)",       False),
+        ("scapy",      "scapy (packet capture)",       False),
         ("maxminddb",  "maxminddb (threat map)",       False),
     ):
         try:
-            __import__(module)
-        except ImportError:
+            if critical:
+                __import__(module)
+            elif importlib.util.find_spec(module) is None:
+                missing_optional.append(label)
+        except (ImportError, ValueError, AttributeError):
             (missing_critical if critical else missing_optional).append(label)
 
     if missing_critical:

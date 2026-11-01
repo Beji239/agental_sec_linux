@@ -375,8 +375,57 @@ class LinuxProcessMonitor(_BaseAdapter):
         self._last_result = {}
         self._unregistered_counts = {}
         self._own_test_runs = 0
+        self._lifecycle_lock = threading.RLock()
+        self._stop_requested = threading.Event()
+
+    def _collection_enabled(self):
+        block = (self.config.get("sensors") or {}).get(self.role) or {}
+        return block.get("enabled", True) is True
+
+    def start(self):
+        with self._lifecycle_lock:
+            if not self._collection_enabled():
+                return False
+            if self._thread is not None and self._thread.is_alive():
+                return self._running
+            self._stop_requested.clear()
+            self._running = True
+            self._last_error = None
+            self._consecutive_failures = 0
+            self._started_at = time.time()
+            self._thread = threading.Thread(target=self._run_worker,
+                                            name=type(self).__name__, daemon=True)
+            try:
+                self._thread.start()
+            except Exception:
+                self._running = False
+                self._stop_requested.set()
+                raise
+            return True
+
+    def _run_worker(self):
+        try:
+            self._loop()
+        finally:
+            with self._lifecycle_lock:
+                self._running = False
+
+    def stop(self, wait_seconds=3.0):
+        with self._lifecycle_lock:
+            self._running = False
+            self._stop_requested.set()
+            worker = self._thread
+        if (worker is not None and worker.ident is not None
+                and worker is not threading.current_thread()):
+            worker.join(max(0.0, float(wait_seconds)))
+        return worker is None or not worker.is_alive()
+
+    def _wait_for_next_poll(self):
+        self._stop_requested.wait(self.poll_interval)
 
     def poll(self):
+        if not self._collection_enabled():
+            return
         from tools import process_monitor_linux as pm
         from core import memory_engine as me
         from core import own_activity
@@ -524,6 +573,18 @@ class LinuxProcessMonitor(_BaseAdapter):
 
     def status(self) -> dict:
         out = super().status()
+        enabled = self._collection_enabled()
+        alive = self._thread is not None and self._thread.is_alive()
+        out["enabled"] = enabled
+        out["state"] = ("running" if self._running and alive else
+                        "stopping" if alive else "stopped" if enabled else "off")
+        if not enabled:
+            out["reason"] = "Process observation is off in configuration."
+            out["note"] = (out["reason"] + " Stored observations remain available.")
+        elif out["state"] == "stopping":
+            out["reason"] = "Waiting for the current process pass to finish."
+        elif not out["running"]:
+            out["reason"] = "Stopped, no ongoing process collection."
         out["process_count"] = self._last_result.get("process_count")
         out["findings_this_pass"] = self._last_result.get("finding_count")
         if self._own_test_runs:

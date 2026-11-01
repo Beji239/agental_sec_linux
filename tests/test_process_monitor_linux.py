@@ -21,6 +21,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -275,49 +277,60 @@ check("a trusted path stays trusted",
 
 print("\n[5] PM-4/PM-13: every field in its own try, one sleep per pass")
 
-# THE DEFECT, re-measured. Before the fix: 226 enumerated, 81 rows, 145 lost
-# to one block-level try, and the command line — readable on 226 of 226 — went
-# with the refused exe.
-#
-# THE TIMING CHECK WAS RESTATED 2026-09-25, AND THE REASON IS WORTH THE SPACE.
-#
-# It used to be `elapsed < 4.0` on ONE pass. That number was true when it was
-# written and it is not a statement about the defect any more: this pass now
-# batches one package-manager call for the whole process list
-# (tools/process_monitor.signatures_for, the PM-1 masquerade basis), and
-# dpkg-query's cost is a scan of its own file database -- about two seconds a
-# call, the same for one path as for a thousand. So the FIRST pass on a cold
-# cache is measured at 7.9 s on this host and every pass after it at 0.8-1.2 s,
-# against 239 rows. The old check called that 8 seconds a regression in PM-13,
-# which it is not: PM-13 was about a sleep taken ONCE PER PROCESS, inside
-# psutil's cpu_percent, and the cost it describes scales with the number of
-# processes.
-#
-# So the check now measures the thing PM-13 is actually about, and it measures
-# it as a relationship rather than a stopwatch reading: N processes must not
-# cost N sleeps. A per-process 0.1 s interval over this machine's process count
-# is the number to beat, and the measured pass has to come in far under it.
-# The one-time package batch is warm by then, and the FIRST pass's cost is
-# PRINTED rather than asserted on, so a cold-cache number stays visible.
+# Keep live timing as a diagnostic. Enumerated rows and refused fields are
+# checked with fixtures so the result does not depend on the host's load.
 t0 = time.time()
 res = pm.monitor_once()
 first_pass = time.time() - t0
-
 t0 = time.time()
 res = pm.monitor_once()
 elapsed = time.time() - t0
+print(f"    live: {res['process_count']} rows in {elapsed:.2f}s, "
+      f"first pass {first_pass:.2f}s")
 
-n = res["process_count"]
-per_process_sleep_cost = n * pm.CPU_SAMPLE_INTERVAL
-print(f"    {n} rows in {elapsed:.2f}s (first pass, cold package cache: "
-      f"{first_pass:.2f}s), unreadable={res['unreadable_by_field']}")
-print(f"    one sleep per process would have cost >= {per_process_sleep_cost:.1f}s")
 
-check_true("every process gets a row", n > 150)
-check_true(
-    f"a pass costs a fraction of {n} per-process sleeps ({elapsed:.2f}s vs "
-    f"{per_process_sleep_cost:.1f}s)",
-    elapsed < per_process_sleep_cost / 4)
+class FixtureProcess:
+    def __init__(self, pid):
+        self.pid = pid
+        self.cpu_calls = []
+
+    def name(self):
+        return "example-process"
+
+    def exe(self):
+        raise psutil.AccessDenied(self.pid)
+
+    def cmdline(self):
+        return ["example-process", "--example"]
+
+    def username(self):
+        return "example-user"
+
+    def create_time(self):
+        return 1e9
+
+    def memory_info(self):
+        return SimpleNamespace(rss=1024, vms=2048)
+
+    def cpu_percent(self, interval=None):
+        self.cpu_calls.append(interval)
+        return 0.0
+
+
+fixture_processes = [FixtureProcess(1000000 + i) for i in range(260)]
+sleeps = []
+with patch.object(psutil, "process_iter", return_value=iter(fixture_processes)), \
+        patch.object(pm, "_proc_exe_path", return_value=(None, None)), \
+        patch.object(pm, "_read_proc_status", return_value={}), \
+        patch.object(pm, "_read_cgroup_unit", return_value=None), \
+        patch.object(pm, "_fill_exe_from_helper", return_value={"filled": 0}), \
+        patch.object(pm, "time", SimpleNamespace(time=lambda: 0.0, sleep=sleeps.append)):
+    fixture_rows = pm._get_all_processes()
+
+check("every enumerated process gets a row", len(fixture_rows), len(fixture_processes))
+check("each process has two nonblocking CPU reads",
+      all(p.cpu_calls == [None, None] for p in fixture_processes), True)
+check("one sampling wait covers the whole pass", sleeps, [pm.CPU_SAMPLE_INTERVAL])
 # AND THE STRUCTURE, so the property is asserted where it lives rather than
 # only in a wall-clock number that a busy machine can move.
 #
@@ -354,14 +367,9 @@ check("while the non-blocking form is used, twice",
 check_true("the refusals are counted by field",
            isinstance(res["unreadable_by_field"], dict))
 
-# THE COMMAND LINE SURVIVES A REFUSED EXE. This is the recovery PM-4 promised
-# and it is measurable on any process this account does not own.
-# With the read helper installed every refused exe is filled (PROC-6), so the
-# helper is switched off here to measure the refusal itself.
-_real_fill = pm._fill_exe_from_helper
-pm._fill_exe_from_helper = lambda rows: {"asked": False, "filled": 0, "reason": None}
-rows = pm._get_all_processes()
-pm._fill_exe_from_helper = _real_fill
+# Refuse one field through the real exception handler while retaining the
+# other readable fields, without depending on the host's process ownership.
+rows = fixture_rows
 with_cmdline_no_exe = [r for r in rows if r["cmdline"] and not r["exe"]]
 print(f"    rows with a command line but a refused exe: "
       f"{len(with_cmdline_no_exe)}")
@@ -380,8 +388,13 @@ check("Seccomp is read", isinstance(
     pm._read_proc_status(os.getpid()).get("seccomp"), int), True)
 check("NoNewPrivs is read", isinstance(
     pm._read_proc_status(os.getpid()).get("no_new_privs"), int), True)
-check_true("and the cgroup unit is attributed",
-           pm._read_cgroup_unit(os.getpid()) is not None)
+import io
+with patch("builtins.open", return_value=io.StringIO("0::/user.slice/example.scope\n")):
+    check("a cgroup unit is attributed when present",
+          pm._read_cgroup_unit(os.getpid()), "example.scope")
+with patch("builtins.open", return_value=io.StringIO("0::/\n")):
+    check("a root cgroup without a unit stays unknown",
+          pm._read_cgroup_unit(os.getpid()), None)
 
 
 print("\n[6] PM-12: the two counts are two different questions, and they say so")
@@ -508,14 +521,22 @@ if greys:
                all("no executable path on disk" not in x
                    and "nothing could be read about this one" not in x
                    for x in reasons))
-    check_true("at least one names the kernel's refusal",
-               any("REFUSED" in x or "PermissionError" in x
-                   or "refused" in x for x in reasons))
-else:
-    print("    (no grey rows on this load — the refusal checks above still "
-          "hold for the next load, and _exe_refusal_note is asserted directly)")
-    check("the refusal note names the kernel, given a pid it cannot read",
-          "REFUSED" in reg._exe_refusal_note(1, False), True)
+    check_true("each grey row explains its reading", all(reasons))
+
+# A refusal, an exited process and a readable file are different outcomes.
+# Exercise all three without assuming this host has a refused process.
+with patch.object(reg.os, "readlink", side_effect=PermissionError("fixture")):
+    check("a refused read names the kernel's refusal",
+          "REFUSED" in reg._exe_refusal_note(1000000, False), True)
+    check("an elevated refused read names the elevated context",
+          "ELEVATED" in reg._exe_refusal_note(1000000, True), True)
+with patch.object(reg.os, "readlink", side_effect=FileNotFoundError("fixture")):
+    check("an exited process is not described as a refusal",
+          "process ended" in reg._exe_refusal_note(1000000, False), True)
+with patch.object(reg.os, "readlink", return_value="/usr/bin/example"):
+    check("a readable path is described as a reading gap",
+          "gap in the reading" in reg._exe_refusal_note(1000000, False), True)
+
 
 
 print("\n[11] PM-7: a dismissal is scoped to the evidence it closed")
