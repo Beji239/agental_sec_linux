@@ -235,6 +235,13 @@ _job = {"running": False, "what": None, "started_at": None,
 def can_update(root: Path = None) -> dict:
     """Whether the button can update this folder, and why not."""
     root = Path(root or ROOT)
+    # Installed from the AgentalSec installer: an update is the next installer,
+    # opened the same way, and it keeps this person's data.
+    if not (root / ".git").exists() and Path("/opt/agentalsec/app/VERSION").is_file():
+        return {"ok": False, "installer": True, "reason": (
+            "AgentalSec was installed with its installer. To update, download the "
+            "new AgentalSec-Setup file from the releases page and open it; your "
+            "settings, keys and history stay as they are.")}
     if not (root / ".git").exists():
         return {"ok": False, "reason": (
             "This folder is not a git clone, so it cannot update itself. "

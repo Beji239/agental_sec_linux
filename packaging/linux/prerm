@@ -1,0 +1,36 @@
+#!/bin/sh
+# Before AgentalSec is removed: the app stops, and the helpers that hold the
+# rights come out, so nothing of it is left running or able to start. On an
+# upgrade they stay; the new version's install puts them back up to date.
+set -e
+
+case "$1" in
+    remove|deconfigure) ;;
+    *) exit 0 ;;
+esac
+
+user=$(cat /var/lib/agentalsec/owner 2>/dev/null || true)
+[ -n "$user" ] && getent passwd "$user" >/dev/null || exit 0
+home=$(getent passwd "$user" | cut -d: -f6)
+app="$home/.local/share/agentalsec"
+
+# The app, asked to stop cleanly, then ended if it does not.
+runuser -u "$user" -- env HOME="$home" /usr/bin/agentalsec --stop >/dev/null 2>&1 || true
+i=0
+while [ $i -lt 60 ] && pgrep -u "$user" -f "$app/main.py|^python3 main.py" >/dev/null 2>&1; do
+    sleep 1
+    i=$((i + 1))
+done
+for p in $(pgrep -u "$user" -x python3 2>/dev/null); do
+    [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$app" ] && kill -9 "$p" 2>/dev/null || true
+done
+
+for h in install_action_helper install_read_helper install_capture_service; do
+    if [ -x "$app/scripts/$h.sh" ]; then
+        SUDO_USER="$user" "$app/scripts/$h.sh" --uninstall </dev/null >>/var/log/agentalsec-install.log 2>&1 || true
+    fi
+done
+
+desk=$(cat /var/lib/agentalsec/launcher 2>/dev/null || true)
+[ -n "$desk" ] && rm -f "$desk"
+exit 0

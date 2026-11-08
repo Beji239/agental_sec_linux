@@ -1,0 +1,16 @@
+#!/bin/sh
+# After AgentalSec is removed. A plain remove keeps the person's AgentalSec
+# folder, with its database, settings and keys, so installing again picks up
+# where it was. Removing it completely (purge) deletes that folder too.
+set -e
+
+if [ "$1" = purge ]; then
+    user=$(cat /var/lib/agentalsec/owner 2>/dev/null || true)
+    if [ -n "$user" ] && getent passwd "$user" >/dev/null; then
+        home=$(getent passwd "$user" | cut -d: -f6)
+        rm -rf "$home/.local/share/agentalsec"
+    fi
+    rm -rf /var/lib/agentalsec /var/log/agentalsec-install.log
+fi
+update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
+exit 0

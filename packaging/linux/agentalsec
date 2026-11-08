@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# /usr/bin/agentalsec, what the AgentalSec icon runs.
+#
+# The installer puts the code in /opt/agentalsec, owned by root. Each person
+# who opens AgentalSec gets their own copy in their own data folder, because
+# the app keeps its database, settings and keys beside its code, and only
+# their own copy may hold them. This script keeps that copy in step with the
+# installed version, and then either opens the dashboard of the AgentalSec
+# already running or starts it. No terminal: the app writes its log to its
+# logs folder, and the dashboard has the button that stops it.
+#
+#   agentalsec              open AgentalSec, starting it if it is not running
+#   agentalsec --setup      only prepare this person's copy; the installer runs
+#                           this for the person who installed it
+#   agentalsec --stop       stop the AgentalSec running for this person
+set -u
+
+SRC=/opt/agentalsec/app
+WHEELS=/opt/agentalsec/wheels
+HOME_APP="${XDG_DATA_HOME:-$HOME/.local/share}/agentalsec"
+LOG="$HOME_APP/logs/launcher.log"
+
+say() {
+    # A desktop note when there is a desktop, the log either way.
+    mkdir -p "$HOME_APP/logs" 2>/dev/null && printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"
+    if [ "${QUIET:-0}" = 0 ] && command -v notify-send >/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        notify-send -i agentalsec "AgentalSec" "$*" 2>/dev/null || true
+    fi
+}
+
+fail() {
+    say "$*"
+    if [ "${QUIET:-0}" = 0 ] && command -v zenity >/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        zenity --error --title=AgentalSec --width=420 --text="$*" 2>/dev/null || true
+    fi
+    exit 1
+}
+
+[ -d "$SRC" ] || fail "AgentalSec is not installed: $SRC is missing. Install it again from the installer."
+
+# This person's copy of the code. Their database, settings, keys, logs and the
+# data files fetched later are theirs and are never touched here.
+sync_copy() {
+    local want have
+    want=$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)
+    have=$(cat "$HOME_APP/VERSION" 2>/dev/null || echo none)
+    [ "$want" = "$have" ] && [ -f "$HOME_APP/main.py" ] && return 0
+    umask 077
+    mkdir -p "$HOME_APP" || fail "Could not make $HOME_APP."
+    rsync -a --exclude=/.env --exclude=/config.json --exclude='/agental_sec.db*' \
+        --exclude=/logs/ --exclude=/module_data/ --exclude=/geoip/*.mmdb \
+        --exclude=/data/oui.csv --exclude=/data/manuf "$SRC/" "$HOME_APP/" \
+        || fail "Could not copy AgentalSec into $HOME_APP."
+    # The folder and what it holds are this person's alone.
+    chmod 700 "$HOME_APP"
+    say "Prepared AgentalSec $want for $(id -un)."
+}
+
+# The Python libraries, for this person, from the ones the installer carries.
+libraries() {
+    python3 -c 'import flask, flask_cors, waitress, httpx, requests, psutil, scapy, paramiko, cryptography, maxminddb, nacl' 2>/dev/null \
+        && return 0
+    [ -d "$WHEELS" ] || fail "The libraries AgentalSec needs are missing, and the installer's copies are not here."
+    python3 -m pip install --user --quiet --break-system-packages --no-index \
+        --find-links "$WHEELS" -r "$HOME_APP/requirements.lock" >> "$LOG" 2>&1 \
+        || fail "Could not install the libraries AgentalSec needs. The details are in $LOG."
+}
+
+# The maker list and the location maps, fetched once; the app works without
+# them, with device makers and the map left blank until they are here.
+data_files() {
+    (
+        cd "$HOME_APP" || exit 0
+        [ -s data/oui.csv ] || timeout 300 python3 scripts/update_oui.py >> "$LOG" 2>&1
+        ls geoip/*city*.mmdb >/dev/null 2>&1 || timeout 600 python3 scripts/fetch_geoip.py >> "$LOG" 2>&1
+        ls geoip/*asn*.mmdb >/dev/null 2>&1 || timeout 300 python3 scripts/fetch_geoip.py --asn >> "$LOG" 2>&1
+    ) || true
+}
+
+port() {
+    python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["flask"].get("port", 5000))' \
+        "$HOME_APP/config.json" 2>/dev/null || echo 5000
+}
+
+running_pid() {
+    local p
+    for p in $(pgrep -u "$(id -u)" -x python3 2>/dev/null); do
+        tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q -- "^python3 $HOME_APP/main.py \|^python3 main.py " || continue
+        [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$HOME_APP" ] && { echo "$p"; return 0; }
+    done
+    return 1
+}
+
+# A one-time link that signs the browser in, as the app makes its own.
+open_dashboard() {
+    local page
+    page=$(cd "$HOME_APP" && python3 - "$(port)" <<'PY' 2>>"$LOG"
+import os, sys
+sys.path.insert(0, ".")
+from api import dashboard_session as ds
+key = ""
+for line in open(".env"):
+    k, _, v = line.strip().partition("=")
+    if k == "AGENTAL_DASHBOARD_KEY":
+        key = v.strip().strip('"')
+url = f"http://127.0.0.1:{sys.argv[1]}"
+if key:
+    url = "file://" + ds.write_opener(f"{url}/open?t={ds.open_link_token(key)}", owner_uid=os.getuid())
+print(url)
+PY
+)
+    [ -n "$page" ] || page="http://127.0.0.1:$(port)"
+    xdg-open "$page" >/dev/null 2>&1 &
+}
+
+case "${1:-}" in
+    --setup)
+        QUIET=1
+        sync_copy
+        libraries
+        data_files
+        exit 0
+        ;;
+    --stop)
+        pid=$(running_pid) || { echo "AgentalSec is not running."; exit 0; }
+        kill -TERM "$pid"
+        exit 0
+        ;;
+    "" ) ;;
+    *) echo "Usage: agentalsec [--setup | --stop]"; exit 2 ;;
+esac
+
+sync_copy
+libraries
+
+if pid=$(running_pid); then
+    open_dashboard
+    exit 0
+fi
+
+say "Starting AgentalSec. The dashboard opens in your browser in a moment."
+( data_files ) &
+cd "$HOME_APP" || fail "Could not open $HOME_APP."
+mkdir -p logs && chmod 700 logs
+setsid nohup python3 main.py >> logs/app.out 2>&1 < /dev/null &
+exit 0

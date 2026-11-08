@@ -1,0 +1,99 @@
+#!/bin/sh
+# After the installer has put AgentalSec in place: prepares the copy of the
+# person who installed it, installs the helpers that hold the rights so the
+# app itself runs as that person, puts the icon on their desktop and, the
+# first time, opens the dashboard. Nothing here may stop the install: a part
+# that cannot be done is written to the log and named in the app.
+set -e
+
+[ "$1" = configure ] || exit 0
+
+LOG=/var/log/agentalsec-install.log
+mkdir -p /var/lib/agentalsec
+chmod 755 /var/lib/agentalsec
+exec 3>>"$LOG"
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >&3; }
+
+# The person installing: sudo or pkexec name them; a click in the software
+# manager goes through pkexec. Failing both, whoever is at the screen.
+installer_user() {
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+        echo "$SUDO_USER"; return
+    fi
+    if [ -n "${PKEXEC_UID:-}" ]; then
+        getent passwd "$PKEXEC_UID" | cut -d: -f1; return
+    fi
+    s=$(loginctl show-seat seat0 -p ActiveSession --value 2>/dev/null || true)
+    [ -n "$s" ] && loginctl show-session "$s" -p Name --value 2>/dev/null || true
+}
+
+# Everything after the first install goes to the person recorded then.
+if [ -s /var/lib/agentalsec/owner ]; then
+    user=$(cat /var/lib/agentalsec/owner)
+else
+    user=$(installer_user)
+fi
+if [ -z "$user" ] || [ "$user" = root ] || ! getent passwd "$user" >/dev/null; then
+    user=""
+fi
+[ -z "$user" ] || [ -s /var/lib/agentalsec/owner ] || echo "$user" > /var/lib/agentalsec/owner
+first=no
+[ -e /var/lib/agentalsec/launched ] || first=yes
+
+gtk-update-icon-cache -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
+update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
+
+if [ -z "$user" ]; then
+    log "no person to install for; each person is prepared when they first open AgentalSec"
+    echo "AgentalSec is installed. Open it from the menu."
+    exit 0
+fi
+
+home=$(getent passwd "$user" | cut -d: -f6)
+uid=$(id -u "$user")
+app="$home/.local/share/agentalsec"
+bus="unix:path=/run/user/$uid/bus"
+log "installing for $user"
+
+# Their copy of the code, the libraries and the data files, made as them.
+if ! runuser -u "$user" -- env HOME="$home" /usr/bin/agentalsec --setup >&3 2>&1; then
+    log "preparing $user's copy did not finish; it is finished when they open AgentalSec"
+fi
+
+# The helpers. Run from their copy, they bind to that copy and to that person.
+if [ -x "$app/scripts/install_capture_service.sh" ]; then
+    for h in install_capture_service install_read_helper install_action_helper; do
+        if SUDO_USER="$user" "$app/scripts/$h.sh" --apply </dev/null >&3 2>&1; then
+            log "$h: installed"
+            echo "$h" >> /var/lib/agentalsec/helpers.new
+        else
+            log "$h: did not install"
+        fi
+    done
+    sort -u /var/lib/agentalsec/helpers.new > /var/lib/agentalsec/helpers 2>/dev/null || true
+    rm -f /var/lib/agentalsec/helpers.new
+fi
+
+# The icon on the desktop, once; deleted, it stays deleted.
+if [ ! -s /var/lib/agentalsec/launcher ]; then
+    desk=$(runuser -u "$user" -- sh -c 'command -v xdg-user-dir >/dev/null && xdg-user-dir DESKTOP' 2>/dev/null || true)
+    if [ -z "$desk" ] || [ "$desk" = "$home" ]; then
+        desk="$home/Desktop"
+    fi
+    if [ -d "$desk" ] && runuser -u "$user" -- sh -c 'umask 022; cp /usr/share/applications/agentalsec.desktop "$1/agentalsec.desktop" && chmod 755 "$1/agentalsec.desktop"' sh "$desk"; then
+        echo "$desk/agentalsec.desktop" > /var/lib/agentalsec/launcher
+        # Mint and others ask before starting a launcher they do not trust yet.
+        if [ -S "/run/user/$uid/bus" ]; then
+            runuser -u "$user" -- env DBUS_SESSION_BUS_ADDRESS="$bus" gio set "$desk/agentalsec.desktop" metadata::trusted true >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+
+# The first time, the dashboard opens by itself.
+if [ "$first" = yes ] && [ -S "/run/user/$uid/bus" ]; then
+    runuser -u "$user" -- env HOME="$home" XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="$bus" \
+        DISPLAY="${DISPLAY:-:0}" setsid /usr/bin/agentalsec >/dev/null 2>&1 </dev/null &
+fi
+touch /var/lib/agentalsec/launched
+log "done"
+exit 0

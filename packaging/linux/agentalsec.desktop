@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=AgentalSec
+GenericName=Home network security
+Comment=Watches this computer and your home network, and tells you what needs you
+Exec=/usr/bin/agentalsec
+Icon=agentalsec
+Terminal=false
+Categories=System;Security;Monitor;
+Keywords=security;network;monitor;router;
+StartupNotify=false
