@@ -59,7 +59,7 @@ fake = bin_dir / "uhttpd"
 fake.write_text(f"""#!/bin/sh
 case " $* " in *" -h "*) [ $# -eq 1 ] && {{ echo "  -E string  404 error handler"; exit 0; }} ;; esac
 ( while :; do sleep 1; done ) </dev/null >/dev/null 2>&1 &
-echo $! > {pidfile}
+echo $! >> {pidfile}
 """)
 fake.chmod(0o755)
 
@@ -209,10 +209,12 @@ r = run("message " + DEVICE + " 41")
 check("a message is refused", r.startswith("ERR") and "no nat" in r, True)
 noipt.unlink()
 
-try:
-    os.kill(int(pidfile.read_text()), 9)
-except (OSError, ValueError):
-    pass
+# Every stand-in started, each on its own: one already gone must not stop the rest.
+for _p in (pidfile.read_text().split() if pidfile.exists() else []):
+    try:
+        os.kill(int(_p), 9)
+    except (OSError, ValueError):
+        pass
 shutil.rmtree(tmp, ignore_errors=True)
 print()
 print("ALL CHECKS PASSED" if not fails else f"FAILED: {fails}")

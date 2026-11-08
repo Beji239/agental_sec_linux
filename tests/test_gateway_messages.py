@@ -61,7 +61,7 @@ fake = bin_dir / "uhttpd"
 fake.write_text(f"""#!/bin/sh
 case " $* " in *" -h "*) [ $# -eq 1 ] && {{ echo "  -E string  404 error handler"; exit 0; }} ;; esac
 ( while :; do sleep 1; done ) </dev/null >/dev/null 2>&1 &
-echo $! > {pidfile}
+echo $! >> {pidfile}
 """)
 fake.chmod(0o755)
 
@@ -179,10 +179,12 @@ g.message(DEVICE, "Still here after a reboot.")
 sh("nft", "delete", "table", "inet", "agentalsec_gw")
 # A reboot ends the page server too. Ending it here, not only forgetting its
 # pid, is what keeps each run from leaving one stand-in running behind it.
-try:
-    os.kill(int(pidfile.read_text()), 9)
-except (OSError, ValueError):
-    pass
+# Every stand-in started, each on its own: one already gone must not stop the rest.
+for _p in (pidfile.read_text().split() if pidfile.exists() else []):
+    try:
+        os.kill(int(_p), 9)
+    except (OSError, ValueError):
+        pass
 pidfile.unlink()
 r = run("restore")
 check("restore answers", r.startswith("OK restore"), True)
@@ -241,10 +243,12 @@ check("a reply is deleted from the dashboard",
 res = client.post("/api/lan/unmessage", json={"target": DEVICE}, headers=h)
 check("and a message removed", (res.status_code, g.messages()["messages"]), (200, []))
 
-try:
-    os.kill(int(pidfile.read_text()), 9)
-except (OSError, ValueError):
-    pass
+# Every stand-in started, each on its own: one already gone must not stop the rest.
+for _p in (pidfile.read_text().split() if pidfile.exists() else []):
+    try:
+        os.kill(int(_p), 9)
+    except (OSError, ValueError):
+        pass
 shutil.rmtree(tmp, ignore_errors=True)
 print()
 print("ALL CHECKS PASSED" if not fails else f"FAILED: {fails}")
