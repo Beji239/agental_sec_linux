@@ -4,9 +4,17 @@ For Ubuntu, Debian and Linux Mint (the install is tested on Ubuntu 24.04 and
 22.04 and Debian 12, Python 3.10 to 3.12). Run every command from the project
 folder unless it says otherwise.
 
-## Automatic install
+## The installer
 
-**The install is now automatic.** Steps 1 to 9 below are done by one script:
+On Linux Mint 22 or Ubuntu 24.04, nothing here is needed: download
+**AgentalSec-Setup-VERSION-amd64.deb** from the releases page, open it and
+press Install (see Quick start in the [README](README.md#quick-start)). This
+guide is for installing from the source code, on other systems or to work on
+the code.
+
+## Automatic install from the source
+
+Steps 1 to 9 below are done by one script:
 
 ```bash
 git clone <repository-url> agental_sec_linux

@@ -446,8 +446,9 @@ expectations. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 
 ## Requirements
 
-- Linux with apt. The automatic install is tested on Ubuntu 24.04, Ubuntu
-  22.04 (the base of Linux Mint 21) and Debian 12; the app runs on Linux Mint.
+- The installer: Linux Mint 22 or Ubuntu 24.04, 64-bit Intel or AMD.
+- From the source: Linux with apt; tested on Ubuntu 24.04, Ubuntu 22.04 (the
+  base of Linux Mint 21) and Debian 12.
 - Any CPU that runs Python, including x86-64 and ARM64.
 - Python 3.10 or newer.
 - For packet capture, the capture service, which the installer sets up (see
@@ -462,37 +463,32 @@ expectations. A tour of each: [docs/TOUR.md](docs/TOUR.md).
 
 ## Quick start
 
-**The install is now automatic.** On Ubuntu, Debian or Linux Mint, three
-commands do the whole thing:
+1. Download **AgentalSec-Setup-VERSION-amd64.deb** from the
+   [Releases](https://github.com/Beji239/agental_sec_linux/releases/latest) page.
+2. Open it from your Downloads folder. The package installer opens; press
+   **Install** and type your password once.
+3. That is all. AgentalSec is on your desktop and in your app menu, and the
+   dashboard opens by itself, already signed in.
 
-```bash
-git clone <repository-url> agental_sec_linux
-cd agental_sec_linux
-./scripts/install.sh
-```
+Everything comes inside the installer: the Python libraries, the capture
+service and the helpers that hold the rights, so AgentalSec itself runs as
+you. It opens without a terminal window; a second click on the icon brings
+back the same dashboard, and the dashboard has the button that stops it.
 
-`<repository-url>` is the address under the green **Code** button at the
-top of this page. No `git` yet? `sudo apt install git` first.
+Set your model provider and its key on the **Settings** tab; everything else
+runs without one. For alerts on your phone, open the **Remote** tab, make
+your bot once with @BotFather as it shows, then press **Pair a phone** and
+scan the code with the phone's camera.
 
-Run it as your own user, not with sudo. It first asks a few questions: your
-model provider's chat address, the model and its key (each can be left empty
-and set later on the Settings tab), and whether to add the optional malware
-scanner. Then it runs on its own, asking for your password once, for the
-system packages, and does every install step in [SETUP.md](SETUP.md): system
-and Python packages, the config files, a new dashboard key, the map and
-vendor data, a check of the result, the capture service and the root
-helpers, and the **AgentalSec** launchers in your app menu, on your desktop and in the project
-folder. Running it again is safe: it keeps your settings and downloads
-nothing it already has.
+To update, download the next installer and open it the same way; your
+settings, keys and history stay. To remove it, remove AgentalSec in the
+Software Manager: the app stops and the helpers come out, and your
+AgentalSec folder stays in case you install it again. Removing it completely
+deletes that folder too.
 
-When it finishes, start AgentalSec from its icon. The dashboard opens at
-http://127.0.0.1:5000, already signed in. Opened by hand, it asks once for the
-private sign-in key in `.env`, named `AGENTAL_DASHBOARD_KEY`, and that browser stays signed in for 30 days. If a
-desktop icon says "untrusted", right-click it and choose "Allow launching".
-
-The optional parts (the kernel camera, your router, start on boot) and every
-step done by hand are in [SETUP.md](SETUP.md). To update later: the
-Update button on the Settings tab, or `./scripts/update.sh`.
+The installer is for Linux Mint 22 and Ubuntu 24.04 on a 64-bit Intel or AMD
+computer. On anything else, or to work on the code, install from the source
+with `./scripts/install.sh`, described in [SETUP.md](SETUP.md).
 
 ## Running without root
 
