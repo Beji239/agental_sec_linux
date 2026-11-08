@@ -177,6 +177,12 @@ except gw.GatewayError:
 print("\n[7] restore puts a message back after a reboot")
 g.message(DEVICE, "Still here after a reboot.")
 sh("nft", "delete", "table", "inet", "agentalsec_gw")
+# A reboot ends the page server too. Ending it here, not only forgetting its
+# pid, is what keeps each run from leaving one stand-in running behind it.
+try:
+    os.kill(int(pidfile.read_text()), 9)
+except (OSError, ValueError):
+    pass
 pidfile.unlink()
 r = run("restore")
 check("restore answers", r.startswith("OK restore"), True)
