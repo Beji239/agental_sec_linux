@@ -23,6 +23,7 @@
   };
   const TOKEN_ENV = 'AGENTAL_REMOTE_BOT_TOKEN';
   let timer = null;
+  let scanPoll = null;
 
   function when(ts) {
     if (!ts) return 'never';
@@ -42,6 +43,7 @@
   async function render(root, h) {
     const esc = h.esc;
     if (timer) { clearInterval(timer); timer = null; }
+    if (scanPoll) { clearInterval(scanPoll); scanPoll = null; }
 
     const st = await h.call('GET', '/state');
     const ev = await h.call('GET', '/events?limit=100');
@@ -63,7 +65,7 @@
       let text;
       if (p.locked) text = '<span style="color:var(--red);">Control locked after wrong tries</span>';
       else if (p.session_until) text = `<span style="color:var(--green);">In control from the phone until ${esc(when(p.session_until))}</span>`;
-      else if (p.enrolled) text = '<span style="color:var(--green);">Can take control</span> with PIN and authenticator';
+      else if (p.enrolled) text = `<span style="color:var(--green);">Can take control</span> with ${p.authenticator ? 'PIN and authenticator' : 'their PIN'}`;
       else if (p.enrolling) text = '<span style="color:var(--amber);">Control setup not finished</span>';
       else text = '<span style="color:var(--text-dim);">Alerts only; no control set up</span>';
       return `<div style="font-size:12px;margin-top:3px;">${text}</div>`;
@@ -80,7 +82,8 @@
 
     function controlButtons(p) {
       if (p.state !== 'paired') return '';
-      let out = `<button class="btn" data-remote-setup="${p.id}">${p.enrolled ? 'Set up control again' : 'Set up control'}</button>`;
+      let out = `<button class="btn" data-remote-pin="${p.id}">${p.enrolled ? 'New PIN' : 'Allow control'}</button>`;
+      if (p.enrolled) out += `<button class="btn" data-remote-setup="${p.id}">${p.authenticator ? 'Authenticator again' : 'Add an authenticator'}</button>`;
       if (p.locked) out += `<button class="btn" data-remote-unlock="${p.id}">Unlock</button>`;
       if (p.enrolled || p.enrolling) out += `<button class="btn" data-remote-uncontrol="${p.id}">Remove control</button>`;
       out += `<button class="btn" data-remote-private="${p.id}">${p.private ? 'New private key' : 'Set up private messages'}</button>`;
@@ -104,26 +107,42 @@
     const chat = s.chat || {};
     const rd = s.reader || {};
 
-    const peopleRows = people.length ? people.map(p => `
+    // A phone that scanned the QR waits here for Accept, with the digits it shows.
+    const acceptRow = p => `
+      <div class="card" style="margin:8px 0;border-color:var(--green);">
+        <div style="font-size:13px;"><b>${esc(p.pair_name || 'A phone')}</b> scanned the code. Does the phone show
+          <span style="font-family:var(--mono);font-size:18px;letter-spacing:2px;margin-left:4px;">${esc(p.pair_digits)}</span>?</div>
+        <div class="card-note" style="margin-top:6px;">Optional: a PIN lets this phone also take control, for 30 minutes at a time.
+          Leave it empty for alerts only; you can allow control later.</div>
+        <div class="row" style="margin-top:8px;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input class="input" id="remote-apin-${p.id}" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN, 6 to 12 digits" maxlength="12" style="width:170px;">
+          <input class="input" id="remote-apin2-${p.id}" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN again" maxlength="12" style="width:130px;">
+          <button class="btn" data-remote-accept="${p.id}" style="border-color:var(--green);color:var(--green);">Accept</button>
+          <button class="btn" data-remote-decline="${p.id}">Not my phone</button>
+          <span id="remote-accept-msg-${p.id}" style="font-family:var(--mono);font-size:11px;"></span>
+        </div>
+      </div>`;
+    const shown = people.filter(p => !(p.scan && p.state === 'waiting' && !p.scan_waiting));
+    const peopleRows = shown.length ? shown.map(p => p.scan_waiting ? acceptRow(p) : `
       <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
         <div>
           <b>${esc(p.name)}</b>
-          <span style="color:var(--text-dim);font-family:var(--mono);font-size:11px;margin-left:8px;">${esc(p.phone)}</span>
+          ${p.phone ? `<span style="color:var(--text-dim);font-family:var(--mono);font-size:11px;margin-left:8px;">${esc(p.phone)}</span>` : ''}
           <div style="font-size:12px;margin-top:3px;">${p.state === 'paired'
             ? `<span style="color:var(--green);">Paired</span>${p.tg_username ? ' as @' + esc(p.tg_username) : ''}, since ${esc(when(p.paired_at))}`
             : (p.code_live
-                ? '<span style="color:var(--amber);">Waiting for the code</span>'
-                : '<span style="color:var(--text-dim);">Not paired; the code ran out or was spent</span>')}</div>
+                ? '<span style="color:var(--amber);">Waiting for the phone</span>'
+                : '<span style="color:var(--text-dim);">Not paired; pair again to show a new code</span>')}</div>
           ${controlLine(p)}
           ${privateLine(p)}
         </div>
         <div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;">
           ${controlButtons(p)}
-          <button class="btn" data-remote-code="${p.id}">${p.state === 'paired' ? 'Pair again' : 'New code'}</button>
+          <button class="btn" data-remote-code="${p.id}">Pair again</button>
           <button class="btn" data-remote-remove="${p.id}">Remove</button>
         </div>
       </div>`).join('')
-      : `<div class="card-note">Nobody yet. Add yourself first, then anyone else who should get the alerts.</div>`;
+      : `<div class="card-note">Nobody yet. Press <b>Pair a phone</b> and scan the code with your phone's camera.</div>`;
 
     const events = (ev.ok && ev.data.events) || [];
     const eventRows = events.length ? events.map(e => `
@@ -159,9 +178,13 @@
       <div class="card">
         <div class="card-title">Bot token</div>
         <div class="card-note">
-          You make the bot yourself, so it belongs to you: in Telegram, open <b>@BotFather</b>,
-          send <code>/newbot</code>, pick a name and a username ending in <code>bot</code>,
-          and paste the token it gives you here. It is kept in <code>.env</code>, encrypted like the other keys.
+          Your bot belongs to you, so you make it once, in Telegram on your phone:
+          <ol style="margin:6px 0 0 18px;padding:0;">
+            <li>Open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer"><b>@BotFather</b></a> and send <code>/newbot</code>.</li>
+            <li>Give it any name, then a username that ends in <code>bot</code>.</li>
+            <li>BotFather answers with a token like <code>123456789:AA...</code>. Paste it here and press Save.</li>
+          </ol>
+          It is kept with the app's other keys, encrypted. This is the only step that needs typing.
         </div>
         <div class="row" style="margin-top:10px;gap:8px;align-items:center;">
           <input class="input" id="remote-token" type="password" autocomplete="off" style="width:360px;"
@@ -175,16 +198,14 @@
       <div class="card">
         <div class="card-title">People</div>
         <div class="card-note">
-          Only people paired here can use the bot. You enter their name and number; they send the
-          code to the bot and share their phone number with Telegram's button. The bot checks it is
-          the same number and that it is their own. Anyone else who writes to the bot is ignored and
-          shows up in the history below.
+          Only phones paired here can use the bot. Press <b>Pair a phone</b>, scan the code with the phone's
+          camera and press <b>Start</b> in Telegram; then accept here when the digits match. The code works once,
+          for 10 minutes. Anyone else who writes to the bot is ignored and shows up in the history below.
         </div>
         <div style="margin-top:8px;">${peopleRows}</div>
         <div class="row" style="margin-top:12px;gap:8px;align-items:center;">
-          <input class="input" id="remote-name" placeholder="name" maxlength="40" style="width:160px;">
-          <input class="input" id="remote-phone" placeholder="phone number" maxlength="24" style="width:180px;">
-          <button class="btn" id="remote-add">Add person</button>
+          <button class="btn" id="remote-pair" ${bot.username ? '' : 'disabled'}>Pair a phone</button>
+          ${bot.username ? '' : '<span class="card-note">Save the bot token first.</span>'}
         </div>
         <div id="remote-code"></div>
         <div id="remote-setup"></div>
@@ -193,12 +214,14 @@
       <div class="card">
         <div class="card-title">Control from the phone</div>
         <div class="card-note">
-          A paired person can decide from the phone once they set up control here, at this computer: their own
-          PIN, an authenticator app (Aegis, Google Authenticator and the like) and a panic word. Telegram never
-          carries the authenticator key, so even Telegram cannot fake an approval.
+          A paired phone can decide once control is allowed here, with a PIN chosen at this computer; it can be
+          given while accepting the phone. For extra protection, add an authenticator app (Aegis, Google
+          Authenticator and the like) and a panic word: Telegram never carries the authenticator key, so even
+          Telegram cannot fake an approval then.
         </div>
         <div class="card-note" style="margin-top:6px;">
-          On the phone they press <b>Take control</b> (or send /control), then the PIN and the code from the app.
+          On the phone they press <b>Take control</b> (or send /control), then the PIN, and the code from the app
+          if they have one.
           For 30 minutes they can approve or deny actions, answer the agent's questions, give verdicts on
           incidents and let held devices in, one tap each. Each code works once. Three wrong PINs or codes
           lock that person's control until you unlock it here, and everyone else enrolled is told. Anything
@@ -321,22 +344,6 @@
     };
     const reason = r => (r.data && (r.data.reason || r.data.detail || r.data.error)) || 'Did not work.';
 
-    function showCode(d, name) {
-      const link = d.username ? `https://t.me/${d.username}?start=${d.code}` : '';
-      $('remote-setup').innerHTML = '';
-      $('remote-code').innerHTML = `
-        <div class="card" style="margin:12px 0 0;border-color:var(--green);">
-          <div style="font-size:13px;">Pairing code for <b>${esc(name)}</b>, valid 15 minutes, works once:</div>
-          <div style="font-family:var(--mono);font-size:26px;letter-spacing:4px;margin:8px 0;">${esc(d.code)}</div>
-          <div class="card-note">
-            ${d.username
-              ? `They open <b>@${esc(d.username)}</b> in Telegram and send this code, or open
-                 <code>${esc(link)}</code> on their phone. Then they press <b>Share my phone number</b>.`
-              : 'The bot is not connected yet, so add the token first; the code still works once it is.'}
-          </div>
-        </div>`;
-    }
-
     $('remote-token-save').addEventListener('click', async () => {
       const value = $('remote-token').value.trim();
       if (!value) return say('remote-token-msg', 'Paste the token first.', true);
@@ -353,25 +360,105 @@
       h.reload();
     });
 
-    $('remote-add').addEventListener('click', async () => {
-      const name = $('remote-name').value.trim(), phone = $('remote-phone').value.trim();
-      const r = await h.call('POST', '/people/add', { name, phone });
+    // The pairing code as a QR: the phone's camera opens the bot in Telegram.
+    function showQR(d) {
+      $('remote-setup').innerHTML = '';
+      $('remote-code').innerHTML = `
+        <div class="card" style="margin:12px 0 0;border-color:var(--green);">
+          <div style="font-size:13px;">Scan this with the phone's camera. Telegram opens <b>@${esc(d.username)}</b>;
+            press <b>Start</b> there. Works once, for ${esc(String(d.valid_minutes || 10))} minutes.</div>
+          <div class="row" style="margin-top:10px;gap:16px;align-items:center;flex-wrap:wrap;">
+            <div id="remote-pair-qr" style="background:#fff;padding:6px;border-radius:4px;line-height:0;"></div>
+            <div class="card-note" style="max-width:320px;">Waiting for the phone... When it has scanned, this asks you to
+              accept it with the digits the phone shows.<br><br>On the phone itself? Open
+              <a href="${esc(d.link)}" target="_blank" rel="noopener noreferrer">this link</a> instead.
+              <div class="row" style="margin-top:10px;"><button class="btn" id="remote-pair-cancel">Cancel</button></div>
+            </div>
+          </div>
+        </div>`;
+      const img = new Image();
+      img.alt = 'QR code that opens the bot in Telegram';
+      img.src = 'data:image/svg+xml;base64,' + btoa(d.svg);
+      $('remote-pair-qr').appendChild(img);
+      $('remote-pair-cancel').addEventListener('click', async () => {
+        if (scanPoll) { clearInterval(scanPoll); scanPoll = null; }
+        await h.call('POST', '/pair/decline', { id: d.id });
+        $('remote-code').innerHTML = '';
+        render(root, h);
+      });
+      // Waits for the scan, then shows Accept.
+      const started = Date.now();
+      scanPoll = setInterval(async () => {
+        if (!h.visible() || Date.now() - started > (d.valid_minutes || 10) * 60000) {
+          clearInterval(scanPoll); scanPoll = null; return;
+        }
+        const r = await h.call('GET', '/state');
+        const p = r.ok && (r.data.people || []).find(x => x.id === d.id);
+        if (p && (p.scan_waiting || p.state === 'paired')) {
+          clearInterval(scanPoll); scanPoll = null;
+          $('remote-code').innerHTML = '';
+          render(root, h);
+        }
+      }, 2000);
+    }
+
+    $('remote-pair').addEventListener('click', async () => {
+      const r = await h.call('POST', '/pair/start', {});
       if (!r.ok) {
         $('remote-code').innerHTML = `<div class="card-note" style="color:var(--red);margin-top:8px;">${esc(reason(r))}</div>`;
         return;
       }
-      await render(root, h);
-      showCode(r.data, name);
+      showQR(r.data);
     });
 
     root.querySelectorAll('[data-remote-code]').forEach(b => b.addEventListener('click', async () => {
       const p = people.find(x => String(x.id) === b.dataset.remoteCode);
       if (p && p.state === 'paired' &&
-          !confirm(`Pair ${p.name} again? Alerts to them stop until they use the new code.`)) return;
-      const r = await h.call('POST', '/people/new-code', { id: Number(b.dataset.remoteCode) });
+          !confirm(`Pair ${p.name} again? Alerts to them stop until the phone scans the new code.`)) return;
+      const r = await h.call('POST', '/pair/start', { id: Number(b.dataset.remoteCode) });
       if (!r.ok) return alert(reason(r));
       await render(root, h);
-      showCode(r.data, p ? p.name : '');
+      showQR(r.data);
+    }));
+
+    root.querySelectorAll('[data-remote-accept]').forEach(b => b.addEventListener('click', async () => {
+      const id = Number(b.dataset.remoteAccept);
+      const r = await h.call('POST', '/pair/accept', { id,
+        pin: $('remote-apin-' + id).value.trim(), pin2: $('remote-apin2-' + id).value.trim() });
+      if (!r.ok) return say('remote-accept-msg-' + id, reason(r), true);
+      render(root, h);
+    }));
+
+    root.querySelectorAll('[data-remote-decline]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Not your phone? It is turned away and the code stops working.')) return;
+      await h.call('POST', '/pair/decline', { id: Number(b.dataset.remoteDecline) });
+      render(root, h);
+    }));
+
+    // Control with a PIN alone; the authenticator is the extra.
+    root.querySelectorAll('[data-remote-pin]').forEach(b => b.addEventListener('click', () => {
+      const p = people.find(x => String(x.id) === b.dataset.remotePin);
+      if (!p) return;
+      $('remote-code').innerHTML = '';
+      $('remote-setup').innerHTML = `
+        <div class="card" style="margin:12px 0 0;border-color:var(--green);">
+          <div style="font-size:13px;">A PIN for <b>${esc(p.name)}</b> to take control from the phone. Let them type it themselves.</div>
+          <div class="row" style="margin-top:10px;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="input" id="remote-ppin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN, 6 to 12 digits" maxlength="12" style="width:170px;">
+            <input class="input" id="remote-ppin2" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN again" maxlength="12" style="width:130px;">
+            <button class="btn" id="remote-ppin-ok">Save</button>
+            <button class="btn" id="remote-ppin-cancel">Cancel</button>
+          </div>
+          <div id="remote-setup-msg" style="font-family:var(--mono);font-size:11px;margin-top:6px;"></div>
+        </div>`;
+      $('remote-ppin-cancel').addEventListener('click', () => { $('remote-setup').innerHTML = ''; render(root, h); });
+      $('remote-ppin-ok').addEventListener('click', async () => {
+        const r = await h.call('POST', '/control/pin', { id: p.id,
+          pin: $('remote-ppin').value.trim(), pin2: $('remote-ppin2').value.trim() });
+        if (!r.ok) return say('remote-setup-msg', reason(r), true);
+        $('remote-setup').innerHTML = '';
+        render(root, h);
+      });
     }));
 
     root.querySelectorAll('[data-remote-remove]').forEach(b => b.addEventListener('click', async () => {
@@ -488,7 +575,7 @@
     root.querySelectorAll('[data-remote-setup]').forEach(b => b.addEventListener('click', () => {
       const p = people.find(x => String(x.id) === b.dataset.remoteSetup);
       if (!p) return;
-      if (p.enrolled && !confirm(`Set up control for ${p.name} again? The old PIN, panic word and authenticator stop working.`)) return;
+      if (p.enrolled && !confirm(`Set up the authenticator for ${p.name}? They choose the PIN and a panic word again, and their old PIN stops working.`)) return;
       showSetup(p);
     }));
 

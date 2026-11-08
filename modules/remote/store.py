@@ -13,6 +13,8 @@ import time
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LEN = 8
 CODE_TTL = 15 * 60
+# A pairing QR on the screen works once and only for a few minutes.
+SCAN_TTL = 10 * 60
 PAIRING_TTL = 10 * 60
 EVENTS_KEPT = 1000
 STRANGERS_KEPT = 5000
@@ -112,6 +114,11 @@ _CONTROL_COLUMNS = (
 # phone's check code.
 _READER_COLUMNS = (("reader_sealed", "TEXT"), ("reader_pending", "TEXT"),
                    ("reader_at", "REAL"))
+# Pairing by scanning a QR at the computer: no name, number or code typed. The
+# phone that scanned it waits here, with the digits both screens show, until
+# someone at the computer accepts it.
+_SCAN_COLUMNS = (("scan", "INTEGER NOT NULL DEFAULT 0"), ("pair_name", "TEXT"),
+                 ("pair_chat", "INTEGER"), ("pair_digits", "TEXT"))
 _CLEAR_CONTROL = ("pin_hash = NULL, word_hash = NULL, totp_sealed = NULL, "
                   "totp_pending = NULL, enrolled_at = NULL, last_step = 0, "
                   "bad_tries = 0, locked_at = NULL, session_until = NULL, "
@@ -127,7 +134,7 @@ class Store:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.executescript(_DDL)
         have = {r[1] for r in self._db.execute("PRAGMA table_info(people)")}
-        for col, kind in _CONTROL_COLUMNS + _READER_COLUMNS:
+        for col, kind in _CONTROL_COLUMNS + _READER_COLUMNS + _SCAN_COLUMNS:
             if col not in have:
                 self._db.execute(f"ALTER TABLE people ADD COLUMN {col} {kind}")
         # Paired phones live here: owner only, like the main database.
@@ -203,7 +210,9 @@ class Store:
                          "tg_username, created_at, paired_at, enrolled_at, "
                          "locked_at, session_until, totp_pending IS NOT NULL "
                          "AS enrolling, reader_at, reader_pending IS NOT NULL "
-                         "AS private_pending FROM people ORDER BY id")
+                         "AS private_pending, scan, pair_name, pair_digits, "
+                         "pairing_until, totp_sealed IS NOT NULL AS authenticator "
+                         "FROM people ORDER BY id")
         now = time.time()
         for r in rows:
             r["code_live"] = bool(r["state"] == "waiting" and r["code_expires"]
@@ -215,6 +224,14 @@ class Store:
             r["private_pending"] = bool(r["private_pending"])
             if not (r["session_until"] and r["session_until"] > now):
                 r["session_until"] = None
+            r["authenticator"] = bool(r["authenticator"])
+            # A phone that scanned the QR and waits for Accept at the computer.
+            waiting = bool(r["scan"] and r["state"] == "waiting" and r["pair_digits"]
+                           and r["pairing_until"] and r["pairing_until"] > now)
+            r["scan_waiting"] = waiting
+            if not waiting:
+                r["pair_name"] = r["pair_digits"] = None
+            r.pop("pairing_until", None)
         return rows
 
     def paired(self) -> list:
@@ -235,6 +252,35 @@ class Store:
             (name, phone, digits(phone), _hash(code), time.time() + CODE_TTL,
              time.time()))
         return pid, code
+
+    def add_scan(self) -> tuple:
+        """A person to be paired by scanning: named after their Telegram name
+        once they have scanned, with no phone number to check."""
+        code = self._new_code()
+        pid = self._run(
+            "INSERT INTO people (name, phone, phone_digits, state, code_hash, "
+            "code_expires, created_at, scan) VALUES ('', '', '', 'waiting', ?, ?, ?, 1)",
+            (_hash(code), time.time() + SCAN_TTL, time.time()))
+        return pid, code
+
+    def scan_wait(self, pid: int, user_id: int, chat_id: int, name: str,
+                  digits_shown: str) -> None:
+        self._run("UPDATE people SET pairing_user_id = ?, pairing_until = ?, "
+                  "pair_chat = ?, pair_name = ?, pair_digits = ? WHERE id = ?",
+                  (int(user_id), time.time() + PAIRING_TTL, int(chat_id), name,
+                   digits_shown, int(pid)))
+
+    def mark_scan(self, pid: int) -> None:
+        self._run("UPDATE people SET scan = 1 WHERE id = ?", (int(pid),))
+
+    def scan_waiting(self, pid: int):
+        return self._one("SELECT * FROM people WHERE id = ? AND scan = 1 AND "
+                         "state = 'waiting' AND pair_digits IS NOT NULL AND "
+                         "pairing_until > ?", (int(pid), time.time()))
+
+    def name_person(self, pid: int, name: str) -> None:
+        self._run("UPDATE people SET name = ?, pair_name = NULL, pair_chat = NULL, "
+                  "pair_digits = NULL WHERE id = ?", (name, int(pid)))
 
     def new_code(self, pid: int) -> str:
         code = self._new_code()
@@ -332,6 +378,13 @@ class Store:
         self._run(f"UPDATE people SET {_CLEAR_CONTROL}, pin_hash = ?, "
                   "word_hash = ?, totp_pending = ? WHERE id = ?",
                   (pin_hash, word_hash, sealed_secret, int(pid)))
+
+    def enrol_pin(self, pid: int, pin_hash: str, word_hash: str | None) -> None:
+        """Control with a PIN alone, from the Telegram account paired here.
+        An authenticator can still be added on top; see enrol_start."""
+        self._run(f"UPDATE people SET {_CLEAR_CONTROL}, pin_hash = ?, word_hash = ?, "
+                  "enrolled_at = ? WHERE id = ?",
+                  (pin_hash, word_hash, time.time(), int(pid)))
 
     def enrol_finish(self, pid: int, step: int) -> None:
         self._run("UPDATE people SET totp_sealed = totp_pending, totp_pending = NULL, "

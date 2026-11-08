@@ -241,6 +241,9 @@ class Routes(BaseHTTPRequestHandler):
         if path.startswith("/control/"):
             return self._control(path, body)
 
+        if path.startswith("/pair/"):
+            return self._pair(path, body)
+
         if path.startswith("/private/") or path.startswith("/reader/"):
             return self._private(path, body)
 
@@ -261,6 +264,60 @@ class Routes(BaseHTTPRequestHandler):
 
         return self._reply(404, {"error": "No such route."})
 
+
+    def _pair(self, path: str, body: dict):
+        """Pairing by one scan: the tab shows a QR, the phone's camera opens the
+        bot in Telegram, Start, and the tab asks to accept with the digits the
+        phone shows. Control can be allowed in the same step with a PIN."""
+        b = self.bot
+        if path == "/pair/start":
+            username = b.state.get("username")
+            if not username:
+                return self._reply(400, {"ok": False, "reason": "The bot is not connected "
+                                         "yet. Save the bot token first."})
+            again = body.get("id")
+            if again:
+                person = b.store.person(again)
+                if not person:
+                    return self._reply(404, {"ok": False, "reason": "No such person."})
+                if person["state"] == "paired" and person.get("chat_id"):
+                    b.say(person["chat_id"], "\U0001F504 Your pairing was reset at the "
+                                             "computer. Alerts stop until you pair again.")
+                b.store.mark_scan(again)
+                code, pid = b.store.new_code(again), int(again)
+            else:
+                pid, code = b.store.add_scan()
+            link = f"https://t.me/{username}?start={code}"
+            b.store.event("code_made", None, "Pairing QR shown at the computer.")
+            return self._reply(200, {"ok": True, "id": pid, "link": link,
+                                     "username": username, "svg": qr.svg(link, 5),
+                                     "valid_minutes": 10})
+
+        person = b.store.person(body.get("id") or 0)
+        if not person:
+            return self._reply(404, {"ok": False, "reason": "No such person."})
+        if path == "/pair/decline":
+            return self._reply(200, {"ok": b.decline_scan(person["id"])})
+        if path == "/pair/accept":
+            pin, pin2 = str(body.get("pin") or ""), str(body.get("pin2") or "")
+            if pin or pin2:
+                why = control.pin_problem(pin) or (None if pin == pin2
+                                                   else "The two PINs are not the same.")
+                if why:
+                    return self._reply(400, {"ok": False, "reason": why})
+            paired = b.accept_scan(person["id"])
+            if not paired:
+                return self._reply(400, {"ok": False, "reason": "That phone is no longer "
+                                         "waiting. Show a new QR and scan it again."})
+            if pin:
+                b.store.enrol_pin(paired["id"], control.hash_pin(pin), None)
+                b.store.event("enrolled", paired["name"], "Control from the phone allowed "
+                                                          "with a PIN, at the computer.")
+                b.say(paired["chat_id"], "\U0001F510 You can also <b>take control</b> from "
+                      "here: press the button or send /control, then your PIN.",
+                      {"inline_keyboard": [[{"text": "Take control", "callback_data": "ctl"}]]})
+            return self._reply(200, {"ok": True, "id": paired["id"], "name": paired["name"]})
+        return self._reply(404, {"error": "No such route."})
 
     def _control(self, path: str, body: dict):
         b = self.bot
@@ -340,6 +397,24 @@ class Routes(BaseHTTPRequestHandler):
             if chat:
                 b.say(chat, "\U0001F510 Control from the phone was removed for you at the "
                             "computer. Alerts still come.")
+            return self._reply(200, {"ok": True})
+
+        if path == "/control/pin":
+            if not chat:
+                return self._reply(400, {"ok": False,
+                                         "reason": "Pair the person first; control comes after."})
+            pin, pin2 = str(body.get("pin") or ""), str(body.get("pin2") or "")
+            why = control.pin_problem(pin) or (None if pin == pin2
+                                               else "The two PINs are not the same.")
+            if why:
+                return self._reply(400, {"ok": False, "reason": why})
+            b.store.enrol_pin(person["id"], control.hash_pin(pin), None)
+            b.challenges.pop(person["tg_user_id"], None)
+            b.store.event("enrolled", person["name"], "Control from the phone allowed "
+                                                      "with a PIN, at the computer.")
+            b.say(chat, "\U0001F510 You can <b>take control</b> from here now: press the "
+                        "button or send /control, then your PIN.",
+                  {"inline_keyboard": [[{"text": "Take control", "callback_data": "ctl"}]]})
             return self._reply(200, {"ok": True})
 
         if path == "/control/unlock":

@@ -436,6 +436,67 @@ try:
     check("Kim stays unpaired", people["Kim"]["state"], "waiting")
     check("and the code is spent", people["Kim"]["code_live"], False)
 
+    print("pairing by one scan")
+    import hashlib as _hl
+
+    def _digits(code_, uid):
+        n = int(_hl.sha256(f"{code_.upper()}:{uid}".encode()).hexdigest(), 16)
+        d = f"{n % 1_000_000:06d}"
+        return f"{d[:3]} {d[3:]}"
+
+    code_, qr_ = call("/pair/start", "POST", {})
+    check("the tab gets a QR to show", (code_, qr_.get("svg", "").startswith("<svg")), (200, True))
+    check("it opens the bot with a start code",
+          qr_.get("link", "").startswith("https://t.me/test_home_bot?start="), True)
+    scode = qr_["link"].rsplit("=", 1)[1]
+    lee = {"id": 444, "is_bot": False, "first_name": "Lee"}
+    lchat = {"id": 444, "type": "private"}
+    fake.push({"message_id": 20, "from": lee, "chat": lchat, "text": f"/start {scode}"})
+    got = wait_for(lambda: [m for m in fake.to(444) if "Almost done" in m["text"]])
+    check("the phone is told to check the computer", bool(got), True)
+    check("with the digits the computer shows", _digits(scode, 444) in (got[-1]["text"] if got else ""), True)
+    check("and no contact button", (got[-1].get("reply_markup") or {}).get("keyboard") if got else None, None)
+    waiting = wait_for(lambda: [p for p in call("/state")[1]["people"] if p.get("scan_waiting")])
+    check("the tab shows the phone waiting, by its Telegram name",
+          [(p["pair_name"], p["pair_digits"]) for p in waiting], [("Lee", _digits(scode, 444))])
+    pid = waiting[0]["id"] if waiting else 0
+    # Someone else scanning the same picture while Lee waits gets nowhere.
+    mo = {"id": 446, "is_bot": False, "first_name": "Mo"}
+    fake.push({"message_id": 21, "from": mo, "chat": {"id": 446, "type": "private"}, "text": f"/start {scode}"})
+    time.sleep(1.5)
+    check("a second phone with the same code is not let in", fake.to(446), [])
+    check("and the waiting phone is still Lee",
+          [p["pair_name"] for p in call("/state")[1]["people"] if p.get("scan_waiting")], ["Lee"])
+    code_, out_ = call("/pair/accept", "POST", {"id": pid, "pin": "246813", "pin2": "246814"})
+    check("two different PINs are refused", code_, 400)
+    code_, out_ = call("/pair/accept", "POST", {"id": pid, "pin": "246813", "pin2": "246813"})
+    check("Accept pairs it", (code_, out_.get("name")), (200, "Lee"))
+    p_ = [p for p in call("/state")[1]["people"] if p["id"] == pid]
+    check("paired, named after Telegram, control by PIN alone",
+          [(p["state"], p["name"], p["enrolled"], p["authenticator"]) for p in p_], [("paired", "Lee", True, False)])
+    wait_for(lambda: [m for m in fake.to(444) if "Two-Step Verification" in m["text"]])
+    fake.push({"message_id": 22, "from": lee, "chat": lchat, "text": "/control"})
+    asked = wait_for(lambda: [m for m in fake.to(444) if "Send your <b>PIN</b>" in m["text"]])
+    check("taking control asks for the PIN", bool(asked), True)
+    fake.push({"message_id": 23, "from": lee, "chat": lchat, "text": "246813"})
+    on = wait_for(lambda: [m for m in fake.to(444) if "Control is on" in m["text"]])
+    check("the PIN alone turns control on, no authenticator code asked", bool(on), True)
+    check("and no code was asked for", any("authenticator app" in m["text"] for m in fake.to(444)), False)
+    fake.push({"message_id": 24, "from": lee, "chat": lchat, "text": "/done"})
+    time.sleep(1)
+    call("/people/remove", "POST", {"id": pid})
+    # Not my phone: turned away, the code stops working.
+    code_, qr2 = call("/pair/start", "POST", {})
+    scode2 = qr2["link"].rsplit("=", 1)[1]
+    ned = {"id": 445, "is_bot": False, "first_name": "Ned"}
+    fake.push({"message_id": 25, "from": ned, "chat": {"id": 445, "type": "private"}, "text": f"/start {scode2}"})
+    w2 = wait_for(lambda: [p for p in call("/state")[1]["people"] if p.get("scan_waiting")])
+    code_, out_ = call("/pair/decline", "POST", {"id": w2[0]["id"] if w2 else 0})
+    check("Not my phone turns it away", out_.get("ok"), True)
+    told = wait_for(lambda: [m for m in fake.to(445) if "declined" in m["text"]])
+    check("and the phone is told", bool(told), True)
+    check("and it is gone from the list", [p for p in call("/state")[1]["people"] if p["id"] == (w2[0]["id"] if w2 else 0)], [])
+
     print("commands")
     fake.push({"message_id": 8, "from": sam, "chat": chat, "text": "/status"})
     wait_for(lambda: "Open incidents" in fake.to(111)[-1]["text"])
@@ -513,7 +574,7 @@ try:
 
     n = len(fake.to(111))
     say_as(sam, "/control")
-    check("control before setup explains how", bool(next_to_sam(n, "set up at the computer")), True)
+    check("control before setup explains how", bool(next_to_sam(n, "set at the computer")), True)
 
     code_, out = call("/control/enrol", "POST", {"id": kim_id, "pin": "480215", "pin2": "480215",
                                                  "word": "red balloon"})

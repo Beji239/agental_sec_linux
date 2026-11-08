@@ -335,6 +335,9 @@ class Bot:
                              f"Sent {person['name']}'s code while someone else "
                              f"was already using it.")
             return
+        if person.get("scan"):
+            self._scanned(person, sender, chat_id, code)
+            return
         self.store.start_pairing(person["id"], sender["id"])
         self.store.event("code_used", person["name"],
                          f"Code sent by {self._name_of(sender)}; waiting for the phone number.")
@@ -346,6 +349,61 @@ class Bot:
                  {"keyboard": [[{"text": "Share my phone number",
                                  "request_contact": True}]],
                   "one_time_keyboard": True, "resize_keyboard": True})
+
+    @staticmethod
+    def scan_digits(code: str, user_id: int) -> str:
+        """Six digits both screens show, from the QR's code and the Telegram
+        account that scanned it, so the person at the computer can see it is
+        their own phone before pressing Accept."""
+        n = int(hashlib.sha256(f"{clean_code(code)}:{int(user_id)}".encode()).hexdigest(), 16)
+        d = f"{n % 1_000_000:06d}"
+        return f"{d[:3]} {d[3:]}"
+
+    def _scanned(self, person: dict, sender: dict, chat_id: int, code: str) -> None:
+        """The phone scanned the QR at the computer. Nothing is paired until
+        someone there presses Accept, seeing the same digits."""
+        shown = self.scan_digits(code, sender["id"])
+        name = (" ".join(x for x in (sender.get("first_name"), sender.get("last_name")) if x)
+                or sender.get("username") or "This phone")[:40]
+        self.store.scan_wait(person["id"], sender["id"], chat_id, name, shown)
+        self.store.event("code_used", name, "Scanned the pairing code; waiting for Accept "
+                                            "at the computer.")
+        self.say(chat_id,
+                 "\U0001F44B <b>Almost done.</b>\n"
+                 f"The computer now shows <b>{shown}</b>. If it matches, press "
+                 "<b>Accept</b> there. Nothing else to type here.")
+
+    def accept_scan(self, pid: int) -> dict | None:
+        """Accept at the computer: pairs the phone that scanned, and tells it."""
+        person = self.store.scan_waiting(pid)
+        if not person:
+            return None
+        name = person.get("name") or person.get("pair_name") or "This phone"
+        user = {"id": person["pairing_user_id"]}
+        self.store.finish_pairing(person["id"], person["pairing_user_id"],
+                                  person["pair_chat"], None)
+        self.store.name_person(person["id"], name)
+        self.store.event("paired", name, f"Paired by scanning, accepted at the computer "
+                                         f"({self._name_of(user)}).")
+        chat_id = person["pair_chat"]
+        self.say(chat_id,
+                 "\u2705 <b>Paired.</b> Urgent alerts from AgentalSec will come here.\n\n"
+                 "\U0001F510 Please turn on Telegram's <b>Two-Step Verification</b> "
+                 "(Settings, Privacy and Security), so nobody can take this account "
+                 "with an SMS code.\n\n" + HELP)
+        self.say(chat_id, "Tap a button any time:", VIEW_BUTTONS)
+        return self.store.person(person["id"])
+
+    def decline_scan(self, pid: int) -> bool:
+        person = self.store.person(pid)
+        if not person or not person.get("scan") or person["state"] != "waiting":
+            return False
+        if person.get("pair_chat"):
+            self.say(person["pair_chat"], "\u26D4 Pairing was declined at the computer.")
+        self.store.event("code_refused", person.get("pair_name") or "A phone",
+                         "Pairing declined at the computer.")
+        self.store.remove_person(pid)
+        return True
 
     def _contact(self, sender: dict, chat_id: int, contact: dict) -> None:
         person = self.store.pairing_for(sender["id"])
@@ -695,12 +753,12 @@ class Bot:
             return ("\U0001F6D1 Control from the phone is off since the panic word. "
                     "It can be turned back on at the computer, in the Remote tab.")
         if not person.get("enrolled_at"):
-            return ("\U0001F510 Control needs a PIN and an authenticator app, set up at "
-                    "the computer in the Remote tab. Until then alerts and /status work.")
+            return ("\U0001F510 Control needs a PIN, set at the computer in the Remote "
+                    "tab. Until then alerts and /status work.")
         if person.get("locked_at"):
             return ("\U0001F512 Control is locked for you after wrong tries. It can be "
                     "unlocked at the computer. Alerts still come.")
-        if not self._secret(person):
+        if person.get("totp_sealed") and not self._secret(person):
             return ("⚠️ Your authenticator could not be read on this computer. "
                     "Set control up again in the Remote tab.")
         return None
@@ -741,18 +799,23 @@ class Bot:
             if not control.pin_ok(text, person["pin_hash"]):
                 self._bad_try(person, chat_id, "PIN")
                 return
-            ch.update(step="code", expires=time.time() + CONFIRM_SECONDS)
-            self.say(chat_id, "Now the <b>6-digit code</b> from your authenticator app.")
-            return
-        secret = self._secret(person)
-        step = control.code_step(secret, text, person.get("last_step") or 0)
-        if step is None:
-            if control.code_step(secret, text, 0) is not None:
-                self.say(chat_id, "That code was already used. Each code works once; "
-                                  "send the next one when your app shows it.")
+            if person.get("totp_sealed"):
+                ch.update(step="code", expires=time.time() + CONFIRM_SECONDS)
+                self.say(chat_id, "Now the <b>6-digit code</b> from your authenticator app.")
                 return
-            self._bad_try(person, chat_id, "code")
-            return
+            # Control set with a PIN alone: the paired account and the PIN are
+            # the two things asked for, and the PIN was right.
+            step = person.get("last_step") or 0
+        else:
+            secret = self._secret(person)
+            step = control.code_step(secret, text, person.get("last_step") or 0)
+            if step is None:
+                if control.code_step(secret, text, 0) is not None:
+                    self.say(chat_id, "That code was already used. Each code works once; "
+                                      "send the next one when your app shows it.")
+                    return
+                self._bad_try(person, chat_id, "code")
+                return
         self.store.used_step(person["id"], step)
         self.challenges.pop(uid, None)
         person = self.store.person(person["id"])
