@@ -64,8 +64,28 @@ PARAM_PREFIXES = {
 }
 
 
+# A PARAMETER FOLLOWED BY ONE FIXED WORD, 2026-11-07. The feature controls
+# call '/api/features/' + name + '/' + action, for the rules
+# /api/features/<name>/run and /api/features/<name>/startup. The prefix is
+# accepted only for such a rule, and every action the page passes has to be
+# one of the words those rules end in, so a typo in either still fails.
+ACTION_RULES = {}
+for rule in DEFINED:
+    if "<" in rule:
+        head, rest = rule.split("<", 1)
+        tail = rest.split(">", 1)[1]
+        if tail.count("/") == 1 and tail.startswith("/") and "<" not in tail:
+            ACTION_RULES.setdefault(head, set()).add(tail[1:])
+ACTIONS_CALLED = {
+    "/api/features/": set(re.findall(r"changeFeature\(name, '([a-z_]+)'", UI)),
+}
+
+
 def is_defined(url: str) -> bool:
-    return url in DEFINED or url in PARAM_PREFIXES
+    if url in DEFINED or url in PARAM_PREFIXES:
+        return True
+    used = ACTIONS_CALLED.get(url)
+    return bool(used) and used <= ACTION_RULES.get(url, set())
 
 
 print("\n[1] every route the page calls actually exists")
@@ -77,6 +97,8 @@ check("no UI call points at a missing route",
 # parameterised call but names no real rule still has to fail.
 check("a made up path is still caught",
       is_defined("/api/agent/nonsense/"), False)
+check("the feature controls call only actions that exist",
+      sorted(ACTIONS_CALLED["/api/features/"]), sorted(ACTION_RULES.get("/api/features/", set())))
 
 
 print("\n[2] the five features are reachable, not just built")

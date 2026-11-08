@@ -524,7 +524,10 @@ def _with_config(block, fn):
 # WHAT THE OPERATOR ACTUALLY HAS, read through the guard's OWN reader so this
 # section cannot quietly disagree with the thing it is testing.
 real_cfg = adapters.read_operator_config()
+# A router enrolled with install_gateway_agent.sh is named in gateway.host,
+# and the guard refuses that one too (_configured_gateway).
 gateway = (adapters._configured_router_from(real_cfg)
+           or str(((real_cfg or {}).get("gateway") or {}).get("host") or "").strip()
            if real_cfg is not None else "")
 if not (core_settings.CONFIG_PATH.exists() and gateway):
     _skip.skip_part('the real-gateway check needs a config.json with a router set')

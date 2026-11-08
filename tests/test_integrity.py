@@ -12,7 +12,7 @@ So the suite checks three things in order of importance:
   an intact-but-REBUILT chain is reported as rebuilt when an anchor exists
   the journal can never break the write it is journaling
 """
-import sys, sqlite3, tempfile, pathlib, json
+import sys, sqlite3, tempfile, pathlib, json, re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -551,6 +551,21 @@ with sqlite3.connect(db1) as c:
         check(f"{table}: every excluded column carries a reason",
               [k for k, why in spec["excluded"].items() if not (why or "").strip()],
               [])
+
+# EVERY OPERATION THE CODE JOURNALS IS ONE THE JOURNAL ACCEPTS, 2026-11-07.
+# record() refuses an unknown name with a warning and writes nothing, so a
+# name added at a call site and not here was silently never recorded: eleven
+# were, two of them from 2.9.0's process controls.
+_files = [p for d in ("core", "tools", "api", "modules") for p in (ROOT / d).rglob("*.py")]
+_files += [ROOT / "main.py", ROOT / "adapters.py"]
+_used = set()
+for _f in _files:
+    _text = _f.read_text(encoding="utf-8", errors="replace")
+    _used |= set(re.findall(r"(?:_journal|ig\.record|integrity\.record)\(\s*['\"]([a-z_]+)['\"]", _text))
+    for _a, _b in re.findall(r"_journal\(\s*['\"]([a-z_]+)['\"]\s+if\s+.*?\s+else\s+['\"]([a-z_]+)['\"]", _text):
+        _used |= {_a, _b}
+check("every operation the code journals is one the journal accepts",
+      sorted(_used - ig.JOURNALLED), [])
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"FAILURES: {fails}"))
 sys.exit(1 if fails else 0)

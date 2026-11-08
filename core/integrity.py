@@ -91,6 +91,24 @@ GENESIS = "0" * 64
 # change what the tool will TELL you later. Journaling every packet insert
 # would bury the signal and cost more than it buys.
 JOURNALLED = {
+    # Added 2026-11-07. Starting or stopping process watching from Settings,
+    # and the choice for the next start, turn a sensor off: 2.9.0 journalled
+    # them, and this list refused both, so no such change was ever recorded.
+    "feature_run_changed",
+    "feature_startup_changed",
+    # Added the same day: these were written since the first release and
+    # refused every time. Each changes what the tool tells you later: a
+    # finding raised, lowered or let expire, a baseline taken back, a device
+    # acknowledged again, and the agent being allowed or refused a permission.
+    "baseline_retracted",
+    "device_reacknowledged",
+    "dismissal_expired",
+    "finding_demoted",
+    "finding_nominated",
+    "finding_promoted",
+    "nomination_rejected",
+    "permission_approved",
+    "permission_denied",
     # Background app block, disable and undo: a person or the agent switching
     # something off on this machine.
     "background_change_applied",

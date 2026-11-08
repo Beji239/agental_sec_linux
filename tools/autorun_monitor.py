@@ -51,6 +51,7 @@ import logging
 import os
 import pwd
 import re
+import shlex
 import stat
 import subprocess
 from datetime import datetime, timezone
@@ -308,6 +309,15 @@ def _file_mode(path: Path) -> Optional[str]:
         return None
 
 
+def _unquoted(line: str) -> str:
+    """A line with the quotes around its words taken out, as the program
+    that runs it would read it. A line that does not split stays as it is."""
+    try:
+        return " ".join(shlex.split(line, comments=False, posix=True))
+    except ValueError:
+        return line.replace('"', "").replace("'", "")
+
+
 def _pattern_hits(text: str, patterns=None) -> list[dict]:
     """
     Every suspicious pattern in one piece of text, with the line that carried it.
@@ -325,7 +335,9 @@ def _pattern_hits(text: str, patterns=None) -> list[dict]:
         else:
             rx = re.compile(re.escape(pattern), re.IGNORECASE)
         for line_num, line in enumerate(text.split("\n"), 1):
-            if not rx.search(line):
+            # systemd and the shell run "/bin/bash" "-i" exactly as /bin/bash -i,
+            # so quotes around each word must not hide it from the patterns.
+            if not rx.search(line) and not rx.search(_unquoted(line)):
                 continue
             stripped = line.strip()
             out.append({
@@ -1083,7 +1095,9 @@ def _exec_start_from_file(content: Optional[str]) -> Optional[str]:
     for line in content.split("\n"):
         stripped = line.strip()
         if stripped.startswith("ExecStart="):
-            return stripped[len("ExecStart="):].strip() or None
+            # The command as it runs, without the quotes around its words, the
+            # way systemd's own show reports a system unit's.
+            return _unquoted(stripped[len("ExecStart="):].strip()) or None
     return None
 
 

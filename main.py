@@ -451,6 +451,9 @@ def _make_private(db_path):
     base = Path(db_path)
     for path in [base, *base.parent.glob(base.name + "*"),
                  base.parent / "config.json"]:
+        # On a first start the database is not built yet; it is made owner-only.
+        if not path.exists():
+            continue
         try:
             mode = path.stat().st_mode & 0o777
             if path.is_file() and mode & 0o077:

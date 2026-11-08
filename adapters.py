@@ -4646,13 +4646,13 @@ class LinuxRemediation:
         # with the operator's own configuration rather than grepping the file
         # for the function's name. A control is armed when something has
         # measured it refuse, not when its name is present.
-        router = _configured_router()
+        router, setting = _configured_router(), "router_monitor.host"
         if not (router and ip == router) and ip == _configured_gateway():
-            router = ip
+            router, setting = ip, "gateway.host"
         if router and ip == router:
             return {"success": False, "refused": True,
                     "error": (f"{ip} is the router named in config.json "
-                              f"(router_monitor.host). Blocking the gateway "
+                              f"({setting}). Blocking the gateway "
                               f"from this host takes this host off the "
                               f"network, which is not what a device ban means "
                               f"and looks exactly like the app breaking. If "

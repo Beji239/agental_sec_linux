@@ -229,7 +229,12 @@ app.config.update(AGENTAL_CONFIG=cfg, AGENTAL_MODULES={"gateway": FakeGatewayMod
                   AGENTAL_ALLOWED_HOSTS={"localhost"})
 routes.register_routes(app)
 client = app.test_client()
-h = {"X-API-Key": "k", "Host": "localhost"}
+# Changes come from the dashboard's own signed session; the integration key
+# only reads since 2.8.2, and is refused for a change.
+from api import dashboard_session as ds                # noqa: E402
+key_only = {"X-API-Key": "k", "Host": "localhost"}
+h = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"]), "Host": "localhost"}
+check("the integration key cannot cut a device", client.post("/api/lan/block", json={"mac": "AA:BB:CC:00:00:10", "ip": "172.21.0.10"}, headers=key_only).status_code, 403)
 res = client.post("/api/lan/block", json={"mac": "AA:BB:CC:00:00:10", "ip": "172.21.0.10"}, headers=h)
 check("cut reaches the router by hardware address", (res.status_code, r.calls[-1]),
       (200, ("block_mac", "aa:bb:cc:00:00:10")))

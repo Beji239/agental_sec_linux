@@ -344,6 +344,10 @@ def _long_write(started: float) -> None:
 @contextmanager
 def _get_conn():
     """Context manager, always returns dicts, always closes cleanly."""
+    # A database this opens for the first time is its owner's alone from the
+    # first byte, as create_fresh_database makes it; SQLite would use the umask.
+    if not Path(DB_PATH).exists():
+        os.close(os.open(DB_PATH, os.O_CREAT | os.O_WRONLY, 0o600))
     conn = sqlite3.connect(DB_PATH, timeout=LOCK_WAIT_SECONDS)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -402,10 +406,21 @@ def _get_readonly_conn():
     """
     path = Path(DB_PATH)
     if not path.exists():
+        # A folder that is not there cannot hold a database: that is a
+        # failure to read, and callers report it as one, as they always have.
+        if not path.parent.is_dir():
+            raise sqlite3.OperationalError(f"unable to open database file: {path}")
+        # Nothing to read yet, and a read must not create the file: --check
+        # left an empty, world-readable database behind this way. An empty
+        # in-memory database answers exactly as a new empty file would.
         logger.debug("Read-only handle requested before the database exists; "
-                     "falling back to the ordinary connection.")
-        with _get_conn() as conn:
+                     "reading an empty one in memory, nothing created.")
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        try:
             yield conn
+        finally:
+            conn.close()
         return
 
     conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)

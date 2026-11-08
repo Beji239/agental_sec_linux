@@ -30,6 +30,7 @@ import json
 import pathlib
 import re
 import sqlite3
+import os
 import sys
 import tempfile
 
@@ -194,12 +195,16 @@ if _b:
                any(f in _family_at_5 for f in live_families))
 
 
-print("\n[T3] THREATFOX: the feed was declared keyed, and it needs no key")
-check("[T3] needs_key is False now", fm.FEEDS["threatfox"]["needs_key"], False)
+print("\n[T3] THREATFOX: its keyless export is gone, the key goes in the address")
+# MOVED 2026-11-07: the old keyless export answers 410 Gone. ThreatFox now
+# takes the abuse.ch Auth-Key inside the URL, so the feed is keyed again, and
+# the address carries a placeholder that only _fetch fills in.
+check("[T3] needs_key is the abuse.ch key again", fm.FEEDS["threatfox"]["needs_key"], True)
 _meta = fm.FEEDS["threatfox"]
 _var, _key, _problem = fm._key_for_feed(_meta)
-check("[T3] so no variable is required", _var, None)
-check("[T3] and there is no problem to report", _problem, None)
+check("[T3] so the abuse.ch variable is the one required", _var, "AGENTAL_ABUSECH_KEY")
+check("[T3] and its address holds a placeholder, never the key",
+      "{key}" in _meta["url"], True)
 # The other two abuse.ch feeds still need one: this fix is a measurement about
 # ONE url, not a relaxation of the rule.
 check("[T3] while feodo still needs AGENTAL_ABUSECH_KEY",
@@ -248,6 +253,18 @@ try:
     fm._fetch("https://example.invalid/keyless", send_key=False)
     check("[T3] a keyless fetch sends NO key header", len(_seen), 1)
     fm._fetch("https://example.invalid/keyed", send_key=True, key_var="AGENTAL_ABUSECH_KEY")
+    # A key in the address goes there, and not also in a header.
+    _urls = []
+    _ReqShim.get = staticmethod(lambda url, headers=None, timeout=None, **kw: (_urls.append(url), _fake_get(url, headers, timeout))[1])
+    _old_env = os.environ.get("AGENTAL_ABUSECH_KEY")
+    os.environ["AGENTAL_ABUSECH_KEY"] = "test-key/1"
+    fm._fetch("https://example.invalid/x/{key}/recent.csv", send_key=True, key_var="AGENTAL_ABUSECH_KEY")
+    check("[T3] a key in the address is filled in, escaped", _urls[-1], "https://example.invalid/x/test-key%2F1/recent.csv")
+    check("[T3] and no key header goes with it", "Auth-Key" in _seen, False)
+    if _old_env is None:
+        os.environ.pop("AGENTAL_ABUSECH_KEY", None)
+    else:
+        os.environ["AGENTAL_ABUSECH_KEY"] = _old_env
 finally:
     if _real_requests is not None:
         sys.modules["requests"] = _real_requests

@@ -414,14 +414,20 @@ FEEDS = {
         "gives": "Botnet C2 servers that Feodo Tracker currently lists as active.",
     },
     "urlhaus": {
-        "url": "https://urlhaus.abuse.ch/downloads/hostfile/",
+        # MOVED, 2026-11-07, as ThreatFox did: the old address answers 410 and
+        # the abuse.ch Auth-Key now goes inside the new one, filled in by _fetch.
+        "url": "https://urlhaus-api.abuse.ch/v2/files/exports/{key}/hostfile.txt",
         "kind": "domain",
         "parser": "hostfile",
         "needs_key": True,
         "gives": "Hosts currently serving malware, in hosts-file format.",
     },
     "threatfox": {
-        "url": "https://threatfox.abuse.ch/export/csv/recent/",
+        # MOVED, 2026-11-07. The keyless export below answers 410 Gone; ThreatFox
+        # now wants the abuse.ch Auth-Key inside the address itself. {key} is
+        # filled in by _fetch only, so the address shown anywhere else keeps the
+        # placeholder and the key is never written to a log or a page.
+        "url": "https://threatfox-api.abuse.ch/v2/files/exports/{key}/recent.csv",
         "kind": "mixed",
         "parser": "threatfox_csv",
         # KEYLESS, MEASURED 2026-09-27. It read True -- the abuse.ch key -- and
@@ -437,7 +443,8 @@ FEEDS = {
         # TO A THIRD PARTY. A declared key is a header this module writes; with
         # no key declared, nothing about the operator's abuse.ch credential is
         # sent to a service that never asked for it. Two defects, one flag.
-        "needs_key": False,
+        # Since the move it does ask for it, in the address, not a header.
+        "needs_key": True,
         "gives": "Recent IOCs with the malware family attached.",
     },
     # MISP AND OTX, 2026-09-23.
@@ -1188,7 +1195,11 @@ def _fetch(url: str, send_key: bool, key_var: str = None) -> tuple:
         if not key:
             return None, (f"no key set for this feed. Put {var} in .env and "
                           f"restart.")
-        headers[_feed_header(var)] = key
+        if "{key}" in url:
+            from urllib.parse import quote
+            url = url.replace("{key}", quote(key, safe=""))
+        else:
+            headers[_feed_header(var)] = key
 
     # Redirects are followed by hand and only on the same host (FM-1b):
     # requests forwards custom key headers like Auth-Key to ANY host a

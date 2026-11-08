@@ -212,9 +212,14 @@ app.config.update(AGENTAL_CONFIG={}, AGENTAL_MODULES={"gateway": FakeGatewayModu
                   AGENTAL_ALLOWED_HOSTS={"localhost"})
 routes.register_routes(app)
 client = app.test_client()
-h = {"X-API-Key": "k", "Host": "localhost"}
+# Changes come from the dashboard's own signed session; the integration key
+# only reads since 2.8.2, and is refused for a change.
+from api import dashboard_session as ds                # noqa: E402
+key_only = {"X-API-Key": "k", "Host": "localhost"}
+h = {ds.HEADER: ds.new_session(app.config["AGENTAL_DASHBOARD_KEY"]), "Host": "localhost"}
 res = client.get("/api/lan/messages", headers=h).get_json()
 check("the list says messages are supported", (res.get("supported"), res.get("max_bytes")), (True, 600))
+check("the integration key cannot send one", client.post("/api/lan/message", json={"target": KEEPER, "text": "x"}, headers=key_only).status_code, 403)
 res = client.post("/api/lan/message", json={"target": KEEPER, "text": "Off for tonight.", "keep": True}, headers=h)
 check("a message is sent from the dashboard", (res.status_code, res.get_json().get("keep")), (200, "yes"))
 res = client.post("/api/lan/message", json={"target": "not-a-mac", "text": "x"}, headers=h)

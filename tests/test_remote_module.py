@@ -373,6 +373,8 @@ try:
     check("the command menu is set",
           bool(menu) and [m["command"] for m in menu[-1]["commands"]],
           ["status", "pending", "control", "done", "check", "new", "help"])
+    # Sent just after the menu, so under a busy machine it may come a moment later.
+    wait_for(lambda: any(c[0] == "setMyDescription" for c in fake.calls))
     check("the description is set", any(c[0] == "setMyDescription" for c in fake.calls), True)
 
     print("pairing")
