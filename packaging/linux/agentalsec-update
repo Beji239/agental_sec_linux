@@ -1,0 +1,216 @@
+#!/usr/bin/python3
+# /usr/lib/agentalsec/agentalsec-update, the update helper. Runs as root, only
+# when the app hands it an installer (agentalsec-update.path watches for the
+# request), and ends when done.
+#
+# It installs a new AgentalSec installer only when it is signed by a key in
+# /usr/share/agentalsec/trusted-keys.asc, which the installed package put
+# there, is the agentalsec package, is the version asked for and is newer than
+# the one installed. Everything the app hands over is copied into a root-only
+# folder first, and only those copies are checked and installed, so the app,
+# or anything running as its person, can ask for an update but can never
+# choose what is installed. Without a valid signature nothing is installed.
+import json
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+
+HOME = "/var/lib/agentalsec"
+INBOX = f"{HOME}/inbox"
+STAGE = f"{HOME}/staging"
+STATUS = f"{HOME}/update-status.json"
+OWNER = f"{HOME}/owner"
+TRUSTED = "/usr/share/agentalsec/trusted-keys.asc"
+LOG = "/var/log/agentalsec-install.log"
+PACKAGE = "agentalsec"
+DEB_NAME = re.compile(r"^AgentalSec-Setup-(\d+\.\d+\.\d+)-amd64\.deb$")
+VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+MAX_DEB = 200 << 20
+MAX_SMALL = 64 << 10
+INSTALL_TIMEOUT = 40 * 60
+
+
+class Refused(Exception):
+    """Why this request is not installed, in plain words."""
+
+
+def log(text: str) -> None:
+    try:
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%F %T')} update: {text}\n")
+    except OSError:
+        pass
+
+
+def write_status(request_id: str, state: str, detail: str = "", version: str = "") -> None:
+    """Root's own file, readable by the app; replaced whole, never followed."""
+    body = json.dumps({"id": request_id, "state": state, "detail": detail[-2000:],
+                       "version": version, "at": time.time()})
+    tmp = f"{STATUS}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(body)
+    os.replace(tmp, STATUS)
+
+
+def owner_uid() -> int:
+    with open(OWNER, encoding="utf-8") as f:
+        name = f.read().strip()
+    import pwd
+    return pwd.getpwnam(name).pw_uid
+
+
+def read_handed(name: str, limit: int, uid: int, copy_to: str = None) -> bytes | None:
+    """A file the app put in the inbox: a plain file, the person's own, not a
+    link, within its size. Copied to copy_to when given, else returned."""
+    fd = os.open(os.path.join(INBOX, name), os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise Refused(f"{name} is not a plain file")
+        if st.st_uid != uid:
+            raise Refused(f"{name} does not belong to the person AgentalSec was installed for")
+        if st.st_size > limit:
+            raise Refused(f"{name} is larger than an installer can be")
+        if copy_to is None:
+            return os.read(fd, limit + 1)
+        out = os.open(copy_to, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(out, "wb") as dst:
+            total = 0
+            while True:
+                chunk = os.read(fd, 1 << 20)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise Refused(f"{name} is larger than an installer can be")
+                dst.write(chunk)
+        return None
+    finally:
+        os.close(fd)
+
+
+def trusted_fingerprints(trusted: str, home: str) -> set:
+    out = subprocess.run(["gpg", "--homedir", home, "--batch", "--with-colons",
+                          "--show-keys", trusted], capture_output=True, text=True, timeout=60)
+    return {line.split(":")[9] for line in out.stdout.splitlines() if line.startswith("fpr:")}
+
+
+def check_signature(deb: str, asc: str, trusted: str = None) -> str:
+    """The fingerprint of the trusted key that signed deb, or Refused."""
+    trusted = trusted or TRUSTED
+    if not os.path.isfile(trusted):
+        raise Refused("the trusted signing key is missing from this computer")
+    home = tempfile.mkdtemp(prefix="agentalsec-gpg-", dir=os.path.dirname(deb))
+    try:
+        fprs = trusted_fingerprints(trusted, home)
+        if not fprs:
+            raise Refused("the trusted signing key could not be read")
+        subprocess.run(["gpg", "--homedir", home, "--batch", "--quiet", "--import", trusted],
+                       capture_output=True, timeout=60)
+        r = subprocess.run(["gpg", "--homedir", home, "--batch", "--status-fd", "1",
+                            "--verify", asc, deb], capture_output=True, text=True, timeout=300)
+        status = r.stdout.splitlines()
+        signer = [l.split()[2] for l in status if l.startswith("[GNUPG:] VALIDSIG ")]
+        bad = [l for l in status if l.split()[1:2] and l.split()[1] in (
+            "BADSIG", "ERRSIG", "EXPKEYSIG", "REVKEYSIG", "EXPSIG", "NO_PUBKEY")]
+        if bad or r.returncode != 0 or not signer:
+            raise Refused("the installer is not signed by the AgentalSec signing key")
+        if signer[0] not in fprs:
+            raise Refused("the installer is signed by a key this computer does not trust")
+        return signer[0]
+    finally:
+        subprocess.run(["gpgconf", "--homedir", home, "--kill", "all"], capture_output=True)
+        shutil.rmtree(home, ignore_errors=True)
+
+
+def package_field(deb: str, field: str) -> str:
+    r = subprocess.run(["dpkg-deb", "-f", deb, field], capture_output=True, text=True, timeout=60)
+    return r.stdout.strip()
+
+
+def installed_version() -> str:
+    r = subprocess.run(["dpkg-query", "-W", "-f=${Version}", PACKAGE],
+                       capture_output=True, text=True, timeout=60)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def newer(a: str, b: str) -> bool:
+    return subprocess.run(["dpkg", "--compare-versions", a, "gt", b]).returncode == 0
+
+
+def check_package(deb: str, version: str) -> None:
+    if package_field(deb, "Package") != PACKAGE:
+        raise Refused("the file is not the AgentalSec installer")
+    if package_field(deb, "Architecture") != "amd64":
+        raise Refused("the installer is for another kind of computer")
+    if package_field(deb, "Version") != version:
+        raise Refused("the installer's version is not the one asked for")
+    have = installed_version()
+    if have and not newer(version, have):
+        raise Refused(f"{version} is not newer than the installed {have}")
+
+
+def install(deb: str) -> str:
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
+    r = subprocess.run(["apt-get", "install", "-y", "-q", deb], capture_output=True,
+                       text=True, timeout=INSTALL_TIMEOUT, env=env)
+    out = (r.stdout + r.stderr)[-4000:]
+    if r.returncode != 0:
+        raise Refused(f"the package manager could not install it: {out.strip().splitlines()[-1] if out.strip() else r.returncode}")
+    return out
+
+
+def main() -> int:
+    request_id = ""
+    version = ""
+    try:
+        uid = owner_uid()
+        raw = read_handed("request.json", MAX_SMALL, uid)
+        req = json.loads(raw)
+        request_id = str(req.get("id", ""))[:64]
+        version = str(req.get("version", ""))
+        deb_name, asc_name = str(req.get("deb", "")), str(req.get("asc", ""))
+        m = DEB_NAME.match(deb_name)
+        if not (VERSION.match(version) and m and m.group(1) == version
+                and asc_name == deb_name + ".asc"):
+            raise Refused("the request does not name an AgentalSec installer")
+        write_status(request_id, "checking", "Checking the signature.", version)
+        log(f"request {request_id} for {version}")
+        shutil.rmtree(STAGE, ignore_errors=True)
+        os.makedirs(STAGE, mode=0o700)
+        deb, asc = os.path.join(STAGE, deb_name), os.path.join(STAGE, asc_name)
+        read_handed(deb_name, MAX_DEB, uid, deb)
+        read_handed(asc_name, MAX_SMALL, uid, asc)
+        signer = check_signature(deb, asc)
+        check_package(deb, version)
+        log(f"{version} signed by {signer}; installing")
+        write_status(request_id, "installing", f"Signed by {signer}; installing.", version)
+        install(deb)
+        log(f"{version} installed")
+        write_status(request_id, "installed", f"Installed {version}.", version)
+        return 0
+    except Refused as e:
+        log(f"refused: {e}")
+        write_status(request_id, "refused", str(e), version)
+        return 1
+    except Exception as e:                              # noqa: BLE001
+        log(f"failed: {type(e).__name__}: {e}")
+        write_status(request_id, "failed", f"{type(e).__name__}: {e}", version)
+        return 1
+    finally:
+        shutil.rmtree(STAGE, ignore_errors=True)
+        for name in os.listdir(INBOX) if os.path.isdir(INBOX) else []:
+            try:
+                os.unlink(os.path.join(INBOX, name))
+            except OSError:
+                pass
+
+
+if __name__ == "__main__":
+    sys.exit(main())

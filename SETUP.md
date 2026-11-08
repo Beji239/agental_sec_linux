@@ -330,6 +330,13 @@ Python packages, the root helpers and sensors again where they fell behind
 code and the page reloads. **Reinstall helpers** does only the helpers. The
 button needs a folder cloned with git; a ZIP download cannot update itself.
 
+Put in with the installer, **Update now** downloads the release's installer
+and its signature instead. The update helper the installer set up checks it
+is signed with the AgentalSec key, is AgentalSec and is newer than what is
+installed, then installs it with no password and AgentalSec restarts on the
+new version. An installer that fails any of these is not installed, and the
+card says why.
+
 From a terminal it is:
 
 ```bash

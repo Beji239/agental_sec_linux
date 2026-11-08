@@ -41,6 +41,18 @@ PASSWORD_WAIT = 300
 ROOT_STEP_TIMEOUT = 1800
 AUDIT_RULES = "/etc/audit/rules.d/agentalsec.rules"
 
+# Installed with the AgentalSec installer: updates come as the next installer,
+# signed with the AgentalSec key, installed by the root update helper the
+# installer put in place. The app downloads it, checks the signature, hands
+# it over and follows the helper; the helper checks everything again.
+INSTALLED_MARK = Path("/opt/agentalsec/app/VERSION")
+UPDATE_HELPER = Path("/usr/lib/agentalsec/agentalsec-update")
+INBOX = Path("/var/lib/agentalsec/inbox")
+HELPER_STATUS = Path("/var/lib/agentalsec/update-status.json")
+TRUSTED_KEYS = Path("/usr/share/agentalsec/trusted-keys.asc")
+MAX_INSTALLER = 200 << 20
+HELPER_WAIT = 45 * 60
+
 # Set by main.py. Only the running app checks GitHub or installs anything,
 # so a test or a script reaching these paths changes nothing.
 LIVE = False
@@ -232,16 +244,25 @@ _job = {"running": False, "what": None, "started_at": None,
         "result": "", "todo": [], "restarting": False}
 
 
+def installed_copy(root: Path = None) -> bool:
+    """This person's copy of an AgentalSec put in by the installer."""
+    root = Path(root or ROOT)
+    return not (root / ".git").exists() and INSTALLED_MARK.is_file()
+
+
 def can_update(root: Path = None) -> dict:
     """Whether the button can update this folder, and why not."""
     root = Path(root or ROOT)
-    # Installed from the AgentalSec installer: an update is the next installer,
-    # opened the same way, and it keeps this person's data.
-    if not (root / ".git").exists() and Path("/opt/agentalsec/app/VERSION").is_file():
-        return {"ok": False, "installer": True, "reason": (
-            "AgentalSec was installed with its installer. To update, download the "
-            "new AgentalSec-Setup file from the releases page and open it; your "
-            "settings, keys and history stay as they are.")}
+    if installed_copy(root):
+        if not UPDATE_HELPER.is_file() or not TRUSTED_KEYS.is_file():
+            return {"ok": False, "installer": True, "reason": (
+                "The update helper is missing. Open the newest AgentalSec-Setup "
+                "file from the releases page once; it puts it back.")}
+        if not os.access(INBOX, os.W_OK | os.X_OK):
+            return {"ok": False, "installer": True, "reason": (
+                "This account cannot hand updates to the update helper; AgentalSec "
+                "was installed for another person on this computer.")}
+        return {"ok": True, "installer": True, "reason": ""}
     if not (root / ".git").exists():
         return {"ok": False, "reason": (
             "This folder is not a git clone, so it cannot update itself. "
@@ -306,6 +327,7 @@ def status() -> dict:
         "security": bool(release and release.get("security")
                          and kind in ("patch", "minor", "major")),
         "can_update": can_update(),
+        "installer": installed_copy(),
         "helpers_behind": helpers_behind(),
         "releases_page": RELEASES_PAGE,
         "job": job,
@@ -471,7 +493,132 @@ def _last_job() -> dict | None:
     return {"running": False, "step": "", "restarting": False, **data}
 
 
+def _helper_module():
+    """The root helper's own checks, so the app refuses exactly what it would."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("agentalsec_update", str(UPDATE_HELPER))
+    spec = importlib.util.spec_from_loader("agentalsec_update", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def installer_assets(release: dict, version: str) -> tuple:
+    """The installer and its signature in a release, by name, or (None, None)."""
+    want = f"AgentalSec-Setup-{version}-amd64.deb"
+    found = {a.get("name"): a.get("browser_download_url") for a in release.get("assets") or []
+             if isinstance(a, dict)}
+    deb, asc = found.get(want), found.get(want + ".asc")
+    ok = all(u and str(u).startswith(f"https://github.com/{REPO}/releases/download/")
+             for u in (deb, asc))
+    return (want, deb, asc) if ok else (want, None, None)
+
+
+def _download(url: str, dest: Path, limit: int, get=None):
+    """One asset into dest, refusing more than limit bytes."""
+    from core import safe_http
+    get = get or safe_http.get
+    tmp = dest.with_name(dest.name + ".part")
+    r = get(url, timeout=60, stream=True, headers={"User-Agent": "AgentalSec-update"})
+    done = False
+    try:
+        if r.status_code != 200:
+            raise CheckFailed(f"GitHub answered HTTP {r.status_code} for {dest.name}")
+        total = 0
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            for chunk in r.iter_content(1 << 20):
+                total += len(chunk)
+                if total > limit:
+                    raise CheckFailed(f"{dest.name} is larger than an installer can be")
+                f.write(chunk)
+        done = True
+    finally:
+        r.close()
+        if not done:
+            tmp.unlink(missing_ok=True)
+    os.replace(tmp, dest)
+    return total
+
+
+def _hand_over(request: dict):
+    """Written in place, so the helper's watcher sees it closed after writing."""
+    path = INBOX / "request.json"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(request))
+
+
+def _helper_answer(request_id: str, wait: float = HELPER_WAIT, tick: float = 2.0) -> dict:
+    """Follows the helper until it says installed, refused or failed."""
+    end, last = time.time() + wait, ""
+    while time.time() < end:
+        try:
+            st = json.loads(HELPER_STATUS.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            st = {}
+        if st.get("id") == request_id:
+            if st.get("detail") and st["detail"] != last:
+                last = st["detail"]
+                _log(last)
+            if st.get("state") in ("installed", "refused", "failed"):
+                return st
+        time.sleep(tick)
+    return {"state": "failed", "detail": "the update helper did not answer in "
+                                         f"{int(wait // 60)} minutes"}
+
+
+def _do_installer_update():
+    from core import version
+    import secrets
+    before = version.current().get("version")
+    _step("Asking GitHub for the newest installer")
+    release = _fetch_latest()
+    latest = summarise(release)["version"]
+    if kind_of(before, latest) not in ("patch", "minor", "major"):
+        return _finish(True, f"Already up to date, AgentalSec {before}.")
+    name, deb_url, asc_url = installer_assets(release, latest)
+    if not deb_url:
+        return _finish(False, f"The {latest} release has no signed installer for this "
+                              f"computer, so nothing was installed.")
+    for old in INBOX.iterdir():
+        if old.is_file() and not old.is_symlink():
+            old.unlink()
+    _step(f"Downloading AgentalSec {latest}")
+    size = _download(deb_url, INBOX / name, MAX_INSTALLER)
+    _download(asc_url, INBOX / (name + ".asc"), 64 << 10)
+    _log(f"{name}, {size // (1 << 20)} MB, and its signature")
+    _step("Checking that it is signed with the AgentalSec key")
+    helper = _helper_module()
+    try:
+        signer = helper.check_signature(str(INBOX / name), str(INBOX / (name + ".asc")),
+                                        str(TRUSTED_KEYS))
+    except helper.Refused as e:
+        return _finish(False, f"Not installed: {e}.")
+    _log(f"Signed by {signer}.")
+    _step(f"Installing AgentalSec {latest}")
+    request_id = secrets.token_hex(8)
+    _hand_over({"id": request_id, "version": latest, "deb": name, "asc": name + ".asc"})
+    answer = _helper_answer(request_id)
+    if answer.get("state") != "installed":
+        return _finish(False, f"Not installed: {answer.get('detail') or 'no reason given'}.")
+    restart = callable(RESTART)
+    msg = f"Updated from {before} to {latest}."
+    todo = []
+    if restart:
+        msg += " AgentalSec was restarted on the new version."
+    else:
+        todo.append("Restart AgentalSec: close it, then start it again from its icon.")
+    _finish(True, msg, todo, restart=restart)
+    if restart:
+        time.sleep(3)
+        RESTART("Restarting on the updated version")
+
+
 def _do_update():
+    if installed_copy():
+        return _do_installer_update()
     from core import version
     before = version.current().get("label")
     _step("Getting the new code and Python packages (scripts/update.sh)")

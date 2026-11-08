@@ -480,8 +480,10 @@ runs without one. For alerts on your phone, open the **Remote** tab, make
 your bot once with @BotFather as it shows, then press **Pair a phone** and
 scan the code with the phone's camera.
 
-To update, download the next installer and open it the same way; your
-settings, keys and history stay. To remove it, remove AgentalSec in the
+A newer release puts a dot next to the version in the top bar. **Update now**
+on the Settings tab downloads its installer, checks that it carries the
+AgentalSec signature and installs it, with no password, then AgentalSec
+restarts on the new version; your settings, keys and history stay. To remove it, remove AgentalSec in the
 Software Manager: the app stops and the helpers come out, and your
 AgentalSec folder stays in case you install it again. Removing it completely
 deletes that folder too.

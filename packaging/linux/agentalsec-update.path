@@ -1,0 +1,9 @@
+[Unit]
+Description=AgentalSec update requests from the app
+
+[Path]
+PathChanged=/var/lib/agentalsec/inbox/request.json
+Unit=agentalsec-update.service
+
+[Install]
+WantedBy=paths.target

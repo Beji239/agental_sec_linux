@@ -51,6 +51,11 @@ fi
 
 home=$(getent passwd "$user" | cut -d: -f6)
 uid=$(id -u "$user")
+
+# Updates: the app puts a signed installer here, the update helper installs it.
+install -d -m 700 -o "$user" -g "$(id -gn "$user")" /var/lib/agentalsec/inbox
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable --now agentalsec-update.path >/dev/null 2>&1 || log "the update watcher could not be switched on"
 app="$home/.local/share/agentalsec"
 bus="unix:path=/run/user/$uid/bus"
 log "installing for $user"

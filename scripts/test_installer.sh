@@ -86,6 +86,29 @@ ok 'SUDO_USER=sam DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /tmp/upd
 ok '[ "$(cat /home/sam/.local/share/agentalsec/VERSION)" = 9.9.9 ]' "sam's copy is the new version"
 ok "[ \"\$(sha256sum /home/sam/.local/share/agentalsec/.env | cut -c1-64)\" = '$before' ] && [ -s /home/sam/.local/share/agentalsec/agental_sec.db ]" "and keeps sam's keys and database"
 
+echo "an update through the update helper, as the Update button hands it over"
+# A throwaway key stands in for the AgentalSec key: root puts it where the
+# installed package keeps the one it trusts, as only root could.
+x 'export GNUPGHOME=/root/testkey; mkdir -p -m 700 $GNUPGHOME && gpg --batch -q --passphrase "" --quick-gen-key "Test <t@example.invalid>" ed25519 sign 1d && gpg --armor --export > /usr/share/agentalsec/trusted-keys.asc'
+x 'export GNUPGHOME=/root/strangerkey; mkdir -p -m 700 $GNUPGHOME && gpg --batch -q --passphrase "" --quick-gen-key "Stranger <s@example.invalid>" ed25519 sign 1d'
+x 'rm -rf /tmp/u2 && mkdir /tmp/u2 && dpkg-deb -R /tmp/setup.deb /tmp/u2 && echo 9.9.10 > /tmp/u2/opt/agentalsec/app/VERSION && sed -i "s/^Version: .*/Version: 9.9.10/" /tmp/u2/DEBIAN/control && dpkg-deb --root-owner-group -b /tmp/u2 /tmp/AgentalSec-Setup-9.9.10-amd64.deb >/dev/null && chmod 644 /tmp/AgentalSec-Setup-9.9.10-amd64.deb'
+x 'GNUPGHOME=/root/strangerkey gpg --batch -q --yes --armor --detach-sign -o /tmp/stranger.asc /tmp/AgentalSec-Setup-9.9.10-amd64.deb && GNUPGHOME=/root/testkey gpg --batch -q --yes --armor --detach-sign -o /tmp/good.asc /tmp/AgentalSec-Setup-9.9.10-amd64.deb && chmod 644 /tmp/*.asc'
+ok 'systemctl is-active agentalsec-update.path' "the update watcher is on"
+hand() {
+    as_sam "cp /tmp/AgentalSec-Setup-9.9.10-amd64.deb /var/lib/agentalsec/inbox/ && cp /tmp/$1 /var/lib/agentalsec/inbox/AgentalSec-Setup-9.9.10-amd64.deb.asc && printf '{\"id\": \"$2\", \"version\": \"9.9.10\", \"deb\": \"AgentalSec-Setup-9.9.10-amd64.deb\", \"asc\": \"AgentalSec-Setup-9.9.10-amd64.deb.asc\"}' > /var/lib/agentalsec/inbox/request.json"
+    for _ in $(seq 300); do x "grep -q '\"id\": \"$2\"' /var/lib/agentalsec/update-status.json && grep -q -E '\"state\": \"(installed|refused|failed)\"' /var/lib/agentalsec/update-status.json" && break; sleep 1; done
+}
+hand stranger.asc s1
+ok 'grep -q "\"state\": \"refused\"" /var/lib/agentalsec/update-status.json && [ "$(dpkg-query -W -f="\${Version}" agentalsec)" = 9.9.9 ]' "an installer signed by another key is refused, nothing installed"
+hand good.asc g1
+ok 'grep -q "\"state\": \"installed\"" /var/lib/agentalsec/update-status.json && [ "$(dpkg-query -W -f="\${Version}" agentalsec)" = 9.9.10 ]' "a signed one is installed, with no password"
+ok '[ "$(cat /home/sam/.local/share/agentalsec/VERSION)" = 9.9.10 ] && [ -s /home/sam/.local/share/agentalsec/.env ]' "sam's copy is the new version and keeps sam's keys"
+ok '[ -z "$(ls -A /var/lib/agentalsec/inbox)" ] && [ ! -e /var/lib/agentalsec/staging ]' "nothing is left lying in the hand-over or staging folders"
+ok '! grep -q "Test <t@example.invalid>" <(gpg --show-keys /usr/share/agentalsec/trusted-keys.asc 2>/dev/null) && cmp -s /usr/share/agentalsec/trusted-keys.asc /opt/agentalsec/app/assets/signing/agentalsec-signing-key.asc' "the update put the AgentalSec key back as the one trusted"
+x 'GNUPGHOME=/root/testkey gpg --armor --export > /usr/share/agentalsec/trusted-keys.asc'
+hand good.asc g2
+ok 'grep -q "not newer than the installed 9.9.10" /var/lib/agentalsec/update-status.json' "the same version twice is refused"
+
 echo "removing"
 as_sam 'agentalsec' ; for _ in $(seq 90); do x listening && break; sleep 1; done
 ok 'DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq agentalsec > /tmp/remove.out 2>&1' "it removes"

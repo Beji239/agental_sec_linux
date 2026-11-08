@@ -13,4 +13,9 @@ if [ "$1" = purge ]; then
     rm -rf /var/lib/agentalsec /var/log/agentalsec-install.log
 fi
 update-desktop-database -q /usr/share/applications >/dev/null 2>&1 || true
+systemctl daemon-reload >/dev/null 2>&1 || true
+# A refused update leaves the helper marked failed; gone, it is forgotten too.
+for u in agentalsec-update.service agentalsec-update.path; do
+    systemctl reset-failed "$u" >/dev/null 2>&1 || true
+done
 exit 0

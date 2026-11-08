@@ -1,0 +1,8 @@
+[Unit]
+Description=AgentalSec update helper: installs a new installer signed by the AgentalSec key
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/lib/agentalsec/agentalsec-update
+TimeoutStartSec=45min

@@ -44,6 +44,11 @@ for n in 16 22 24 32 36 48 64 128 256; do
     install -D -m 644 "assets/logo/png/orca_tile_ink_$n.png" \
         "$PKG/usr/share/icons/hicolor/${n}x${n}/apps/agentalsec.png"
 done
+echo "== the update helper and the key it trusts"
+install -D -m 755 packaging/linux/agentalsec-update "$PKG/usr/lib/agentalsec/agentalsec-update"
+install -D -m 644 packaging/linux/agentalsec-update.path "$PKG/usr/lib/systemd/system/agentalsec-update.path"
+install -D -m 644 packaging/linux/agentalsec-update.service "$PKG/usr/lib/systemd/system/agentalsec-update.service"
+install -D -m 644 assets/signing/agentalsec-signing-key.asc "$PKG/usr/share/agentalsec/trusted-keys.asc"
 for s in postinst prerm postrm; do
     install -m 755 "packaging/linux/$s" "$PKG/DEBIAN/$s"
 done
@@ -55,7 +60,7 @@ Version: $VERSION
 Architecture: amd64
 Maintainer: Behzad Rabiei <274306789+Beji239@users.noreply.github.com>
 Installed-Size: $size
-Depends: python3 (>= 3.12), python3 (<< 3.13), python3-pip, sudo, rsync, libpcap0.8, iproute2, net-tools, nftables, iptables, iputils-ping, openssh-client, pkexec | policykit-1, libnotify-bin, zenity, xdg-utils, procps, systemd
+Depends: python3 (>= 3.12), python3 (<< 3.13), python3-pip, sudo, gpg, rsync, libpcap0.8, iproute2, net-tools, nftables, iptables, iputils-ping, openssh-client, pkexec | policykit-1, libnotify-bin, zenity, xdg-utils, procps, systemd
 Recommends: auditd
 Section: net
 Priority: optional

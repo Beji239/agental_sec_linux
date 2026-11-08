@@ -9,6 +9,8 @@ case "$1" in
     *) exit 0 ;;
 esac
 
+systemctl disable --now agentalsec-update.path >/dev/null 2>&1 || true
+
 user=$(cat /var/lib/agentalsec/owner 2>/dev/null || true)
 [ -n "$user" ] && getent passwd "$user" >/dev/null || exit 0
 home=$(getent passwd "$user" | cut -d: -f6)
