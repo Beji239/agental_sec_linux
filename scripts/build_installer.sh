@@ -53,7 +53,7 @@ cat > "$PKG/DEBIAN/control" <<EOF
 Package: agentalsec
 Version: $VERSION
 Architecture: amd64
-Maintainer: AgentalSec <274306789+Beji239@users.noreply.github.com>
+Maintainer: Behzad Rabiei <274306789+Beji239@users.noreply.github.com>
 Installed-Size: $size
 Depends: python3 (>= 3.12), python3 (<< 3.13), python3-pip, sudo, rsync, libpcap0.8, iproute2, net-tools, nftables, iptables, iputils-ping, openssh-client, pkexec | policykit-1, libnotify-bin, zenity, xdg-utils, procps, systemd
 Recommends: auditd
