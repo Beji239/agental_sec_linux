@@ -94,8 +94,18 @@ if [ ! -s /var/lib/agentalsec/launcher ]; then
     fi
 fi
 
+# An AgentalSec running on the old code restarts on the new one, unless its
+# Update button asked for this install; then it restarts itself.
+running=no
+for p in $(pgrep -u "$user" -x python3 2>/dev/null); do
+    [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$app" ] && running=yes
+done
+if [ "$running" = yes ] && grep -q '"state": "installing"' /var/lib/agentalsec/update-status.json 2>/dev/null; then
+    running=no
+fi
+
 # The first time, the dashboard opens by itself.
-if [ "$first" = yes ] && [ -S "/run/user/$uid/bus" ]; then
+if { [ "$first" = yes ] && [ -S "/run/user/$uid/bus" ]; } || [ "$running" = yes ]; then
     runuser -u "$user" -- env HOME="$home" XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="$bus" \
         DISPLAY="${DISPLAY:-:0}" setsid /usr/bin/agentalsec >/dev/null 2>&1 </dev/null &
 fi

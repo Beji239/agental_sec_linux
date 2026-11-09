@@ -33,3 +33,4 @@ ebpf/*.o
 coverage/
 .coverage
 .coverage.*
+/.new-version

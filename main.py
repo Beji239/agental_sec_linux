@@ -1997,6 +1997,10 @@ def _launcher_hint():
     """
     if os.environ.get("AGENTAL_IN_CONTAINER"):
         return None
+    # The installer puts its own icon and menu entry in place.
+    from core import updater
+    if updater.installed_copy(PROJECT_ROOT):
+        return None
     home = Path.home()
     user = os.environ.get("SUDO_USER") or os.environ.get("PKEXEC_UID")
     if os.geteuid() == 0 and user:
@@ -2091,6 +2095,11 @@ def main(argv=None):
     logger.info(f"Project root: {PROJECT_ROOT}")
     logger.info(f"Python {sys.version}")
     logger.info(f"Platform: {sys.platform}")
+    # Running the code the installer last put here, so no restart is owed.
+    try:
+        (PROJECT_ROOT / ".new-version").unlink(missing_ok=True)
+    except OSError:
+        pass
     if not LOG_FILE_ACTIVE:
         logger.warning("Running WITHOUT a durable log file. See the error above.")
     logger.info("")

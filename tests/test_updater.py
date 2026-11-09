@@ -123,8 +123,11 @@ check("unknown job refused", updater.start_job("rm")["started"], False)
 updater.LIVE = False
 
 tmp = pathlib.Path(tempfile.mkdtemp(prefix="updater."))
+# An installed AgentalSec on the test machine must not change this answer.
+mark, updater.INSTALLED_MARK = updater.INSTALLED_MARK, tmp / "no-such-install"
 check("no git clone, no update",
       "not a git clone" in updater.can_update(tmp)["reason"], True)
+updater.INSTALLED_MARK = mark
 
 print("the button, with the commands recorded")
 UPDATE_OUT = """Looking for updates on main...
