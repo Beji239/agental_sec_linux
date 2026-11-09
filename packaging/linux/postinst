@@ -98,7 +98,11 @@ fi
 # Update button asked for this install; then it restarts itself.
 running=no
 for p in $(pgrep -u "$user" -x python3 2>/dev/null); do
-    [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$app" ] && running=yes
+    [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$app" ] || continue
+    case "$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null)" in
+        *" --capture "*|*" --check "*) ;;
+        *python3\ main.py\ *|*python3\ "$app"/main.py\ *) running=yes ;;
+    esac
 done
 if [ "$running" = yes ] && grep -q '"state": "installing"' /var/lib/agentalsec/update-status.json 2>/dev/null; then
     running=no

@@ -85,10 +85,17 @@ port() {
 }
 
 running_pid() {
-    local p
+    # Started from the icon it is "python3 main.py"; after the Update button's
+    # restart it is the full path of both. The sensors' own processes are not it.
+    local p args
     for p in $(pgrep -u "$(id -u)" -x python3 2>/dev/null); do
-        tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q -- "^python3 $HOME_APP/main.py \|^python3 main.py " || continue
-        [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$HOME_APP" ] && { echo "$p"; return 0; }
+        [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$HOME_APP" ] || continue
+        args=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null)
+        case "$args" in
+            *" --capture "*|*" --check "*) continue ;;
+            python3\ main.py\ *|*/python3\ main.py\ *|python3\ "$HOME_APP"/main.py\ *|*/python3\ "$HOME_APP"/main.py\ *)
+                echo "$p"; return 0 ;;
+        esac
     done
     return 1
 }
