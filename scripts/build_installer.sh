@@ -8,6 +8,8 @@
 # It carries the committed code (git archive of HEAD, so only what is in git),
 # the Python libraries as ready-built files for this Python, the launcher, the
 # menu entry and the icons. The build happens in RUN_FOLDER, never in here.
+# The kernel camera is compiled here too, so the build needs clang, libbpf-dev
+# and bpftool.
 #
 #     ./scripts/build_installer.sh RUN_FOLDER
 set -euo pipefail
@@ -29,6 +31,10 @@ mkdir -p "$PKG/DEBIAN" "$PKG/opt/agentalsec/app" "$PKG/usr/bin" "$PKG/usr/share/
 
 echo "== the code, as committed"
 git archive HEAD | tar -x -C "$PKG/opt/agentalsec/app"
+
+echo "== the kernel camera"
+bash ebpf/build.sh >"$RUN/ebpf-build.log" 2>&1 || { cat "$RUN/ebpf-build.log" >&2; exit 1; }
+install -m 644 ebpf/ebpf_monitor.bpf.o "$PKG/opt/agentalsec/app/ebpf/ebpf_monitor.bpf.o"
 
 echo "== the libraries"
 mkdir -p "$RUN/wheels"
@@ -60,8 +66,7 @@ Version: $VERSION
 Architecture: amd64
 Maintainer: Behzad Rabiei <274306789+Beji239@users.noreply.github.com>
 Installed-Size: $size
-Depends: python3 (>= 3.12), python3 (<< 3.13), python3-pip, sudo, gpg, rsync, libpcap0.8, iproute2, net-tools, nftables, iptables, iputils-ping, openssh-client, pkexec | policykit-1, libnotify-bin, zenity, xdg-utils, procps, systemd
-Recommends: auditd
+Depends: python3 (>= 3.12), python3 (<< 3.13), python3-pip, sudo, gpg, rsync, libpcap0.8, iproute2, net-tools, nftables, iptables, iputils-ping, openssh-client, pkexec | policykit-1, libnotify-bin, zenity, xdg-utils, procps, systemd, auditd, libbpf1
 Section: net
 Priority: optional
 Homepage: https://github.com/Beji239/agental_sec_linux

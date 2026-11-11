@@ -66,8 +66,10 @@ if ! runuser -u "$user" -- env HOME="$home" /usr/bin/agentalsec --setup >&3 2>&1
 fi
 
 # The helpers. Run from their copy, they bind to that copy and to that person.
+# The audit watches go last, so they do not record the install itself.
 if [ -x "$app/scripts/install_capture_service.sh" ]; then
-    for h in install_capture_service install_read_helper install_action_helper; do
+    for h in install_capture_service install_read_helper install_action_helper \
+             install_ebpf_camera install_audit_rules; do
         if SUDO_USER="$user" "$app/scripts/$h.sh" --apply </dev/null >&3 2>&1; then
             log "$h: installed"
             echo "$h" >> /var/lib/agentalsec/helpers.new

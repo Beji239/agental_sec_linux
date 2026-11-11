@@ -47,7 +47,12 @@ x 'id sam >/dev/null 2>&1 || useradd -m -s /bin/bash sam; mkdir -p /home/sam/Des
 docker cp "$DEB" "$c:/tmp/setup.deb"
 
 echo "installing, as sam would"
-x 'apt-get update -qq >/dev/null 2>&1'
+got=no
+for _ in 1 2 3; do
+    x 'apt-get update -qq 2>&1 | grep -q "^[WE]:"' || { got=yes; break; }
+    sleep 5
+done
+[ "$got" = yes ] || { echo "The container could not reach the package sources; nothing was tested." >&2; exit 1; }
 ok 'SUDO_USER=sam DEBIAN_FRONTEND=noninteractive apt-get install -y -qq /tmp/setup.deb > /tmp/install.out 2>&1' "the installer installs, with what it needs"
 ok '[ -x /usr/bin/agentalsec ] && [ -f /usr/share/applications/agentalsec.desktop ]' "the launcher and the menu entry are in place"
 ok '[ -f /usr/share/icons/hicolor/256x256/apps/agentalsec.png ]' "and the icon"
@@ -59,6 +64,10 @@ ok '! grep -q "Terminal=true" /usr/share/applications/agentalsec.desktop' "and i
 ok 'systemctl cat agentalsec-capture.service agentalsec-names.service >/dev/null' "the capture helper is installed"
 ok 'ls /etc/sudoers.d | grep -q agentalsec' "the read helper is installed"
 ok '[ -f /usr/share/polkit-1/actions/org.agentalsec.action-helper.policy ] || ls /usr/share/polkit-1/actions | grep -q agentalsec' "the action helper is installed"
+ok 'systemctl cat agentalsec-ebpf-camera.service >/dev/null && cmp -s /home/sam/.local/share/agentalsec/ebpf/ebpf_monitor.bpf.o /usr/local/lib/agentalsec/ebpf/ebpf_monitor.bpf.o' "the kernel camera is installed, built by the installer"
+ok '! systemctl is-enabled --quiet agentalsec-ebpf-camera && ! systemctl is-active --quiet agentalsec-ebpf-camera' "and it is not left running or set to start at boot"
+# A container cannot load audit rules into the kernel, so only the file is checked.
+ok 'grep -q "^-w /etc/sudoers -p wa -k agentalsec" /etc/audit/rules.d/agentalsec.rules' "the audit watches are written"
 x 'cat /var/log/agentalsec-install.log' | sed 's/^/        /' | tail -8
 
 echo "opening AgentalSec, as a click on the icon"
@@ -77,7 +86,7 @@ ok "[ '$n1' = '$n2' ]" "a second click opens the same AgentalSec, not another"
 echo "stopping"
 as_sam 'agentalsec --stop'
 for _ in $(seq 120); do x listening || break; sleep 1; done
-ok '! listening && ! pgrep -u sam -x python3' "it stops, with nothing left running"
+ok '! listening && ! pgrep -u sam -x python3 && ! systemctl is-active --quiet agentalsec-ebpf-camera' "it stops, with nothing left running"
 
 echo "an update keeps sam's data"
 before=$(x 'sha256sum /home/sam/.local/share/agentalsec/.env | cut -c1-64')
@@ -114,6 +123,7 @@ as_sam 'agentalsec' ; for _ in $(seq 90); do x listening && break; sleep 1; done
 ok 'DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq agentalsec > /tmp/remove.out 2>&1' "it removes"
 ok '! pgrep -u sam -x python3 && ! listening' "the running app was stopped"
 ok '! systemctl cat agentalsec-capture.service >/dev/null 2>&1 && ! ls /etc/sudoers.d | grep -q agentalsec' "the helpers are gone"
+ok '! systemctl cat agentalsec-ebpf-camera.service >/dev/null 2>&1 && [ ! -e /usr/local/lib/agentalsec/ebpf ] && [ ! -e /etc/audit/rules.d/agentalsec.rules ]' "the kernel camera and the audit watches are gone"
 ok '! systemctl list-units --all | grep -q agentalsec' "nothing of it is left to run"
 ok '[ ! -e /home/sam/Desktop/agentalsec.desktop ] && [ ! -e /usr/bin/agentalsec ]' "the icon and the launcher are gone"
 ok '[ -s /home/sam/.local/share/agentalsec/.env ]' "sam's data stays for a reinstall"

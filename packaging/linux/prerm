@@ -27,7 +27,8 @@ for p in $(pgrep -u "$user" -x python3 2>/dev/null); do
     [ "$(readlink "/proc/$p/cwd" 2>/dev/null)" = "$app" ] && kill -9 "$p" 2>/dev/null || true
 done
 
-for h in install_action_helper install_read_helper install_capture_service; do
+for h in install_audit_rules install_ebpf_camera install_action_helper \
+         install_read_helper install_capture_service; do
     if [ -x "$app/scripts/$h.sh" ]; then
         SUDO_USER="$user" "$app/scripts/$h.sh" --uninstall </dev/null >>/var/log/agentalsec-install.log 2>&1 || true
     fi
