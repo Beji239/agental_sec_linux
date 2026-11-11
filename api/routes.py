@@ -557,8 +557,12 @@ def register_routes(app):
     @app.route("/api/version")
     @require_api_key
     def app_version():
+        import os
         from core import version
-        return jsonify(version.current())
+        # pid and shutting_down let a new start wait for a copy still closing.
+        return jsonify({**version.current(), "pid": os.getpid(),
+                        "shutting_down": bool(getattr(
+                            agent_loop, "_shutting_down", False))})
 
     # Updates from GitHub: the daily check's answer, the Update button and
     # its progress. core/updater.py does the work.

@@ -125,6 +125,24 @@ f.st["engine"] = {"installed": False}
 check("a scanner with no engine installed is off",
       sw.assess("x", f, T)["state"], "off")
 f = Fake(started_at=T)
+f.st["auditd"] = {"installed": False, "running": False}
+check("no audit feed installed is off",
+      sw.assess("x", f, T)["state"], "off")
+f.st["auditd"] = {"installed": False, "running": True}
+check("but a readable audit log without auditd still counts",
+      sw.assess("x", f, T)["state"], "ok")
+f.st["auditd"] = {"installed": True, "running": False}
+check("and an installed feed is judged by its polls",
+      sw.assess("x", f, T)["state"], "ok")
+f = Fake(started_at=T)
+f.st["camera"] = {"reachable": False, "events_db": str(tmp / "nothing.db")}
+check("no camera file at all is off",
+      sw.assess("x", f, T)["state"], "off")
+(tmp / "camera.db").write_text("")
+f.st["camera"] = {"reachable": False, "events_db": str(tmp / "camera.db")}
+check("a camera file that cannot be read is not called uninstalled",
+      sw.assess("x", f, T)["state"], "ok")
+f = Fake(started_at=T)
 f.lv["started"] = False
 f.st = {"note": "No router agent is configured."}
 check("never started is off", sw.assess("x", f, T)["state"], "off")

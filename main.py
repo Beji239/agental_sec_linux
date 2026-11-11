@@ -1892,6 +1892,95 @@ def _port_holder(host: str, port: int) -> dict:
     return out
 
 
+def _dashboard_answer(host: str, port: int, api_key: str) -> dict | None:
+    """What the AgentalSec on host:port says about itself (pid and
+    shutting_down), or None when nothing answered. Asked with the read key,
+    so it works even when that copy runs as root."""
+    import urllib.request
+
+    if not api_key:
+        return None
+    if host in ("0.0.0.0", "::", ""):
+        host = "127.0.0.1"
+    where = f"[{host}]" if ":" in host else host
+    req = urllib.request.Request(f"http://{where}:{port}/api/version",
+                                 headers={"X-API-Key": api_key})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+_PID_FILE = _LOG_DIR / "agentalsec.pid"
+
+
+def _previous_copy_pid() -> int:
+    """The pid in the pid file when that process is still an AgentalSec,
+    else 0. Its command line is readable even when it runs as root."""
+    try:
+        pid = int(_PID_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return 0
+    if pid <= 0 or pid == os.getpid():
+        return 0
+    try:
+        args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+    except OSError:
+        return 0
+    if not any(a.endswith(b"main.py") for a in args) or b"--capture" in args:
+        return 0
+    return pid
+
+
+def _write_pid_file() -> None:
+    """Replaced, not rewritten: a root run's file is still removable here."""
+    try:
+        _PID_FILE.unlink(missing_ok=True)
+        _PID_FILE.write_text(f"{os.getpid()}\n")
+        os.chmod(_PID_FILE, 0o644)
+    except OSError as e:
+        logger.debug(f"could not write {_PID_FILE}: {e}")
+
+
+def _wait_for_closing_copy(host: str, port: int, api_key: str, taken: bool,
+                           limit: float = 180.0) -> bool:
+    """
+    When the last copy is still closing, wait for its process to end. Its
+    final rollup can take a minute, and starting earlier would share the
+    database with it and let its exit stop the sensor services this start
+    has just started. A dashboard stop keeps answering while it closes and
+    says so. A signal closes on the thread that serves the dashboard, so that
+    copy stops answering, or lets the port go first; then the pid file names
+    it. True when it ended in time.
+    """
+    pid = _previous_copy_pid()
+    if taken:
+        answer = _dashboard_answer(host, port, api_key)
+        if answer is not None:
+            if answer.get("shutting_down") is not True:
+                return False
+            try:
+                pid = int(answer.get("pid") or 0) or pid
+            except (TypeError, ValueError):
+                pass
+    if not pid:
+        return False
+    logger.info(f"The last AgentalSec (pid {pid}) is still closing and "
+                f"saving its final summary. Waiting for it to finish, up to "
+                f"{int(limit // 60)} minutes...")
+    deadline = time.time() + limit
+    while time.time() < deadline:
+        if not os.path.exists(f"/proc/{pid}"):
+            logger.info("It has closed. Starting.")
+            return True
+        time.sleep(1)
+    logger.error(f"The last AgentalSec (pid {pid}) is still closing after "
+                 f"{int(limit // 60)} minutes.")
+    return False
+
+
 def _bind_listener(host: str, port: int):
     """
     Bind and listen on host:port, and hand the socket back.
@@ -2137,8 +2226,12 @@ def main(argv=None):
     _flask = config.get("flask", {})
     _host, _port = _flask.get("host", "127.0.0.1"), int(_flask.get("port", 5000))
     _held = _port_holder(_host, _port)
+    if _wait_for_closing_copy(_host, _port, resolved["app_api_key"],
+                              bool(_held.get("taken"))):
+        _held = _port_holder(_host, _port)
     if _held.get("taken"):
         return _refuse_busy_port(_host, _port, _held)
+    _write_pid_file()
 
     # The sensor services run only while the app runs, and get a few seconds
     # to settle before the modules read them. Stopped again at exit.

@@ -8,6 +8,7 @@
 # desktop notice, so nothing here talks to either directly.
 
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -110,6 +111,17 @@ def assess(name: str, mod, now: float = None) -> dict | None:
     eng = st.get("engine")
     if isinstance(eng, dict) and eng.get("installed") is False:
         return row("off", "its scanning engine is not installed")
+    # A reader whose feed was never installed on this machine has nothing to
+    # read, so it is not counted as watching. A readable audit log still
+    # counts even with auditd itself missing.
+    aud = st.get("auditd")
+    if isinstance(aud, dict) and aud.get("installed") is False \
+            and not aud.get("running"):
+        return row("off", "the kernel audit feed is not installed")
+    cam = st.get("camera")
+    if isinstance(cam, dict) and not cam.get("reachable") \
+            and cam.get("events_db") and not os.path.exists(cam["events_db"]):
+        return row("off", "the kernel camera is not installed")
     if st.get("_error"):
         return row("quiet", f"could not report its own health ({st['_error']})")
     if st.get("blind"):
