@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -39,6 +40,19 @@ CALL_TIMEOUT = 15.0
 # module never sees the model key or the dashboard key.
 _ENV_PASS = ("PATH", "HOME", "LANG", "LC_ALL", "TZ", "SSL_CERT_FILE",
              "SSL_CERT_DIR")
+# The app's own keys and settings. A manifest naming one is refused, so a
+# module can neither read nor overwrite them from its tab.
+_HOST_ENV = frozenset((
+    "AGENTAL_API_KEY", "AGENTAL_APP_API_KEY", "AGENTAL_DASHBOARD_KEY",
+    "AGENTAL_DEEPSEEK_API_KEY", "AGENTAL_SSH_KEY_PATH", "AGENTAL_ROUTER_COMMUNITY",
+    "AGENTAL_ABUSEIPDB_KEY", "AGENTAL_ABUSECH_KEY", "AGENTAL_OTX_KEY",
+    "AGENTAL_GREYNOISE_KEY", "AGENTAL_IPAPI_KEY", "AGENTAL_NVD_API_KEY",
+    "AGENTAL_TAVILY_KEY", "AGENTAL_SERPAPI_KEY", "AGENTAL_GOOGLE_CSE_KEY",
+    "AGENTAL_GOOGLE_CSE_CX", "AGENTAL_SESSION_ID", "AGENTAL_ROOT",
+    "AGENTAL_CONFIG", "AGENTAL_ALLOWED_HOSTS", "AGENTAL_MODULES",
+    "AGENTAL_PROVIDER_URL", "AGENTAL_MODEL", "AGENTAL_ENV_PLAINTEXT",
+    "AGENTAL_FEATURE_CONTROLS", "AGENTAL_SHUTDOWN", "AGENTAL_APP_VERSION",
+))
 
 _lock = threading.RLock()
 _running = {}
@@ -68,11 +82,25 @@ def _app_version() -> str:
     return version.read_file() or "0.0.0"
 
 
+def _list(value) -> list:
+    return value if isinstance(value, list) else []
+
+
+def _module_secret(name: str, env) -> bool:
+    """A key the module may have: AGENTAL_<MODULE>_..., never one of the app's."""
+    return (isinstance(env, str) and bool(_ENV_NAME.match(env))
+            and env.startswith(f"AGENTAL_{name.upper()}_")
+            and env not in _HOST_ENV and not env.startswith("AGENTAL_MODULE_"))
+
+
 def _read_manifest(folder: Path) -> dict | None:
     try:
         data = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         logger.warning(f"Module folder {folder.name} has no readable manifest: {e}")
+        return None
+    if not isinstance(data, dict):
+        logger.warning(f"Module folder {folder.name}: the manifest is not a JSON object.")
         return None
     name = data.get("name")
     if not isinstance(name, str) or not _NAME.match(name) or name != folder.name:
@@ -80,15 +108,20 @@ def _read_manifest(folder: Path) -> dict | None:
                        f"match the folder name.")
         return None
     entry = data.get("entry") or "service.py"
-    if "/" in entry or not (folder / entry).is_file():
+    if not isinstance(entry, str) or "/" in entry or not (folder / entry).is_file():
         logger.warning(f"Module {name}: entry file {entry} is missing.")
         return None
-    secrets_ = [s for s in (data.get("secrets") or [])
-                if isinstance(s, str) and _ENV_NAME.match(s)]
+    asked = _list(data.get("secrets"))
+    secrets_ = [s for s in asked if _module_secret(name, s)]
+    for env in asked:
+        if env not in secrets_:
+            logger.warning(f"Module {name}: key {str(env)[:70]} is not one a module "
+                           f"may have, so it is not given.")
     ui = data.get("ui")
-    if ui and ("/" in ui or not (folder / ui).is_file()):
+    if not isinstance(ui, str) or "/" in ui or not (folder / ui).is_file():
         ui = None
-    decides = [k for k in (data.get("decides") or []) if k in DECISION_KINDS]
+    decides = [k for k in _list(data.get("decides"))
+               if isinstance(k, str) and k in DECISION_KINDS]
     need = str(data.get("app_min") or "0.0.0")
     fits = _version_tuple(_app_version()) >= _version_tuple(need)
     return {
@@ -97,8 +130,8 @@ def _read_manifest(folder: Path) -> dict | None:
         "tab": str(data.get("tab") or data.get("title") or name.title())[:16],
         "version": str(data.get("version") or "0.0.0")[:20],
         "summary": str(data.get("summary") or "")[:600],
-        "ram_mb": data.get("ram_mb"),
-        "needs": [str(n)[:120] for n in (data.get("needs") or [])][:8],
+        "ram_mb": data.get("ram_mb") if isinstance(data.get("ram_mb"), (int, float)) else None,
+        "needs": [str(n)[:120] for n in _list(data.get("needs"))][:8],
         "secrets": secrets_,
         "decides": decides,
         "agent_chat": data.get("agent_chat") is True,
@@ -118,7 +151,11 @@ def discover() -> dict:
         return found
     for folder in sorted(MODULES_DIR.iterdir()):
         if folder.is_dir() and _NAME.match(folder.name):
-            man = _read_manifest(folder)
+            try:
+                man = _read_manifest(folder)
+            except Exception as e:                      # noqa: BLE001
+                logger.warning(f"Module folder {folder.name} was skipped: {e}")
+                man = None
             if man:
                 found[man["name"]] = man
     return found
@@ -133,20 +170,55 @@ def _read_switches() -> dict:
 
 
 def _write_switches(data: dict) -> None:
+    from core.private_file import replace_private
     DATA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    tmp = SWITCHES.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(tmp, SWITCHES)
+    replace_private(SWITCHES, json.dumps(data, indent=2, sort_keys=True))
+    _give_back(DATA_DIR, SWITCHES)
 
 
 def is_on(name: str) -> bool:
     return _read_switches().get(name, False)
 
 
+def run_as() -> tuple | None:
+    """(uid, gid, home) modules run as when the app runs as root: the person
+    who owns this folder. None when the app is not root, or the folder is
+    root's own install."""
+    if os.geteuid() != 0:
+        return None
+    import pwd
+    try:
+        uid = int(os.environ.get("SUDO_UID") or PROJECT_ROOT.stat().st_uid)
+        user = pwd.getpwuid(uid)
+    except (OSError, ValueError, KeyError):
+        return None
+    if uid == 0:
+        return None
+    return user.pw_uid, user.pw_gid, user.pw_dir
+
+
+def _give_back(*paths: Path) -> None:
+    """Under root, hands what modules use back to the person they run as."""
+    who = run_as()
+    if not who:
+        return
+    for path in paths:
+        try:
+            st = os.lstat(path)
+            if stat.S_ISLNK(st.st_mode) or (not stat.S_ISDIR(st.st_mode) and st.st_nlink > 1):
+                continue
+            os.chown(path, who[0], who[1], follow_symlinks=False)
+        except OSError as e:
+            logger.debug(f"Could not hand {path} back: {e}")
+
+
 def data_dir(name: str) -> Path:
     path = DATA_DIR / name
+    if DATA_DIR.is_symlink() or path.is_symlink():
+        raise OSError(f"{path} is a link, not the module's own folder")
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path, 0o700)
+    _give_back(DATA_DIR, path)
     return path
 
 
@@ -156,11 +228,14 @@ def socket_path(name: str) -> Path:
     path = DATA_DIR / name / "module.sock"
     if len(str(path)) < 100:
         return path
-    run = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    who = run_as()
+    uid = who[0] if who else os.getuid()
+    run = (None if who else os.environ.get("XDG_RUNTIME_DIR")) or f"/run/user/{uid}"
     if not os.path.isdir(run):
         return path
     folder = Path(run) / "agentalsec-modules"
     folder.mkdir(mode=0o700, exist_ok=True)
+    _give_back(folder)
     return folder / f"{name}.sock"
 
 
@@ -174,6 +249,9 @@ def _rotate_log(path: Path) -> None:
 
 def _child_env(man: dict, token: str) -> dict:
     env = {k: os.environ[k] for k in _ENV_PASS if os.environ.get(k)}
+    who = run_as()
+    if who:
+        env["HOME"] = who[2]
     for name in man["secrets"]:
         if os.environ.get(name):
             env[name] = os.environ[name]
@@ -211,15 +289,20 @@ def start(name: str) -> dict:
         LOG_DIR.mkdir(exist_ok=True)
         log_path = LOG_DIR / f"module-{name}.log"
         _rotate_log(log_path)
+        # Under root a module still runs as the person, never as root.
+        who = run_as()
+        drop = {"user": who[0], "group": who[1], "extra_groups": []} if who else {}
         try:
-            log = open(log_path, "ab")
+            log = os.fdopen(os.open(log_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT
+                                    | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600), "ab")
+            _give_back(log_path)
             # stdin stays open for the module's whole life: when the app goes,
             # even killed, the pipe closes and the module stops by itself.
             proc = subprocess.Popen(
                 [sys.executable, "-B", "-s", "-E", str(man["folder"] / man["entry"])],
                 cwd=str(man["folder"]), env=_child_env(man, token),
                 stdin=subprocess.PIPE, stdout=log, stderr=log,
-                close_fds=True)
+                close_fds=True, **drop)
             log.close()
         except OSError as e:
             logger.error(f"Module {name} could not start: {e}")

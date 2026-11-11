@@ -184,6 +184,37 @@ shutil.copy(str(good) + ".asc", inbox / "AgentalSec-Setup-2.10.1-amd64.deb.asc")
 code = helper.main()
 st = json.loads((state / "status.json").read_text())
 check("a link handed over in place of the installer is not followed", (code, st["state"], installed), (1, "failed", []))
+# A pipe where the request should be cannot hold the helper.
+for f in inbox.iterdir():
+    f.unlink()
+os.mkfifo(inbox / "request.json")
+import signal
+signal.signal(signal.SIGALRM, lambda *a: (_ for _ in ()).throw(TimeoutError("blocked")))
+signal.alarm(10)
+try:
+    code = helper.main()
+    st = json.loads((state / "status.json").read_text())
+    got = (code, st["state"])
+except TimeoutError:
+    got = "blocked"
+finally:
+    signal.alarm(0)
+check("a pipe handed over as the request does not block the helper", got, (1, "refused"))
+(inbox / "request.json").unlink()
+# A new request handed over while the last one installs is kept for the next run.
+def install_and_hand_again(deb):
+    os.replace(inbox / "request.json", inbox / "old.json")
+    (inbox / "request.json").write_text(json.dumps({"id": "r3"}))
+    installed.append(pathlib.Path(deb).name)
+    return "ok"
+helper.install = install_and_hand_again
+code, st = hand("2.10.1", good, pathlib.Path(str(good) + ".asc"))
+check("a request handed over meanwhile is kept",
+      (code, json.loads((inbox / "request.json").read_text())["id"]), (0, "r3"))
+check("while the files that were installed are cleared",
+      sorted(p.name for p in inbox.iterdir()), ["old.json", "request.json"])
+helper.install = lambda deb: installed.append(pathlib.Path(deb).name) or "ok"
+installed.clear()
 # Someone else's file: the helper only takes the person's own.
 (state / "owner").write_text("root")
 code, st = hand("2.10.1", good, pathlib.Path(str(good) + ".asc"))
@@ -224,6 +255,16 @@ except updater.CheckFailed:
 check("and leaves nothing half written behind",
       [p.name for p in tmp.iterdir() if p.name.startswith("big.deb")], [])
 check("a copy from a git clone is not taken for an installed one", updater.installed_copy(ROOT), False)
+updater.HELPER_STATUS = tmp / "helper-status.json"
+now = 1_000_000.0
+for state_, at, want in (("installing", now - 60, True), ("checking", now - 5, True),
+                         ("installing", now - updater.HELPER_WAIT - 1, False),
+                         ("installed", now - 5, False), ("refused", now - 5, False)):
+    updater.HELPER_STATUS.write_text(json.dumps({"state": state_, "at": at, "version": "2.10.1"}))
+    check(f"a new update waits while the helper is {state_}, {int(now - at)} s ago",
+          bool(updater._helper_busy(now)), want)
+updater.HELPER_STATUS.unlink()
+check("and goes ahead when the helper never ran", updater._helper_busy(now), "")
 
 for home in gnupg.values():
     subprocess.run(["gpgconf", "--homedir", str(home), "--kill", "all"], capture_output=True)

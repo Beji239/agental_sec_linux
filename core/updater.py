@@ -569,6 +569,26 @@ def _helper_answer(request_id: str, wait: float = HELPER_WAIT, tick: float = 2.0
                                          f"{int(wait // 60)} minutes"}
 
 
+def _helper_busy(now: float = None) -> str:
+    """Why a new installer cannot be handed over yet, or "". While the helper
+    still checks or installs the last one, clearing the inbox would pull its
+    files away."""
+    try:
+        st = json.loads(HELPER_STATUS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(st, dict) or st.get("state") not in ("checking", "installing"):
+        return ""
+    try:
+        age = (now or time.time()) - float(st.get("at") or 0)
+    except (TypeError, ValueError):
+        return ""
+    if 0 <= age < HELPER_WAIT:
+        return (f"The update helper is still installing {st.get('version') or 'the last update'}. "
+                f"Try again when it has finished.")
+    return ""
+
+
 def _do_installer_update():
     from core import version
     import secrets
@@ -582,6 +602,9 @@ def _do_installer_update():
     if not deb_url:
         return _finish(False, f"The {latest} release has no signed installer for this "
                               f"computer, so nothing was installed.")
+    busy = _helper_busy()
+    if busy:
+        return _finish(False, busy)
     for old in INBOX.iterdir():
         if old.is_file() and not old.is_symlink():
             old.unlink()

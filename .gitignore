@@ -1,6 +1,8 @@
 # Secrets and personal data, never published
 .env
 config.json
+.env.*.tmp
+config.json.*.tmp
 agental_sec.db*
 logs/
 integrity_anchor*

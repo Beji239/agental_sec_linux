@@ -65,14 +65,24 @@ def owner_uid() -> int:
     return pwd.getpwnam(name).pw_uid
 
 
-def read_handed(name: str, limit: int, uid: int, copy_to: str = None) -> bytes | None:
+def read_handed(name: str, limit: int, uid: int, copy_to: str = None,
+                seen: dict = None) -> bytes | None:
     """A file the app put in the inbox: a plain file, the person's own, not a
-    link, within its size. Copied to copy_to when given, else returned."""
-    fd = os.open(os.path.join(INBOX, name), os.O_RDONLY | os.O_NOFOLLOW)
+    link, within its size. Copied to copy_to when given, else returned.
+    Opened without blocking, so a pipe put there cannot hold the helper."""
+    inbox = os.open(INBOX, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                     dir_fd=inbox)
+    finally:
+        os.close(inbox)
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             raise Refused(f"{name} is not a plain file")
+        os.set_blocking(fd, True)
+        if seen is not None:
+            seen[name] = (st.st_dev, st.st_ino)
         if st.st_uid != uid:
             raise Refused(f"{name} does not belong to the person AgentalSec was installed for")
         if st.st_size > limit:
@@ -166,12 +176,32 @@ def install(deb: str) -> str:
     return out
 
 
+def clear_handed(seen: dict) -> None:
+    """Removes only the files this run read, and only while they are still the
+    same files, so a request handed over meanwhile is kept for the next run."""
+    try:
+        inbox = os.open(INBOX, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        return
+    try:
+        for name, ident in seen.items():
+            try:
+                st = os.stat(name, dir_fd=inbox, follow_symlinks=False)
+                if (st.st_dev, st.st_ino) == ident:
+                    os.unlink(name, dir_fd=inbox)
+            except OSError:
+                pass
+    finally:
+        os.close(inbox)
+
+
 def main() -> int:
     request_id = ""
     version = ""
+    seen = {}
     try:
         uid = owner_uid()
-        raw = read_handed("request.json", MAX_SMALL, uid)
+        raw = read_handed("request.json", MAX_SMALL, uid, seen=seen)
         req = json.loads(raw)
         request_id = str(req.get("id", ""))[:64]
         version = str(req.get("version", ""))
@@ -185,8 +215,8 @@ def main() -> int:
         shutil.rmtree(STAGE, ignore_errors=True)
         os.makedirs(STAGE, mode=0o700)
         deb, asc = os.path.join(STAGE, deb_name), os.path.join(STAGE, asc_name)
-        read_handed(deb_name, MAX_DEB, uid, deb)
-        read_handed(asc_name, MAX_SMALL, uid, asc)
+        read_handed(deb_name, MAX_DEB, uid, deb, seen)
+        read_handed(asc_name, MAX_SMALL, uid, asc, seen)
         signer = check_signature(deb, asc)
         check_package(deb, version)
         log(f"{version} signed by {signer}; installing")
@@ -205,11 +235,7 @@ def main() -> int:
         return 1
     finally:
         shutil.rmtree(STAGE, ignore_errors=True)
-        for name in os.listdir(INBOX) if os.path.isdir(INBOX) else []:
-            try:
-                os.unlink(os.path.join(INBOX, name))
-            except OSError:
-                pass
+        clear_handed(seen)
 
 
 if __name__ == "__main__":

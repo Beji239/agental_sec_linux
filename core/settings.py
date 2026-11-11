@@ -47,6 +47,7 @@ import threading
 from pathlib import Path
 
 from core import secret_crypto as crypto
+from core.private_file import replace_private
 
 # HOW MANY FAILED POLLS IN A ROW MAKE A ROW RED. Read from the ONE place it is
 # declared (core/sensor_health), so the card and the model path cannot disagree
@@ -437,26 +438,6 @@ def generate_app_key() -> dict:
                        "so nothing breaks until you restart.")}
 
 
-def _own_read_only(path: Path) -> None:
-    """
-    Owner-only permissions, set on the TEMP file before the rename, so there
-    is never a moment where .env exists with default permissions.
-
-    THIS IS THE WHOLE PROTECTION ON THIS PLATFORM, and it is not decoration:
-    a world-readable .env is a real finding here, unlike on Windows where the
-    mode bit does almost nothing because permissions come from the folder ACL.
-    Encryption (core/secret_crypto) sits on top of it rather than instead of
-    it, and either one failing is not a reason to refuse to save a key.
-
-    Best effort by design. A filesystem that will not take a mode is not a
-    reason to refuse to save somebody's key.
-    """
-    try:
-        os.chmod(path, 0o600)
-    except OSError as e:                         # pragma: no cover
-        logger.debug(f"Could not set owner-only permissions on {path}: {e}")
-
-
 def _write_env_line(name: str, value: str) -> tuple[bool, str]:
     """
     Set NAME=value in .env, keeping every comment and every other line.
@@ -470,11 +451,8 @@ def _write_env_line(name: str, value: str) -> tuple[bool, str]:
     operation, and holding the lock over only the write half would still let
     two callers read the same original.
 
-    The temp file keeps its fixed name rather than getting a per-thread one.
-    The lock means only one of these runs at a time, so there is nothing to
-    collide with, and a generated name like ".env.4821.tmp" would fall outside
-    whatever .gitignore covers, which is the trap the naming comment below is
-    already about.
+    The temp file gets a new unique name, owner-only from the start, so a
+    link left at a fixed name is never written through.
     """
     with _write_lock:
         try:
@@ -512,19 +490,9 @@ def _write_env_line(name: str, value: str) -> tuple[bool, str]:
                 block += "\n"
             new = text + block + line + "\n"
 
-        # Sibling temp file, named by hand rather than with_suffix: ENV_PATH is
-        # ".env", which pathlib reads as all stem and no suffix, so with_suffix
-        # would produce ".env.env.tmp" and quietly drop out of .gitignore's reach.
-        tmp = ENV_PATH.with_name(ENV_PATH.name + ".tmp")
         try:
-            tmp.write_text(new, encoding="utf-8")
-            _own_read_only(tmp)
-            os.replace(tmp, ENV_PATH)
+            replace_private(ENV_PATH, new)
         except OSError as e:
-            try:
-                tmp.unlink(missing_ok=True)
-            except OSError:
-                pass
             return False, f"Could not write .env: {e}"
         return True, ""
 
@@ -821,18 +789,9 @@ def persist_config_value(block: str, leaf: str, value) -> str | None:
             return f"config.json has no '{block}' block to write into."
         raw[block][leaf] = value
 
-        tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
         try:
-            with open(tmp, "w", encoding="utf-8",
-                      opener=lambda path, flags: os.open(path, flags, 0o600)) as stream:
-                os.fchmod(stream.fileno(), 0o600)
-                stream.write(json.dumps(raw, indent=2))
-            os.replace(tmp, CONFIG_PATH)
+            replace_private(CONFIG_PATH, json.dumps(raw, indent=2))
         except OSError as e:
-            try:
-                tmp.unlink(missing_ok=True)
-            except OSError:
-                pass
             return f"Could not write config.json: {e}"
     return None
 

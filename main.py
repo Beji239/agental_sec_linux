@@ -390,13 +390,8 @@ def _check_dependencies():
 
 def _write_config_file(text: str):
     """Replace config.json atomically, so a reader never sees half a file (BP-1)."""
-    tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
-    try:
-        tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, CONFIG_PATH)
-    except OSError:
-        tmp.unlink(missing_ok=True)
-        raise
+    from core.private_file import replace_private
+    replace_private(CONFIG_PATH, text)
 
 
 def _load_config() -> dict:
