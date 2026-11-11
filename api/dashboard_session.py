@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import secrets
+import stat
 import tempfile
 import threading
 import time
@@ -53,8 +54,52 @@ def open_link_token(api_key: str, now=None) -> str:
     return _token(api_key, "open", now)
 
 
+def _spent_dir() -> str | None:
+    """A private folder of this account's that outlives the app, where each
+    spent link leaves a mark, so a restart does not make it usable again."""
+    base = os.environ.get("XDG_RUNTIME_DIR") or ""
+    if not os.path.isdir(base):
+        base = tempfile.gettempdir()
+    path = os.path.join(base, f"agentalsec-links-{os.geteuid()}")
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        pass
+    except OSError:
+        return None
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
+        return None
+    return path
+
+
+def _mark_spent(token: str, now: float) -> bool:
+    """True when this is the first time the link is spent, on disk too."""
+    path = _spent_dir()
+    if not path:
+        return True
+    try:
+        for name in os.listdir(path):
+            old = os.path.join(path, name)
+            try:
+                if now - os.lstat(old).st_mtime > LINK_TTL * 2:
+                    os.unlink(old)
+            except OSError:
+                pass
+        mark = os.path.join(path, hashlib.sha256(token.encode()).hexdigest())
+        os.close(os.open(mark, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600))
+    except FileExistsError:
+        return False
+    except OSError:
+        pass
+    return True
+
+
 def redeem_link(api_key: str, token, now=None) -> bool:
-    """True once per genuine link, inside LINK_TTL."""
+    """True once per genuine link, inside LINK_TTL, across restarts too."""
     if _check(api_key, "open", token, LINK_TTL, now) is None:
         return False
     now = time.time() if now is None else now
@@ -64,7 +109,7 @@ def redeem_link(api_key: str, token, now=None) -> bool:
         if token in _used:
             return False
         _used[token] = now
-    return True
+        return _mark_spent(token, now)
 
 
 def new_session(api_key: str, now=None) -> str:

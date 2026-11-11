@@ -187,10 +187,17 @@ else:
           "measurement attached",
           "MEASURED on this host" in
           dict(p["degraded_when_unelevated"]).get("event_monitor", ""), True)
-check("the others are still measured as degrading, which is what they were "
-      "before this round",
-      sorted(n for n in measured if n != "event_monitor"),
-      ["network_scanner", "port_owner", "port_scanner", "process_monitor"])
+# The port rows follow their own probes: a host that may read other accounts'
+# sockets, or send SYNs, drops the row whose loss it does not have.
+syn_ok = p["syn_scan_probe"]["available"]
+owner_ok = p["port_owner_probe"]["readable"]
+want = ["network_scanner", "process_monitor"]
+if not owner_ok:
+    want.append("port_owner")
+if not (syn_ok and owner_ok):
+    want.append("port_scanner")
+check("the others are measured as degrading exactly where their probes say so",
+      sorted(n for n in measured if n != "event_monitor"), sorted(want))
 # AND WHY PORT_SCANNER LEFT THE 'NEEDS NOTHING' LIST AND CAME BACK TO THIS
 # ONE, 2026-09-25, register PS-13. This is now a THREE-STATE history and the
 # file says so rather than showing only where it landed:
@@ -265,9 +272,29 @@ if not p["syn_scan_probe"]["available"]:
     check("a SYN-capability refusal is measured onto the row, not assumed",
           "MEASURED on this host" in
           dict(p["degraded_when_unelevated"]).get("port_scanner", ""), True)
-check("and port_owner's row carries its measurement too",
-      "MEASURED on this host" in
-      dict(p["degraded_when_unelevated"]).get("port_owner", ""), True)
+if p["port_owner_probe"]["readable"]:
+    check("a readable port owner is not painted as degraded",
+          "port_owner" in dict(p["degraded_when_unelevated"]), False)
+else:
+    check("and port_owner's row carries its measurement too",
+          "MEASURED on this host" in
+          dict(p["degraded_when_unelevated"]).get("port_owner", ""), True)
+# Both probes, each way, whatever this host allows.
+from unittest import mock
+for syn, owner in ((True, True), (True, False), (False, True), (False, False)):
+    with mock.patch.object(pv, "check_syn_scan_capability",
+                           return_value=(syn, "probe says so")), \
+         mock.patch.object(pv, "check_port_owner_readability",
+                           return_value=(owner, "probe says so", {"readable": owner, "refused": 0})):
+        rows = dict(pv.posture()["degraded_when_unelevated"])
+    check(f"SYN {'works' if syn else 'refused'}, owners {'readable' if owner else 'refused'}: "
+          f"port_owner row", ("MEASURED on this host" in rows["port_owner"]) if "port_owner" in rows else None,
+          None if owner else True)
+    check(f"SYN {'works' if syn else 'refused'}, owners {'readable' if owner else 'refused'}: "
+          f"port_scanner row names only what is lost",
+          None if "port_scanner" not in rows else
+          ("cannot send SYNs" in rows["port_scanner"], "port-to-process" in rows["port_scanner"]),
+          None if syn and owner else (not syn, not owner))
 if p["elevated"]:
     check("and counts modules holding rights they never use",
           p["excess_privilege_modules"] > 10, True)

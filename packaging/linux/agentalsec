@@ -120,6 +120,10 @@ PY
 )
     [ -n "$page" ] || page="http://127.0.0.1:$(port)"
     xdg-open "$page" >/dev/null 2>&1 &
+    # The page outlives this script, so it is removed once its link has expired.
+    case "$page" in
+        file://*) (sleep 150; rm -f "${page#file://}") >/dev/null 2>&1 </dev/null & ;;
+    esac
 }
 
 case "${1:-}" in

@@ -205,6 +205,13 @@ session = handoff.split(f'"{ds.STORAGE_KEY}", "')[1].split('"')[0]
 check("the session it hands over is valid", ds.session_valid(DASHBOARD, session), True)
 check("a link works once",
       client.get("/open?t=" + link, environ_overrides=LOCAL).status_code, 303)
+ds._used.clear()
+check("and stays spent after the app restarts",
+      client.get("/open?t=" + link, environ_overrides=LOCAL).status_code, 303)
+fresh = ds.open_link_token(DASHBOARD)
+ds._used.clear()
+check("while a link not yet used still works after a restart",
+      client.get("/open?t=" + fresh, environ_overrides=LOCAL).status_code, 200)
 old = ds.open_link_token(DASHBOARD, now=1_000_000)
 check("an old link does not work",
       client.get("/open?t=" + old, environ_overrides=LOCAL).status_code, 303)
